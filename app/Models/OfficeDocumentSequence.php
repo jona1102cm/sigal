@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable(['legislature_id', 'office_id', 'prefix', 'padding', 'last_issued_number'])]
+/** Configuración del siguiente correlativo documental para una oficina y legislatura. */
 class OfficeDocumentSequence extends Model
 {
     /** @return BelongsTo<Legislature, $this> */

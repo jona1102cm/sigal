@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'content_hash',
     'uploaded_by',
 ])]
+/** Metadatos verificables de un binario asociado a un documento. */
 class DocumentAttachment extends Model
 {
     /** @return BelongsTo<Document, $this> */

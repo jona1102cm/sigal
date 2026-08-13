@@ -17,6 +17,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
+/** Expone derivaciones y acciones independientes de sus oficinas destinatarias. */
 class ExpedientMovementController extends Controller
 {
     public function __construct(private readonly ExpedientMovementService $expedientMovementService) {}

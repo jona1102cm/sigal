@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\DocumentManagement;
 
 use App\Domain\Audit\DTOs\RequestAuditContext;
 use App\Domain\Audit\Services\ActivityLogger;
+use App\Domain\Authorization\Enums\RoleCode;
 use App\Domain\DocumentManagement\DTOs\CreateExpedientData;
 use App\Domain\DocumentManagement\DTOs\CreateExpedientMovementData;
 use App\Domain\DocumentManagement\Enums\ExpedientStatus;
@@ -16,11 +17,12 @@ use App\Http\Resources\DocumentManagement\ExpedientResource;
 use App\Models\Expedient;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Collection;
 
+/** Lista, muestra y registra la cabecera excepcional de expedientes. */
 class ExpedientController extends Controller
 {
     private const RELATIONS = [
@@ -82,7 +84,7 @@ class ExpedientController extends Controller
     {
         $officeIds = $user->currentOfficeMemberships()->pluck('office_id')->map(fn ($id) => (int) $id);
         $canReviewEveryOffice = $user->isSuperAdministrator()
-            || $user->hasActiveRole(\App\Domain\Authorization\Enums\RoleCode::Observer);
+            || $user->hasActiveRole(RoleCode::Observer);
 
         if (! $canReviewEveryOffice && $officeIds->isEmpty()) {
             $query->whereRaw('1 = 0');

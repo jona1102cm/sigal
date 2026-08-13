@@ -1,4 +1,8 @@
 <script setup>
+/**
+ * Vista operativa completa del expediente. Calcula acciones visibles desde la
+ * oficina que posee el último movimiento y delega la validación definitiva al API.
+ */
 import { computed, reactive, ref, watch } from 'vue';
 import RichTextEditor from './RichTextEditor.vue';
 import SearchableSelect from './SearchableSelect.vue';
@@ -48,6 +52,7 @@ const myOfficeIds = computed(() => (props.session.user?.office_memberships ?? []
 const allOffices = computed(() => flattenOfficeHierarchy(documents.catalogs.offices));
 const latestMovement = computed(() => documents.movements[0] ?? null);
 const currentHolderOfficeIds = computed(() => {
+    // Solo el movimiento más reciente representa la tenencia; los anteriores son historial.
     if (Array.isArray(selected.value?.current_holder_office_ids)) {
         return selected.value.current_holder_office_ids.map(Number).filter(Boolean);
     }
@@ -138,6 +143,7 @@ function movementRouteLabel(movement) {
 }
 
 function recipientCanAct(movement, recipient) {
+    // Una copia o una recepción histórica nunca debe presentar controles operativos.
     return movement.id === latestMovement.value?.id
         && recipient.recipient_kind === 'primary'
         && !recipientIsTerminal(recipient)
@@ -181,6 +187,7 @@ async function updateRecipient(recipient, status) {
 }
 
 async function submitDocument() {
+    // El documento y su derivación se envían juntos para evitar el doble trabajo del flujo antiguo.
     error.value = null;
     try {
         const payload = {

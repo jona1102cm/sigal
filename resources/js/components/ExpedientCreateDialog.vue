@@ -1,4 +1,8 @@
 <script setup>
+/**
+ * Alta normal de gestión documental: reúne documento inicial, metadatos del
+ * expediente, archivos y destinatarios en una sola intención del usuario.
+ */
 import { computed, reactive, ref, watch } from 'vue';
 import { flattenOfficeHierarchy } from '../lib/organization';
 import RichTextEditor from './RichTextEditor.vue';
@@ -63,6 +67,7 @@ const hasManyResponsibleOffices = computed(() => responsibleOffices.value.length
 const selectedResponsibleOfficeId = computed(() => positiveIntegerId(form.responsible_office_id));
 
 function setSensibleDefaults() {
+    // Solo se autoselecciona una opción cuando no existe una decisión real que tomar.
     const internal = documents.catalogs.confidentialityLevels.find((level) => level.code === 'INTERNAL');
     const defaultLevel = internal ?? documents.catalogs.confidentialityLevels[0];
     const defaultExpedientCode = form.origin === 'internal' ? 'INTERNAL_CORRESPONDENCE' : 'EXTERNAL_CORRESPONDENCE';
@@ -140,6 +145,7 @@ function toggleRecipient(list, id) {
 }
 
 async function submit() {
+    // FormData permite enviar los campos estructurados y múltiples binarios en la misma solicitud.
     error.value = null;
 
     const expedientTypeId = positiveIntegerId(form.expedient_type_id);

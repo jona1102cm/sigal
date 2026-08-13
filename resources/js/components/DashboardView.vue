@@ -1,4 +1,5 @@
 <script setup>
+/** Resumen operativo derivado de la bandeja ya autorizada por el backend. */
 import { computed } from 'vue';
 import { useDocumentManagementStore } from '../stores/document-management';
 

@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable(['employment_contract_id', 'user_id', 'role_id', 'assigned_by', 'effective_from', 'effective_to'])]
+/** Intervalo histórico durante el cual un usuario posee un rol del sistema. */
 class UserRoleAssignment extends Model
 {
     protected function casts(): array

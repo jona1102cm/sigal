@@ -9,6 +9,7 @@ use App\Http\Requests\Administration\PerformOperationalResetRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
+/** Previsualiza y ejecuta la limpieza extraordinaria de registros beta. */
 class OperationalResetController extends Controller
 {
     public function __construct(private readonly OperationalResetService $operationalResetService) {}

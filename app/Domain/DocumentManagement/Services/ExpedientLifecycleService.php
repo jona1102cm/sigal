@@ -17,6 +17,12 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
+/**
+ * Ejecuta transiciones terminales y el procedimiento controlado de reapertura.
+ *
+ * Archivo, cierre y anulación requieren facultades específicas; la reapertura deja
+ * solicitud y decisión auditables en vez de modificar silenciosamente el estado.
+ */
 class ExpedientLifecycleService
 {
     public function __construct(private readonly ActivityLogger $activityLogger) {}

@@ -25,6 +25,12 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Throwable;
 
+/**
+ * Implementa el ciclo de un documento: borrador, emisión, corrección y adjuntos.
+ *
+ * Una emisión queda inmutable; cualquier cambio posterior crea una revisión y
+ * conserva la numeración institucional y la evidencia anterior.
+ */
 class DocumentService
 {
     public function __construct(

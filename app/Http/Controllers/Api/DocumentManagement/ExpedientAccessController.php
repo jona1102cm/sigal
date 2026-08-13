@@ -14,6 +14,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
+/** Administra accesos extraordinarios sin modificar la visibilidad ordinaria. */
 class ExpedientAccessController extends Controller
 {
     public function __construct(private readonly ExpedientAccessService $expedientAccessService) {}

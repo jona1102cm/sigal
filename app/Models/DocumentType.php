@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 #[Fillable(['code', 'name', 'is_official', 'status'])]
+/** Catálogo de clases documentales utilizadas dentro de un expediente. */
 class DocumentType extends Model
 {
     protected function casts(): array

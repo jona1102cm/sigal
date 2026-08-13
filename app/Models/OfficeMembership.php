@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'effective_to',
     'assigned_by',
 ])]
+/** Pertenencia histórica de una cuenta a una oficina y su función organizacional. */
 class OfficeMembership extends Model
 {
     protected function casts(): array

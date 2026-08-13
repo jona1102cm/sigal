@@ -15,6 +15,7 @@ use App\Policies\UserPolicy;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
+/** Registra configuraciones y vínculos globales propios de SIGAL en el contenedor Laravel. */
 class AppServiceProvider extends ServiceProvider
 {
     /**

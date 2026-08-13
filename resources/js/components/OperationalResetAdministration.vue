@@ -1,4 +1,5 @@
 <script setup>
+/** Confirma y ejecuta la limpieza extraordinaria de datos generados durante la beta. */
 import { onMounted, ref } from 'vue';
 import { useDocumentManagementStore } from '../stores/document-management';
 import { useHumanResourcesStore } from '../stores/human-resources';

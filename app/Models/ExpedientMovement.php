@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'sent_by',
     'sent_at',
 ])]
+/** Derivación emitida por la oficina que poseía el expediente en ese instante. */
 class ExpedientMovement extends Model
 {
     protected function casts(): array

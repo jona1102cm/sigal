@@ -1,4 +1,5 @@
 <script setup>
+/** Carga la fotografía mediante una descarga autenticada y libera el blob al reemplazarla. */
 import { onBeforeUnmount, ref, watch } from 'vue';
 import { getToken } from '../lib/api';
 

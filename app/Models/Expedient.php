@@ -44,6 +44,7 @@ use Illuminate\Support\Collection;
     'voided_at',
     'voided_by',
 ])]
+/** Proceso administrativo central; agrupa documentos y registra su estado agregado. */
 class Expedient extends Model
 {
     protected function casts(): array

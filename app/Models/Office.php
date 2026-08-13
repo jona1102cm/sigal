@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable(['parent_id', 'code', 'name', 'status', 'supports_staffing', 'requires_manager'])]
+/** Nodo recursivo del organigrama y fuente de jerarquía, dotación y responsabilidad. */
 class Office extends Model
 {
     protected function casts(): array

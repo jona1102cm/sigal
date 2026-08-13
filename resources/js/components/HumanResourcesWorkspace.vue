@@ -1,4 +1,8 @@
 <script setup>
+/**
+ * Workspace de RR. HH. para registrar, corregir y consultar el ciclo laboral
+ * completo sin separar artificialmente kardex, contrato, cargo y cuenta.
+ */
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import EmployeeAvatar from './EmployeeAvatar.vue';
 import EmployeeBulkImportDialog from './EmployeeBulkImportDialog.vue';
@@ -84,15 +88,18 @@ watch(search, (value) => {
 });
 
 watch(() => form.office_id, async (officeId, previousOfficeId) => {
+    // El catálogo de cargos depende de la oficina y se invalida al cambiarla.
     if (officeId !== previousOfficeId) form.office_position_id = null;
     if (officeId) await humanResources.loadPositions(officeId);
 });
 
 function uppercase(formData, field) {
+    // Normaliza mientras se escribe; el backend repite la normalización por seguridad.
     formData[field] = formData[field].toLocaleUpperCase('es-BO');
 }
 
 async function verifyIdentityCard() {
+    // Consultar el CI antes del alta permite reutilizar funcionarios de gestiones anteriores.
     existingEmployee.value = await humanResources.lookupByIdentity(form.identity_card);
     if (existingEmployee.value) Object.assign(form, personalAttributes(existingEmployee.value));
 }

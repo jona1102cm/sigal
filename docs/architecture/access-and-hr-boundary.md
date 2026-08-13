@@ -1,25 +1,41 @@
-# Acceso al sistema y frontera con Recursos Humanos
+# Acceso al sistema y relación con Recursos Humanos
 
-Estado: **implementado y pendiente de la definición funcional de Recursos Humanos**.
+Estado: **implementado en la versión beta**.
 
-## Alcance actual
+## Separación de responsabilidades
 
-- `users` representa una identidad de acceso al sistema, no un contrato laboral ni una ficha de personal.
-- Cada usuario tiene estado `active` o `inactive`. Al inactivarlo se conserva toda su historia, se revocan sus tokens de Sanctum y se bloquea cualquier acceso posterior. Un cambio de contraseña también revoca los tokens vigentes.
-- Los únicos roles definidos actualmente son `super_administrator`, `observer` y `simple_user`.
-- Los roles se asignan y se cierran de forma histórica mediante `user_role_assignments`; no se eliminan registros previos.
-- Solo un superadministrador activo puede administrar usuarios y roles. El sistema protege al último superadministrador activo para evitar perder el acceso institucional, incluso ante solicitudes concurrentes.
-- Toda autenticación y acción de administración de usuarios o roles genera un evento inmutable en `activity_logs`.
+- `users` representa una identidad de acceso; no es un contrato ni duplica el kardex.
+- `employees` representa a la persona y se identifica de forma única por CI.
+- `employment_contracts` conserva cada relación laboral y su vigencia.
+- `office_memberships` conserva la pertenencia histórica del usuario a una oficina.
+- `user_role_assignments` conserva roles por intervalos.
 
-## Efecto de los roles en Gestión Documental
+Esta separación permite que una persona vuelva a la institución con otro contrato, oficina o rol utilizando el mismo kardex y la misma identidad, sin perder historia.
 
-- `super_administrator`: administración completa, incluida Legislaturas y Directiva.
-- `observer`: podrá consultar cualquier flujo de Expedientes cuando se implemente su política.
-- `simple_user`: podrá consultar lo creado por él o lo tramitado por su oficina cuando se implemente la política de Expedientes.
-- La visibilidad del jefe sobre actuaciones de dependientes será una regla de la política de Expedientes apoyada por la futura estructura organizacional; no se modela como un campo duplicado en `users`.
+## Ciclo de acceso
 
-## Límite con Recursos Humanos
+- Un contrato que empieza hoy o antes activa/reutiliza la cuenta, abre membresía y asigna el rol seleccionado.
+- Un contrato futuro conserva la cuenta inactiva hasta su fecha inicial.
+- Al vencer o finalizar el único contrato vigente se cierran las asignaciones creadas por él, se inactiva la cuenta y se revocan tokens.
+- Una cuenta inactiva no puede autenticarse ni continuar usando un token anterior.
+- Una contraseña temporal limita la sesión al cambio de clave o logout.
+- Las claves actuales no son recuperables: Laravel conserva un hash. El superadministrador puede generar una clave temporal de emergencia, nunca visualizar la anterior.
 
-Recursos Humanos será la fuente institucional de funcionarios, contrataciones, cargos, montos, fechas de inicio y finalización. El módulo de acceso se vinculará posteriormente a esa fuente mediante una relación explícita; no copiará contratos ni datos salariales.
+## Roles
 
-Antes de implementar RR. HH. se deben definir, entre otros, modalidades de contratación, estados y renovaciones, aprobaciones, tratamiento de adendas, confidencialidad salarial, estructura organizativa y relación entre funcionario, contrato y cuenta de acceso.
+- `super_administrator`: administración completa de SIGAL.
+- `human_resources_manager`: administración de RR. HH. sin privilegios globales.
+- `observer`: consulta transversal de expedientes según Policy.
+- `simple_user`: operación documental según creación, oficina, tenencia y jerarquía.
+
+Los roles no reemplazan la pertenencia a oficina. Para derivar o actuar sobre un expediente se evalúan ambas dimensiones y las reglas específicas del flujo.
+
+## Seguridad e historia
+
+- Solo superadministración gestiona identidades/roles globales y reset operativo.
+- Superadministración y el rol de RR. HH. administran funcionarios y contratos.
+- El último superadministrador activo está protegido frente a inactivación o pérdida de rol.
+- La creación, edición, activación, inactivación, cambio de contraseña, reset y asignación/cierre de roles se auditan.
+- Los historiales no se eliminan cuando una persona deja de trabajar.
+
+Para el flujo HTTP y las clases involucradas, consultar [../manual-tecnico.md](../manual-tecnico.md) y [../reference/backend.md](../reference/backend.md).

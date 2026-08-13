@@ -27,6 +27,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'issued_by',
     'issued_at',
 ])]
+/** Pieza documental perteneciente obligatoriamente a un expediente y una oficina emisora. */
 class Document extends Model
 {
     protected function casts(): array

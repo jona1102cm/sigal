@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'ended_on',
     'ended_at',
 ])]
+/** Titular histórico de un cargo de Directiva con fecha e instante efectivos. */
 class LegislatureBoardAssignment extends Model
 {
     protected function casts(): array

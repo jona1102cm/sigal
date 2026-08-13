@@ -19,6 +19,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
+/** Expone períodos legislativos y reemplazos históricos de la Directiva. */
 class LegislatureController extends Controller
 {
     public function __construct(

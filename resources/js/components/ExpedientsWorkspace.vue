@@ -1,4 +1,5 @@
 <script setup>
+/** Bandeja documental con vistas separadas para pendientes y finalizados. */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ExpedientDetail from './ExpedientDetail.vue';
 import SearchableSelect from './SearchableSelect.vue';
@@ -40,6 +41,7 @@ onMounted(() => {
 onBeforeUnmount(() => clearTimeout(searchTimer));
 
 watch(search, (value) => {
+    // El debounce evita consultar el servidor por cada pulsación sin exigir Enter al usuario.
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => {
         documents.loadExpedients(1, value, inboxScope.value).catch(() => {});

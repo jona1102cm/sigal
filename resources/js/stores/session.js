@@ -1,6 +1,10 @@
 import { defineStore } from 'pinia';
 import { getToken, request, setToken } from '../lib/api';
 
+/**
+ * Fuente única de la sesión visible en Vue.
+ * Las capacidades son ayudas de interfaz; las Policies del backend siguen siendo la autoridad.
+ */
 export const useSessionStore = defineStore('session', {
     state: () => ({
         user: null,
@@ -22,6 +26,7 @@ export const useSessionStore = defineStore('session', {
 
     actions: {
         async restore() {
+            // Sin token local no se consulta /auth/me y la aplicación puede mostrar el login de inmediato.
             if (!getToken()) {
                 this.ready = true;
                 return;

@@ -7,6 +7,12 @@ use Illuminate\Validation\ValidationException;
 use SimpleXMLElement;
 use ZipArchive;
 
+/**
+ * Extrae valores de la plantilla XLSX sin convertir el libro en una fuente confiable.
+ *
+ * Solo interpreta la estructura del archivo; las reglas institucionales y la
+ * persistencia permanecen en EmployeeBulkImportService/HumanResourcesService.
+ */
 class EmployeeImportWorkbookReader
 {
     private const SPREADSHEET_NAMESPACE = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';

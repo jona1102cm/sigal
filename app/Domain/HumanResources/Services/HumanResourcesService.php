@@ -29,6 +29,12 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
+/**
+ * Orquesta el kardex, el contrato y sus efectos sobre acceso y organización.
+ *
+ * El funcionario se reutiliza por CI; cada contratación coordina cuenta, rol y
+ * membresía en una transacción para que nunca queden altas parciales.
+ */
 class HumanResourcesService
 {
     public function __construct(private readonly ActivityLogger $activityLogger) {}

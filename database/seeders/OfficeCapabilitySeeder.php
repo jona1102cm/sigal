@@ -7,6 +7,7 @@ use App\Models\Office;
 use App\Models\OfficeCapability;
 use Illuminate\Database\Seeder;
 
+/** Asigna facultades especiales del flujo a las oficinas institucionales definidas. */
 class OfficeCapabilitySeeder extends Seeder
 {
     public function run(): void

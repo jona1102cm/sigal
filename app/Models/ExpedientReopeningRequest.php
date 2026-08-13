@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'decided_at',
     'decision_note',
 ])]
+/** Solicitud auditable y su decisión para reabrir un expediente terminal. */
 class ExpedientReopeningRequest extends Model
 {
     protected function casts(): array

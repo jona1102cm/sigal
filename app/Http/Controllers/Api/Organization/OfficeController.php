@@ -21,6 +21,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
+/** Adapta consultas/mutaciones del organigrama y membresías al dominio. */
 class OfficeController extends Controller
 {
     public function __construct(

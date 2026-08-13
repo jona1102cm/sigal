@@ -1,4 +1,5 @@
 <script setup>
+/** Editor enriquecido liviano; su HTML se considera no confiable hasta sanearlo en el backend. */
 import { nextTick, onMounted, ref, watch } from 'vue';
 
 const props = defineProps({
@@ -24,6 +25,7 @@ function insertLink() {
 }
 
 function pastePlainText(event) {
+    // Evita incorporar estilos y etiquetas ocultas al pegar desde Word u otra página.
     event.preventDefault();
     const text = event.clipboardData?.getData('text/plain') || '';
     execute('insertText', text);

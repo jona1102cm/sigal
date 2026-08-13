@@ -11,6 +11,12 @@ use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * Caso de uso normal de ingreso: expediente, documento inicial y derivación opcional.
+ *
+ * La transacción garantiza que el proceso administrativo no quede separado de la
+ * documentación que justificó su apertura.
+ */
 class DocumentedExpedientEntryService
 {
     public function __construct(
@@ -29,6 +35,7 @@ class DocumentedExpedientEntryService
         RequestAuditContext $context,
     ): Expedient {
         return DB::transaction(function () use ($expedientData, $documentData, $attachments, $derivationData, $actor, $context): Expedient {
+            // El orden refleja la dependencia: el documento necesita un expediente existente.
             $expedient = $this->expedientService->create($expedientData, $actor, $context);
 
             $document = $this->documentService->registerInitialDocument(
@@ -39,6 +46,7 @@ class DocumentedExpedientEntryService
                 $context,
             );
 
+            // Se conserva null para el alta excepcional autorizada sin derivación inmediata.
             if ($derivationData !== null) {
                 $movement = $this->expedientMovementService->create($expedient, $derivationData, $actor, $context);
                 $this->documentService->linkToMovement($expedient, $movement, $document, $actor, $context);

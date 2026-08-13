@@ -4,6 +4,7 @@ namespace App\Policies;
 
 use App\Models\User;
 
+/** Autoriza la administración de identidades y protege la continuidad administrativa. */
 class UserPolicy
 {
     public function viewAny(User $user): bool

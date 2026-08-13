@@ -1,4 +1,5 @@
 <script setup>
+/** Mantiene el catálogo que clasifica procesos administrativos sin usar texto libre. */
 import { computed, onMounted, reactive, ref } from 'vue';
 import { useDocumentManagementStore } from '../stores/document-management';
 

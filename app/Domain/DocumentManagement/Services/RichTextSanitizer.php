@@ -6,6 +6,12 @@ use DOMDocument;
 use DOMElement;
 use DOMNode;
 
+/**
+ * Reduce el HTML del editor al subconjunto permitido antes de persistirlo/mostrarlo.
+ *
+ * El frontend no es una frontera de confianza: todo informe enriquecido vuelve a
+ * sanearse en el backend para evitar etiquetas, atributos y URLs peligrosas.
+ */
 class RichTextSanitizer
 {
     private const ALLOWED_TAGS = [

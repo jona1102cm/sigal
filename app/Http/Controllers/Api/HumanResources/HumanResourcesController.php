@@ -10,8 +10,8 @@ use App\Domain\HumanResources\DTOs\RegisterEmployeeContractData;
 use App\Domain\HumanResources\DTOs\UpdateEmployeeData;
 use App\Domain\HumanResources\DTOs\UpdateOfficePositionData;
 use App\Domain\HumanResources\Enums\EmployeeAttachmentType;
-use App\Domain\HumanResources\Services\HumanResourcesService;
 use App\Domain\HumanResources\Services\EmployeeBulkImportService;
+use App\Domain\HumanResources\Services\HumanResourcesService;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\HumanResources\ExtendEmploymentContractRequest;
 use App\Http\Requests\HumanResources\ImportEmployeesRequest;
@@ -34,10 +34,11 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Storage;
-use Symfony\Component\HttpFoundation\StreamedResponse;
-use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
+/** Expone los casos de uso de kardex, contratos, cargos, adjuntos e importación. */
 class HumanResourcesController extends Controller
 {
     public function __construct(

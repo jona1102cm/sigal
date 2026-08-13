@@ -17,6 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'user_agent',
     'occurred_at',
 ])]
+/** Evidencia inmutable de una acción con actor, sujeto, contexto y cambios. */
 class ActivityLog extends Model
 {
     public const UPDATED_AT = null;

@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable(['office_id', 'name', 'membership_role', 'created_by'])]
+/** Cargo del catálogo propio de una oficina, con función de responsable u oficial. */
 class OfficePosition extends Model
 {
     protected function casts(): array

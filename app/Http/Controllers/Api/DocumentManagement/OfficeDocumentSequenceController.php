@@ -14,6 +14,7 @@ use App\Models\OfficeDocumentSequence;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
+/** Consulta/configura el próximo correlativo documental por oficina y legislatura. */
 class OfficeDocumentSequenceController extends Controller
 {
     public function __construct(private readonly NumberSequenceService $numberSequenceService) {}

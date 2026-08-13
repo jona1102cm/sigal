@@ -18,6 +18,12 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
+/**
+ * Crea la cabecera administrativa de un expediente y reserva su número SIGAL.
+ *
+ * Los flujos compuestos agregan documento y derivación mediante servicios
+ * coordinadores; este servicio conserva una única implementación del alta base.
+ */
 class ExpedientService
 {
     public function __construct(

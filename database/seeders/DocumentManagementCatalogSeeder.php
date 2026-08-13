@@ -8,6 +8,7 @@ use App\Models\DocumentType;
 use App\Models\ExpedientType;
 use Illuminate\Database\Seeder;
 
+/** Registra los tipos documentales y niveles de confidencialidad iniciales. */
 class DocumentManagementCatalogSeeder extends Seeder
 {
     public function run(): void

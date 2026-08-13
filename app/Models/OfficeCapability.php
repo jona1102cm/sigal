@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable(['office_id', 'capability'])]
+/** Facultad especial de una oficina para acciones sensibles del ciclo documental. */
 class OfficeCapability extends Model
 {
     protected function casts(): array

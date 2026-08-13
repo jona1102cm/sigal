@@ -11,6 +11,12 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
 
+/**
+ * Limpia datos transaccionales de la etapa beta conservando estructura institucional.
+ *
+ * Es una operación extraordinaria, restringida y auditable; no sustituye políticas
+ * de retención, respaldos ni migraciones de base de datos.
+ */
 class OperationalResetService
 {
     public function __construct(private readonly ActivityLogger $activityLogger) {}

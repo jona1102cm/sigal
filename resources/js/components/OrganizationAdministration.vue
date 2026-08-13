@@ -1,4 +1,5 @@
 <script setup>
+/** Editor del organigrama recursivo y de las membresías históricas por oficina. */
 import { computed, onMounted, reactive, ref } from 'vue';
 import SearchableSelect from './SearchableSelect.vue';
 import { useDocumentManagementStore } from '../stores/document-management';

@@ -1,54 +1,59 @@
 # Recursos Humanos
 
-Estado: **implementado en la primera version operativa**.
+Estado: **implementado en la versión beta, incluida la importación masiva**.
 
-## Proposito
+## Propósito
 
-Recursos Humanos sera el origen institucional de los funcionarios y de su historial contractual. Desde este modulo se podra alimentar la identidad de las personas que, cuando corresponda, tendran una cuenta de acceso en SIGAL.
+Recursos Humanos es el origen institucional de los funcionarios y de su historial contractual. Desde este módulo se alimentan las personas que, cuando corresponde, tienen una cuenta de acceso en SIGAL.
 
-## Navegacion modular propuesta
+Funcionario, contrato, cargo, membresía de oficina y rol de sistema son conceptos distintos. Sus relaciones conservan vigencia e historial.
 
-La navegacion lateral se organizara por modulos y subopciones:
+## Reglas implementadas
 
-- Inicio.
-- Gestion documental: bandeja de expedientes y registro de ingresos.
-- Recursos Humanos: funcionarios, contratos y cuentas de acceso.
-- Administracion: organigrama, legislaturas y catalogos institucionales.
+- Datos obligatorios: nombres, apellidos, CI, celular, fecha de nacimiento, grado académico y profesión.
+- Datos opcionales: correo, dirección, número de CUA, libreta de servicio militar, tipo de sangre y contacto de emergencia.
+- Nombres y apellidos se normalizan en mayúsculas.
+- El CI evita duplicar a una persona que trabajó anteriormente.
+- Los respaldos REJAP, CENVI, padrón biométrico, otros documentos y fotografía se guardan fuera de PostgreSQL con metadatos y SHA-256.
+- El kardex puede corregirse con validación y auditoría. Los respaldos nuevos se agregan sin borrar evidencia anterior.
+- Tipos de contrato: Eventual, Consultoría de Línea, TGN y Funcionamiento.
+- Tipo, inicio, oficina y cargo son obligatorios. Fin y monto pueden ser opcionales según el contrato.
+- Un funcionario no puede mantener más de un contrato vigente.
+- Cada cargo pertenece a una oficina; el formulario filtra cargos por la oficina elegida y permite crear uno autorizado cuando falta.
+- Registrar un contrato crea o reutiliza la cuenta, asigna rol y abre membresía. El rol predeterminado es Usuario simple.
+- Si no hay correo, SIGAL genera una dirección interna corta y única basada en el CI.
+- Un contrato futuro conserva el acceso inactivo hasta su inicio.
+- Al finalizar/vencer el contrato se cierran sus asignaciones, se revocan tokens y se inactiva la cuenta si no existe otra vigencia.
+- Una nueva contratación reutiliza kardex y cuenta, sin duplicar la persona.
+- Existe una cuenta institucional independiente con rol `human_resources_manager`, además del acceso del superadministrador.
 
-Un funcionario, su contrato, su asignacion a una oficina y sus roles de sistema son conceptos distintos. La relacion entre ellos debe conservar historial y fechas de vigencia.
+## Importación masiva
 
-## Reglas ya confirmadas
+Superadministración y RR. HH. pueden descargar una plantilla XLSX en español y subirla llena. La importación mantiene intacto el alta manual y aplica las mismas reglas de negocio.
 
-- Recursos Humanos registra las nuevas contrataciones y alimenta a los funcionarios y usuarios del sistema.
-- La ficha personal conserva historiales aunque la persona o su usuario ya no esten activos; el acceso se restringe al inactivar el usuario.
-- Datos personales obligatorios: nombres, apellidos, CI, celular, fecha de nacimiento, grado academico y profesion. Los nombres y apellidos se normalizan y guardan en mayusculas.
-- Datos personales opcionales: correo, direccion, numero de CUA, libreta de servicio militar, tipo de sangre y contacto de emergencia.
-- Se podran adjuntar los certificados REJAP, CENVI y de padron biometrico electoral, ademas de una fotografia de perfil opcional. Sus archivos se guardaran fuera de PostgreSQL, con sus metadatos y huella de contenido auditables.
-- El kardex personal puede corregirse por personal autorizado. Las correcciones de datos quedan auditadas; los respaldos se agregan como nuevas evidencias y nunca eliminan su historial. Tambien se admite la categoria "otro documento de respaldo".
-- Los contratos permitidos son: Eventual, Consultoria de Linea, TGN y Funcionamiento.
-- Un contrato requiere tipo, fecha de inicio, oficina y cargo. La fecha de fin y el monto contractual son opcionales.
-- Una persona no puede mantener mas de un contrato vigente.
-- Cada cargo pertenece a una oficina. Al elegir una oficina, solo se muestran sus cargos; si falta uno se puede registrar desde el mismo flujo.
-- Al registrar el contrato se crea automaticamente una cuenta SIGAL y se le asigna el rol elegido en el kardex. El rol inicial por defecto es Usuario simple.
-- Si no se proporciona correo, SIGAL genera una dirección institucional corta y única basada en el CI, con dominio interno `sigal.local`.
-- Antes de crear a una persona se consulta su CI. Si ya existe, se reutiliza su kardex y su cuenta en vez de duplicarlos.
-- Al finalizar o vencer un contrato, SIGAL cierra la membresía creada por ese contrato, cierra su rol contractual, invalida los tokens e inactiva la cuenta. Una nueva contratación reactiva la misma cuenta sin duplicarla.
-- Un contrato con fecha de inicio futura conserva la cuenta inactiva hasta su fecha de inicio; una tarea institucional diaria la activa. Otra tarea diaria finaliza los contratos vencidos.
-- Existe una cuenta institucional independiente, no ligada a funcionario, con el rol Administrador de Recursos Humanos. Puede gestionar solamente el módulo de RR. HH.; los superadministradores también mantienen acceso al módulo.
+- La plantilla ofrece selects de grado académico, tipo de sangre y oficina.
+- Las oficinas se muestran por nombre completo; el lector también acepta códigos por compatibilidad.
+- Correo, dirección, CUA, libreta militar, tipo de sangre, contacto de emergencia y fecha final son opcionales.
+- El lector valida tipo/estructura del libro; el servicio valida encabezados, catálogos, fechas, CI y duplicados.
+- Los errores se reportan por fila para poder corregir el archivo.
+- El alta de cada registro reutiliza el flujo transaccional de RR. HH.; no existe una segunda lógica de contratos para Excel.
 
 ## Operación programada
 
-El programador de Laravel ejecuta diariamente la activación de contratos que comienzan y el cierre de contratos vencidos. En producción debe estar habilitado el programador de la aplicación (`schedule:run` cada minuto o el proceso equivalente del servidor).
+El scheduler ejecuta diariamente la activación de contratos que comienzan y el cierre de contratos vencidos. Producción debe invocar el scheduler de Laravel; si se detiene, las fechas cambian en base pero sus efectos de acceso no se aplican automáticamente.
 
-## Modelo propuesto
+## Modelo
 
-- **Funcionario:** datos personales, fotografia de perfil opcional y documentos de respaldo.
-- **Cargo de oficina:** catalogo historico de cargos vinculados a una oficina.
-- **Contrato:** relacion historica entre funcionario, cargo y oficina.
-- **Usuario SIGAL:** cuenta de acceso vinculada al funcionario, con roles y membresia de oficina separados del contrato para conservar la trazabilidad institucional.
+- `employees`: kardex personal.
+- `office_positions`: catálogo de cargos por oficina y función responsable/funcionario.
+- `employment_contracts`: historial contractual y asignaciones originadas.
+- `employee_attachments`: respaldos y fotografía.
+- `users`: identidad de acceso reutilizable.
+- `office_memberships`: ubicación histórica.
+- `user_role_assignments`: permisos históricos.
 
-El alta se realizara en una sola transaccion: funcionario, cargo si se crea, contrato, usuario, rol y membresia de oficina. Si una validacion falla, no se registrara una contratacion parcial.
+El alta coordinada registra funcionario, contrato, cuenta, rol y membresía en una transacción. Si una regla falla, no queda una contratación parcial.
 
-## Decisiones abiertas antes de crear datos reales
+## Consideración vigente
 
-- La extensión se habilita para contratos que ya tengan fecha de fin. Los contratos sin fecha de fin no requieren extensión.
+La extensión se habilita para contratos con fecha final. Los contratos sin fecha final no requieren extensión; su cierre se realiza expresamente cuando corresponda.

@@ -13,6 +13,12 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
 
+/**
+ * Coordina un documento posterior, sus archivos y la derivación que lo transporta.
+ *
+ * Complementa la transacción de base con una compensación manual: si algo falla,
+ * elimina del storage los binarios que ya se hubieran escrito.
+ */
 class DocumentWorkflowService
 {
     public function __construct(
@@ -29,6 +35,7 @@ class DocumentWorkflowService
         User $actor,
         RequestAuditContext $context,
     ): Document {
+        // Se conservan los modelos escritos para poder retirar sus binarios si la BD revierte.
         $storedAttachments = [];
 
         try {
@@ -47,6 +54,7 @@ class DocumentWorkflowService
                 return $document->refresh()->load(['documentType', 'issuingOffice', 'numberSeries', 'createdBy', 'issuedBy', 'attachments']);
             });
         } catch (Throwable $exception) {
+            // Una transacción PostgreSQL no puede revertir por sí sola escrituras al filesystem.
             foreach ($storedAttachments as $attachment) {
                 Storage::disk($attachment->storage_disk)->delete($attachment->storage_path);
             }

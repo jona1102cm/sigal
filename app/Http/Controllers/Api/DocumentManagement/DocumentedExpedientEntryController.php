@@ -12,6 +12,7 @@ use App\Http\Requests\DocumentManagement\StoreDocumentedExpedientRequest;
 use App\Http\Resources\DocumentManagement\ExpedientResource;
 use Illuminate\Http\JsonResponse;
 
+/** Recibe el alta compuesta de expediente, documento inicial, adjuntos y derivación. */
 class DocumentedExpedientEntryController extends Controller
 {
     public function __construct(private readonly DocumentedExpedientEntryService $entryService) {}

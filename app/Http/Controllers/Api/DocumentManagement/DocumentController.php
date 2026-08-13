@@ -27,6 +27,7 @@ use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Storage;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
+/** Expone borradores, emisión, correcciones, adjuntos, revisiones y vínculos. */
 class DocumentController extends Controller
 {
     private const RELATIONS = [

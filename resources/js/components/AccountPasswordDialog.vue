@@ -1,4 +1,5 @@
 <script setup>
+/** Permite al usuario autenticado rotar su propia contraseña y revocar sesiones anteriores. */
 import { reactive, ref } from 'vue';
 import { useSessionStore } from '../stores/session';
 

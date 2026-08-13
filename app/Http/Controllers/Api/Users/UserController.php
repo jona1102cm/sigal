@@ -19,6 +19,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
+/** Expone administración autorizada de cuentas, estados, roles y reset temporal. */
 class UserController extends Controller
 {
     public function __construct(

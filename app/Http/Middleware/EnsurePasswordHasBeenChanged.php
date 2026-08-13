@@ -7,6 +7,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
+/** Impide operar módulos mientras la identidad conserve una contraseña temporal. */
 class EnsurePasswordHasBeenChanged
 {
     /**

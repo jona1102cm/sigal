@@ -5,6 +5,7 @@ namespace App\Policies;
 use App\Models\Legislature;
 use App\Models\User;
 
+/** Restringe períodos y Directiva a usuarios con administración global. */
 class LegislaturePolicy
 {
     public function viewAny(User $user): bool

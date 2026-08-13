@@ -5,12 +5,13 @@ namespace App\Http\Controllers\Api\Authentication;
 use App\Domain\Audit\DTOs\RequestAuditContext;
 use App\Domain\Authorization\Services\AuthenticationService;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\Authentication\LoginRequest;
 use App\Http\Requests\Authentication\ChangeOwnPasswordRequest;
+use App\Http\Requests\Authentication\LoginRequest;
 use App\Http\Resources\Users\UserResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
+/** Adapta login, sesión actual, logout y cambio de clave al servicio de autenticación. */
 class AuthenticationController extends Controller
 {
     public function __construct(private readonly AuthenticationService $authenticationService) {}

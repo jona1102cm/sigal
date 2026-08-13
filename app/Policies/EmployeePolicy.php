@@ -5,6 +5,7 @@ namespace App\Policies;
 use App\Models\Employee;
 use App\Models\User;
 
+/** Limita kardex y contratos a superadministración y administración de RR. HH. */
 class EmployeePolicy
 {
     public function viewAny(User $user): bool

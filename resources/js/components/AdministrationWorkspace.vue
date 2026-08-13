@@ -1,4 +1,5 @@
 <script setup>
+/** Contenedor de las herramientas institucionales exclusivas de superadministración. */
 import { ref } from 'vue';
 import ExpedientTypeAdministration from './ExpedientTypeAdministration.vue';
 import LegislatureAdministration from './LegislatureAdministration.vue';

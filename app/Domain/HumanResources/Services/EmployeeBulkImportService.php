@@ -14,11 +14,17 @@ use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
+/**
+ * Valida y procesa la carga masiva de funcionarios desde la plantilla oficial.
+ *
+ * Resuelve etiquetas españolas contra catálogos reales y reutiliza el alta manual,
+ * evitando que Excel tenga un segundo conjunto de reglas de contratación.
+ */
 class EmployeeBulkImportService
 {
     /** @var array<int, string> */
@@ -133,6 +139,7 @@ class EmployeeBulkImportService
 
             if ($validator->fails()) {
                 $errors[] = $this->rowError($rowNumber, implode(' ', $validator->errors()->all()));
+
                 continue;
             }
 
@@ -140,6 +147,7 @@ class EmployeeBulkImportService
 
             if (isset($seenIdentityCards[$identityCardKey])) {
                 $errors[] = $this->rowError($rowNumber, "El CI ya aparece en la fila {$seenIdentityCards[$identityCardKey]}.");
+
                 continue;
             }
 
@@ -148,6 +156,7 @@ class EmployeeBulkImportService
 
             if ($position instanceof ValidationException) {
                 $errors[] = $this->rowError($rowNumber, implode(' ', $position->errors()['office_position'] ?? $position->errors()['office_code'] ?? ['Oficina o cargo inválido.']));
+
                 continue;
             }
 
@@ -174,7 +183,7 @@ class EmployeeBulkImportService
     }
 
     /**
-     * @param array<int, array{row: int, data: array<string, string|null>, office_position_id: int}> $records
+     * @param  array<int, array{row: int, data: array<string, string|null>, office_position_id: int}>  $records
      */
     private function persist(array $records, User $actor, RequestAuditContext $context): EmployeeBulkImportResult
     {
@@ -234,7 +243,7 @@ class EmployeeBulkImportService
     }
 
     /**
-     * @param array<int, array<int, string|null>> $rows
+     * @param  array<int, array<int, string|null>>  $rows
      * @return array{0:int, 1:array<string, int>}
      */
     private function columns(array $rows): array
@@ -267,8 +276,8 @@ class EmployeeBulkImportService
     }
 
     /**
-     * @param array<int, string|null> $row
-     * @param array<string, int> $columns
+     * @param  array<int, string|null>  $row
+     * @param  array<string, int>  $columns
      * @return array<string, string|null>
      */
     private function recordFromRow(array $row, array $columns): array

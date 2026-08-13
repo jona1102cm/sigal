@@ -8,5 +8,7 @@ Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
 
+// Primero activa las nuevas vigencias y luego cierra las vencidas, usando la zona horaria de la aplicación.
+// El servidor debe ejecutar `php artisan schedule:run` cada minuto para que estas tareas se disparen.
 Schedule::command('human-resources:activate-starting-contracts')->dailyAt('00:05');
 Schedule::command('human-resources:expire-contracts')->dailyAt('00:10');

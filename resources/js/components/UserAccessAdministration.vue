@@ -1,4 +1,5 @@
 <script setup>
+/** Administra cuentas y recuperación de acceso sin intentar revelar contraseñas hash. */
 import { computed, onMounted, ref } from 'vue';
 import { useDocumentManagementStore } from '../stores/document-management';
 import { useSessionStore } from '../stores/session';

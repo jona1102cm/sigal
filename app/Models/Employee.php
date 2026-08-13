@@ -25,6 +25,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'emergency_contact',
     'created_by',
 ])]
+/** Kardex único de la persona, reutilizable entre diferentes relaciones laborales. */
 class Employee extends Model
 {
     protected function casts(): array

@@ -5,6 +5,10 @@ function list(payload) {
     return payload?.data ?? [];
 }
 
+/**
+ * Coordina catálogos, kardex, cargos, contratos, respaldos e importación masiva.
+ * Los cargos se cachean por oficina para mantener consistente el formulario dependiente.
+ */
 export const useHumanResourcesStore = defineStore('humanResources', {
     state: () => ({
         bootstrap: { offices: [], roles: [] },

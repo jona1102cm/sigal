@@ -13,6 +13,12 @@ use App\Models\OfficeDocumentSequence;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * Configura y reserva correlativos institucionales y de oficina de forma concurrente.
+ *
+ * Las reservas bloquean la fila de secuencia para impedir que dos solicitudes
+ * obtengan el mismo número; nunca deben sustituirse por un cálculo MAX()+1.
+ */
 class NumberSequenceService
 {
     public function __construct(private readonly ActivityLogger $activityLogger) {}

@@ -14,6 +14,12 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
+/**
+ * Aplica las reglas transaccionales de legislaturas y de su Directiva.
+ *
+ * Mantiene un solo período activo y cierra una titularidad antes de abrir su
+ * reemplazo, conservando fecha administrativa e instante exacto.
+ */
 class LegislatureService
 {
     public function __construct(private readonly ActivityLogger $activityLogger) {}

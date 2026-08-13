@@ -19,6 +19,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
+/** Expone tipos de expediente y catálogos documentales de solo lectura. */
 class ExpedientTypeController extends Controller
 {
     public function __construct(

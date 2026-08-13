@@ -20,6 +20,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'ended_by',
     'created_by',
 ])]
+/** Relación laboral histórica que origina cargo, membresía y rol durante su vigencia. */
 class EmploymentContract extends Model
 {
     protected function casts(): array

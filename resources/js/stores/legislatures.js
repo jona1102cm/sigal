@@ -6,6 +6,7 @@ const jsonHeaders = {
     'X-Requested-With': 'XMLHttpRequest',
 };
 
+// Cliente histórico de la página aislada de legislaturas; el shell principal usa el cliente común.
 async function request(path, options = {}) {
     const response = await fetch(`/api${path}`, {
         credentials: 'include',
@@ -25,6 +26,7 @@ async function request(path, options = {}) {
     return payload;
 }
 
+/** Estado y operaciones de la pantalla administrativa aislada de legislaturas. */
 export const useLegislaturesStore = defineStore('legislatures', {
     state: () => ({
         items: [],

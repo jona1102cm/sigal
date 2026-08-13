@@ -1,6 +1,7 @@
 const API_PREFIX = '/api';
 const TOKEN_KEY = 'sigal.access-token';
 
+/** Error uniforme que conserva el código HTTP y los errores por campo enviados por Laravel. */
 export class ApiError extends Error {
     constructor(message, { status = 0, errors = {} } = {}) {
         super(message);
@@ -22,6 +23,7 @@ export function setToken(token) {
     }
 }
 
+/** Construye cabeceras comunes sin fijar Content-Type en FormData: el navegador agrega su boundary. */
 function buildHeaders(headers, body) {
     const merged = new Headers({
         Accept: 'application/json',
@@ -41,6 +43,7 @@ function buildHeaders(headers, body) {
     return merged;
 }
 
+/** Ejecuta una solicitud autenticada y convierte cualquier respuesta fallida en ApiError. */
 export async function request(path, options = {}) {
     const { body, headers, ...requestOptions } = options;
     const response = await fetch(`${API_PREFIX}${path}`, {
@@ -60,6 +63,7 @@ export async function request(path, options = {}) {
     return payload;
 }
 
+/** Recorre colecciones paginadas de Laravel y devuelve un único arreglo para catálogos pequeños. */
 export async function getAll(path) {
     const items = [];
     let page = 1;
@@ -76,6 +80,7 @@ export async function getAll(path) {
     return items;
 }
 
+/** Descarga un blob protegido sin exponer el token en una URL ni conservar URLs temporales. */
 export async function download(path, fileName) {
     const response = await fetch(`${API_PREFIX}${path}`, { headers: buildHeaders() });
 

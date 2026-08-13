@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
+/** Crea la cuenta institucional de RR. HH. sin asociarla a un contrato o funcionario. */
 class BootstrapHumanResourcesAdministrator extends Command
 {
     protected $signature = 'sigal:bootstrap-human-resources-administrator

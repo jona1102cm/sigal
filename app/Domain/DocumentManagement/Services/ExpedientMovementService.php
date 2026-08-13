@@ -17,6 +17,12 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
+/**
+ * Transfiere la tenencia administrativa y mantiene el estado independiente por oficina.
+ *
+ * La autoridad para derivar se calcula desde el último movimiento, nunca desde el
+ * creador del expediente ni desde una oficina responsable histórica.
+ */
 class ExpedientMovementService
 {
     public function __construct(private readonly ActivityLogger $activityLogger) {}
@@ -28,6 +34,7 @@ class ExpedientMovementService
         RequestAuditContext $context,
     ): ExpedientMovement {
         return DB::transaction(function () use ($expedient, $data, $actor, $context): ExpedientMovement {
+            // Serializa derivaciones concurrentes para que solo una parta de la tenencia vigente.
             $target = Expedient::query()->lockForUpdate()->findOrFail($expedient->id);
             $this->assertCanReceiveMovements($target);
             $this->assertDistinctRecipients($data);
@@ -67,6 +74,7 @@ class ExpedientMovementService
                 'sent_at' => now(),
             ]);
 
+            // Cada destino primario administra su propio pendiente; una copia nunca exige acción.
             foreach ($data->primaryOfficeIds as $officeId) {
                 $movement->recipients()->create([
                     'recipient_office_id' => $officeId,
@@ -89,6 +97,7 @@ class ExpedientMovementService
                 ]);
             }
 
+            // El estado del expediente es una proyección del último movimiento, no una decisión manual.
             $oldStatus = $target->status;
             $target->update(['status' => $this->calculateExpedientStatus($target)]);
 
@@ -131,6 +140,7 @@ class ExpedientMovementService
                 ]);
             }
 
+            // Un movimiento anterior queda como historia y ya no puede recuperar el control actual.
             $latestMovementId = $targetExpedient->movements()->latest('sent_at')->latest('id')->value('id');
 
             if ($target->expedient_movement_id !== $latestMovementId) {
@@ -244,6 +254,7 @@ class ExpedientMovementService
             ->value('instruction');
     }
 
+    /** Calcula el estado agregado exclusivamente desde los destinatarios del último movimiento. */
     private function calculateExpedientStatus(Expedient $expedient): ExpedientStatus
     {
         $latestMovementId = $expedient->movements()

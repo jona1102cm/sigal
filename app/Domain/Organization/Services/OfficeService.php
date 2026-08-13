@@ -15,6 +15,12 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
+/**
+ * Mantiene el árbol institucional y las membresías históricas de cada oficina.
+ *
+ * Valida jerarquía, capacidad de dotación y cierres sin borrar las relaciones
+ * utilizadas posteriormente por permisos y tenencia documental.
+ */
 class OfficeService
 {
     public function __construct(private readonly ActivityLogger $activityLogger) {}

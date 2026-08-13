@@ -16,6 +16,12 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
+/**
+ * Administra identidades, estados, recuperación de emergencia y roles históricos.
+ *
+ * Protege la continuidad institucional impidiendo perder al último
+ * superadministrador activo, incluso frente a solicitudes concurrentes.
+ */
 class UserManagementService
 {
     private const SUPER_ADMINISTRATION_LOCK_ID = 9_013_127;

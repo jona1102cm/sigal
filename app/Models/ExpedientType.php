@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 #[Fillable(['code', 'name', 'category', 'status'])]
+/** Catálogo administrable que clasifica el tipo de proceso administrativo. */
 class ExpedientType extends Model
 {
     protected function casts(): array

@@ -9,6 +9,12 @@ use App\Models\Expedient;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * Conserva la apertura excepcional de un expediente sin documento inicial.
+ *
+ * La operación normal debe usar DocumentedExpedientEntryService; esta variante
+ * existe para casos administrativos que no pueden aportar un documento al inicio.
+ */
 class ExpedientRegistrationService
 {
     public function __construct(

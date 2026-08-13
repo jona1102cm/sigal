@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'completed_by',
     'completed_at',
 ])]
+/** Estado independiente de una oficina destinataria primaria o en copia. */
 class ExpedientMovementRecipient extends Model
 {
     protected function casts(): array

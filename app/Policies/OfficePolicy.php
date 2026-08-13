@@ -6,6 +6,7 @@ use App\Domain\Authorization\Enums\RoleCode;
 use App\Models\Office;
 use App\Models\User;
 
+/** Separa la consulta operativa del directorio de la modificación del organigrama. */
 class OfficePolicy
 {
     public function viewAny(User $user): bool

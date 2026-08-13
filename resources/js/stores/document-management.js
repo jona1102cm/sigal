@@ -5,6 +5,10 @@ function list(payload) {
     return payload?.data ?? [];
 }
 
+/**
+ * Estado compartido del módulo documental y de sus catálogos administrativos.
+ * Las mutaciones recargan la vista afectada para reflejar el estado calculado por el servidor.
+ */
 export const useDocumentManagementStore = defineStore('documentManagement', {
     state: () => ({
         catalogs: {
@@ -37,6 +41,7 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
 
     actions: {
         async run(key, operation) {
+            // busy es un mapa por operación: permite bloquear un botón sin congelar todo el workspace.
             this.busy = { ...this.busy, [key]: true };
             this.error = null;
 

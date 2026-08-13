@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable(['document_id', 'revision_number', 'title', 'content', 'changed_by', 'changed_at'])]
+/** Versión inmutable del contenido que permite corregir sin sobrescribir evidencia. */
 class DocumentRevision extends Model
 {
     protected function casts(): array

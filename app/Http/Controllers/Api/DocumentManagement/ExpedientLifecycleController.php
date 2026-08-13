@@ -17,6 +17,7 @@ use App\Models\ExpedientReopeningRequest;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
+/** Expone archivo, cierre, anulación y el procedimiento auditable de reapertura. */
 class ExpedientLifecycleController extends Controller
 {
     public function __construct(private readonly ExpedientLifecycleService $expedientLifecycleService) {}

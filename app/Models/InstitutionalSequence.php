@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable(['legislature_id', 'last_issued_number'])]
+/** Contador SIGAL por legislatura, reservado bajo bloqueo para evitar duplicados. */
 class InstitutionalSequence extends Model
 {
     /** @return BelongsTo<Legislature, $this> */

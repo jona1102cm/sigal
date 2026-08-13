@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 #[Fillable(['code', 'name', 'requires_explicit_access', 'sort_order', 'status'])]
+/** Catálogo de niveles que condicionan la visibilidad documental. */
 class ConfidentialityLevel extends Model
 {
     protected function casts(): array

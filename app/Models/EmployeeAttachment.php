@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'uploaded_by',
     'uploaded_at',
 ])]
+/** Metadatos y hash de una foto o respaldo laboral almacenado fuera de PostgreSQL. */
 class EmployeeAttachment extends Model
 {
     protected function casts(): array

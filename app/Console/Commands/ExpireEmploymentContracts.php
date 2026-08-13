@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Domain\HumanResources\Services\HumanResourcesService;
 use Illuminate\Console\Command;
 
+/** Cierra contratos vencidos y delega al dominio sus efectos de acceso y membresía. */
 class ExpireEmploymentContracts extends Command
 {
     protected $signature = 'human-resources:expire-contracts';

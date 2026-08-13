@@ -1,4 +1,5 @@
 <script setup>
+/** Select accesible y filtrable mientras el usuario escribe, reutilizado en todo SIGAL. */
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 
 const props = defineProps({
@@ -17,6 +18,7 @@ const query = ref('');
 
 const selected = computed(() => props.options.find((option) => String(option.value) === String(props.modelValue)) ?? null);
 const filteredOptions = computed(() => {
+    // Se filtra localmente en cada pulsación; no hace falta confirmar con Enter.
     const normalizedQuery = query.value.trim().toLocaleLowerCase('es');
 
     if (!normalizedQuery) return props.options;

@@ -9,6 +9,10 @@ use App\Domain\Organization\Enums\OfficeMembershipRole;
 use App\Models\Expedient;
 use App\Models\User;
 
+/**
+ * Fuente autoritativa de visibilidad y acciones sobre expedientes.
+ * Evalúa rol, creación, membresía, jerarquía, tenencia, acceso concedido y capacidades.
+ */
 class ExpedientPolicy
 {
     public function viewAny(User $user): bool

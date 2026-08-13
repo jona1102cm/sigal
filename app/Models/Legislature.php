@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable(['start_year', 'end_year', 'status', 'activated_at', 'inactivated_at'])]
+/** Período legislativo de dos años consecutivos; solo uno puede estar activo. */
 class Legislature extends Model
 {
     protected function casts(): array

@@ -12,6 +12,12 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
+/**
+ * Administra concesiones extraordinarias de lectura sobre un expediente.
+ *
+ * Cada concesión se cierra por vigencia y conserva quién la otorgó; no reemplaza
+ * las reglas ordinarias de acceso por rol, creación, oficina o jerarquía.
+ */
 class ExpedientAccessService
 {
     public function __construct(private readonly ActivityLogger $activityLogger) {}

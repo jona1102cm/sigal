@@ -5,6 +5,7 @@ namespace App\Policies;
 use App\Models\ExpedientType;
 use App\Models\User;
 
+/** Autoriza la lectura operativa y la administración separada del catálogo. */
 class ExpedientTypePolicy
 {
     public function viewAny(User $user): bool

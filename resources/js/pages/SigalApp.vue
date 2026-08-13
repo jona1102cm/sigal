@@ -1,4 +1,8 @@
 <script setup>
+/**
+ * Shell principal autenticado: decide qué módulo puede ver el usuario y coordina
+ * las cargas iniciales sin duplicar las reglas de autorización del backend.
+ */
 import { computed, onMounted, ref } from 'vue';
 import AccountPasswordDialog from '../components/AccountPasswordDialog.vue';
 import AdministrationWorkspace from '../components/AdministrationWorkspace.vue';
@@ -29,6 +33,7 @@ async function loadWorkspace() {
     bootError.value = null;
 
     try {
+        // Carga en paralelo solo los módulos permitidos para reducir tiempo de arranque y exposición.
         const loads = [];
         if (session.canUseDocumentManagement) loads.push(documents.loadCatalogs(), documents.loadExpedients());
         if (session.canManageHumanResources) loads.push(humanResources.loadBootstrap(), humanResources.loadEmployees());
@@ -47,6 +52,7 @@ async function authenticated() {
 }
 
 async function openExpedient(expedient) {
+    // La selección cambia primero al workspace; el detalle ocupa después toda el área principal.
     view.value = 'expedients';
     try {
         await documents.selectExpedient(expedient);

@@ -1,4 +1,5 @@
 <script setup>
+/** Descarga la plantilla oficial y presenta el resultado por fila de la importación masiva. */
 import { ref } from 'vue';
 import { useHumanResourcesStore } from '../stores/human-resources';
 
@@ -24,6 +25,7 @@ async function downloadTemplate() {
 }
 
 async function submit() {
+    // El archivo viaja como multipart; el servicio del backend valida nuevamente todos sus valores.
     if (!file.value) {
         errors.value = ['Seleccione la plantilla Excel completada antes de importar.'];
         return;

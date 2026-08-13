@@ -6,6 +6,7 @@ use App\Domain\Organization\Enums\OfficeStatus;
 use App\Models\Office;
 use Illuminate\Database\Seeder;
 
+/** Registra de forma idempotente el organigrama oficial y sus cargos iniciales. */
 class OrganizationSeeder extends Seeder
 {
     public function run(): void

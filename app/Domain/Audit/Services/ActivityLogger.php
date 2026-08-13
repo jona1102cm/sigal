@@ -7,6 +7,12 @@ use App\Models\ActivityLog;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 
+/**
+ * Persiste una bitácora uniforme e inmutable de acciones de seguridad y dominio.
+ *
+ * Los servicios entregan snapshots relevantes; esta clase agrega actor, sujeto y
+ * contexto HTTP sin acoplar la regla de negocio a la clase Request de Laravel.
+ */
 class ActivityLogger
 {
     /**

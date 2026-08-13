@@ -6,10 +6,15 @@ use App\Domain\Audit\DTOs\RequestAuditContext;
 use App\Domain\Audit\Services\ActivityLogger;
 use App\Domain\Authorization\DTOs\AuthenticatedSessionData;
 use App\Models\User;
-use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 
+/**
+ * Gestiona el ciclo de una sesión Sanctum y los efectos de seguridad de la contraseña.
+ *
+ * Cada mutación revoca o crea tokens según corresponda y deja evidencia auditable.
+ */
 class AuthenticationService
 {
     public function __construct(private readonly ActivityLogger $activityLogger) {}

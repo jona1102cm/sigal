@@ -1,4 +1,5 @@
 <script setup>
+/** Formulario público de acceso; el backend limita intentos y valida el estado de la cuenta. */
 import { reactive, ref } from 'vue';
 import { useSessionStore } from '../stores/session';
 

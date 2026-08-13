@@ -19,6 +19,7 @@ use Laravel\Sanctum\HasApiTokens;
 
 #[Fillable(['employee_id', 'name', 'email', 'password', 'status', 'must_change_password'])]
 #[Hidden(['password', 'remember_token'])]
+/** Identidad autenticable reutilizable, separada del kardex y de sus asignaciones históricas. */
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */

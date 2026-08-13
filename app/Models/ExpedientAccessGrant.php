@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'effective_to',
     'reason',
 ])]
+/** Concesión extraordinaria y temporal de acceso adicional a un expediente. */
 class ExpedientAccessGrant extends Model
 {
     protected function casts(): array

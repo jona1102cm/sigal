@@ -1,4 +1,5 @@
 <script setup>
+/** Administra períodos legislativos y reemplazos efectivos de la Directiva. */
 import { computed, onMounted, reactive, ref } from 'vue';
 import SearchableSelect from './SearchableSelect.vue';
 import { useDocumentManagementStore } from '../stores/document-management';

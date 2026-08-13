@@ -1,4 +1,5 @@
 <script setup>
+/** Única pantalla funcional disponible cuando la cuenta conserva una clave temporal. */
 import { reactive, ref } from 'vue';
 import { useSessionStore } from '../stores/session';
 

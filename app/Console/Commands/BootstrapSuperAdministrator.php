@@ -13,6 +13,7 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
+/** Crea o asegura la cuenta institucional inicial con administración completa. */
 class BootstrapSuperAdministrator extends Command
 {
     protected $signature = 'sigal:bootstrap-superadministrator

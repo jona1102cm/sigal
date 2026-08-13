@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'formatted_number',
     'last_version_number',
 ])]
+/** Serie/número institucional ya reservado y vinculado a un documento. */
 class DocumentNumberSeries extends Model
 {
     /** @return BelongsTo<Expedient, $this> */
