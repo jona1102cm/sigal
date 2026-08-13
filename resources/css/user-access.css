@@ -1,0 +1,90 @@
+.user-access-administration {
+    display: grid;
+    gap: 1rem;
+}
+
+.user-access-search {
+    max-width: 32rem;
+}
+
+.user-access-list {
+    display: grid;
+    overflow: hidden;
+    border: 1px solid #e0e9e4;
+    border-radius: .8rem;
+    background: white;
+}
+
+.user-access-row {
+    display: grid;
+    grid-template-columns: minmax(16rem, 1.25fr) minmax(13rem, .9fr) auto;
+    align-items: center;
+    gap: 1rem;
+    padding: .9rem 1rem;
+}
+
+.user-access-row + .user-access-row {
+    border-top: 1px solid #edf2ef;
+}
+
+.user-access-row__identity {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: .65rem;
+}
+
+.user-access-row__identity > span {
+    display: grid;
+    width: 2.25rem;
+    height: 2.25rem;
+    flex: 0 0 auto;
+    place-items: center;
+    border-radius: .7rem;
+    background: #dff0e7;
+    color: #1d684f;
+    font-size: .74rem;
+    font-weight: 800;
+}
+
+.user-access-row__identity strong,
+.user-access-row__identity small,
+.user-access-row__meta small {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.user-access-row__identity strong {
+    color: #315447;
+    font-size: .78rem;
+}
+
+.user-access-row__identity small,
+.user-access-row__meta small {
+    margin-top: .16rem;
+    color: #778b82;
+    font-size: .66rem;
+}
+
+.user-access-row__meta {
+    display: grid;
+    min-width: 0;
+    gap: .18rem;
+}
+
+.user-access-row__meta .employee-row__state {
+    margin-bottom: .12rem;
+}
+
+@media (max-width: 760px) {
+    .user-access-row {
+        grid-template-columns: 1fr;
+        align-items: flex-start;
+    }
+
+    .user-access-row .button {
+        width: 100%;
+    }
+}

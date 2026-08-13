@@ -1,0 +1,123 @@
+<script setup>
+import { computed, onMounted, ref } from 'vue';
+import AccountPasswordDialog from '../components/AccountPasswordDialog.vue';
+import AdministrationWorkspace from '../components/AdministrationWorkspace.vue';
+import DashboardView from '../components/DashboardView.vue';
+import ExpedientCreateDialog from '../components/ExpedientCreateDialog.vue';
+import ExpedientsWorkspace from '../components/ExpedientsWorkspace.vue';
+import HumanResourcesWorkspace from '../components/HumanResourcesWorkspace.vue';
+import LoginScreen from '../components/LoginScreen.vue';
+import PasswordChangeScreen from '../components/PasswordChangeScreen.vue';
+import { useDocumentManagementStore } from '../stores/document-management';
+import { useHumanResourcesStore } from '../stores/human-resources';
+import { useSessionStore } from '../stores/session';
+
+const session = useSessionStore();
+const documents = useDocumentManagementStore();
+const humanResources = useHumanResourcesStore();
+const view = ref('dashboard');
+const mobileMenuOpen = ref(false);
+const sidebarCollapsed = ref(false);
+const expandedModule = ref(null);
+const createDialogOpen = ref(false);
+const booting = ref(false);
+const bootError = ref(null);
+const passwordDialogOpen = ref(false);
+
+async function loadWorkspace() {
+    booting.value = true;
+    bootError.value = null;
+
+    try {
+        const loads = [];
+        if (session.canUseDocumentManagement) loads.push(documents.loadCatalogs(), documents.loadExpedients());
+        if (session.canManageHumanResources) loads.push(humanResources.loadBootstrap(), humanResources.loadEmployees());
+        await Promise.all(loads);
+
+        if (!session.canUseDocumentManagement && session.canManageHumanResources) view.value = 'human-resources';
+    } catch (error) {
+        bootError.value = error.message;
+    } finally {
+        booting.value = false;
+    }
+}
+
+async function authenticated() {
+    await loadWorkspace();
+}
+
+async function openExpedient(expedient) {
+    view.value = 'expedients';
+    try {
+        await documents.selectExpedient(expedient);
+    } catch {
+        // The workspace displays the actionable server message when access changes concurrently.
+    }
+}
+
+async function logout() {
+    await session.logout();
+    documents.$reset();
+    humanResources.$reset();
+    view.value = 'dashboard';
+}
+
+function toggleModule(module, targetView) {
+    expandedModule.value = expandedModule.value === module ? null : module;
+    view.value = targetView;
+    mobileMenuOpen.value = false;
+}
+
+const viewContext = computed(() => ({
+    dashboard: 'Inicio',
+    expedients: 'Gestion documental',
+    'human-resources': 'Recursos Humanos',
+    administration: 'Administracion',
+}[view.value] || 'SIGAL'));
+
+onMounted(async () => {
+    await session.restore();
+    if (session.authenticated) await loadWorkspace();
+});
+</script>
+
+<template>
+    <div v-if="!session.ready" class="app-loading"><div class="app-loading__mark">S</div><p>Preparando SIGAL...</p></div>
+    <LoginScreen v-else-if="!session.authenticated" @authenticated="authenticated" />
+    <PasswordChangeScreen v-else-if="session.mustChangePassword" @changed="authenticated" @logout="logout" />
+
+    <div v-else class="app-shell" :class="{ 'is-sidebar-collapsed': sidebarCollapsed }">
+        <aside class="app-sidebar" :class="{ 'is-open': mobileMenuOpen }">
+            <div class="sidebar__brand-row">
+                <div class="sidebar__brand"><span class="brand__mark" aria-hidden="true">S</span><span class="sidebar__label">SIGAL</span></div>
+                <button class="sidebar-collapse-button" type="button" :aria-label="sidebarCollapsed ? 'Expandir panel de navegacion' : 'Contraer panel de navegacion'" :title="sidebarCollapsed ? 'Expandir panel' : 'Contraer panel'" @click="sidebarCollapsed = !sidebarCollapsed"><span aria-hidden="true">{{ sidebarCollapsed ? '>' : '<' }}</span></button>
+            </div>
+            <p class="sidebar__institution">Asamblea Legislativa Departamental del Beni</p>
+            <nav class="sidebar__nav" aria-label="Navegacion principal">
+                <button v-if="session.canUseDocumentManagement" type="button" :class="{ 'is-active': view === 'dashboard' }" @click="view = 'dashboard'; mobileMenuOpen = false"><span aria-hidden="true">D</span><span class="sidebar__nav-label">Inicio</span></button>
+                <section v-if="session.canUseDocumentManagement" class="sidebar__module" :class="{ 'is-active': view === 'expedients' }"><button class="sidebar__module-button" type="button" :aria-expanded="expandedModule === 'document-management'" @click="toggleModule('document-management', 'expedients')"><span aria-hidden="true">GD</span><span class="sidebar__nav-label">Gestion documental</span><em class="sidebar__module-chevron" aria-hidden="true">{{ expandedModule === 'document-management' ? '-' : '+' }}</em></button><button v-if="expandedModule === 'document-management'" class="sidebar__subnav" type="button" :class="{ 'is-active': view === 'expedients' }" @click="view = 'expedients'; mobileMenuOpen = false"><span class="sidebar__nav-label">Bandeja de expedientes</span></button></section>
+                <section v-if="session.canManageHumanResources" class="sidebar__module" :class="{ 'is-active': view === 'human-resources' }"><button class="sidebar__module-button" type="button" :aria-expanded="expandedModule === 'human-resources'" @click="toggleModule('human-resources', 'human-resources')"><span aria-hidden="true">RH</span><span class="sidebar__nav-label">Recursos Humanos</span><em class="sidebar__module-chevron" aria-hidden="true">{{ expandedModule === 'human-resources' ? '-' : '+' }}</em></button><button v-if="expandedModule === 'human-resources'" class="sidebar__subnav" type="button" :class="{ 'is-active': view === 'human-resources' }" @click="view = 'human-resources'; mobileMenuOpen = false"><span class="sidebar__nav-label">Funcionarios y contratos</span></button></section>
+                <section v-if="session.isSuperAdministrator" class="sidebar__module" :class="{ 'is-active': view === 'administration' }"><button class="sidebar__module-button" type="button" :aria-expanded="expandedModule === 'administration'" @click="toggleModule('administration', 'administration')"><span aria-hidden="true">AD</span><span class="sidebar__nav-label">Administracion</span><em class="sidebar__module-chevron" aria-hidden="true">{{ expandedModule === 'administration' ? '-' : '+' }}</em></button><button v-if="expandedModule === 'administration'" class="sidebar__subnav" type="button" :class="{ 'is-active': view === 'administration' }" @click="view = 'administration'; mobileMenuOpen = false"><span class="sidebar__nav-label">Institucion y catalogos</span></button></section>
+            </nav>
+            <div class="sidebar__footer"><span class="status-dot status-dot--success"></span><span class="sidebar__label">Sesion protegida</span></div>
+        </aside>
+
+        <main class="app-main">
+            <header class="app-topbar">
+                <button class="mobile-menu-button" type="button" aria-label="Abrir navegacion" @click="mobileMenuOpen = !mobileMenuOpen">=</button>
+                <div class="topbar__context"><span class="topbar__eyebrow">SIGAL</span><span>{{ viewContext }}</span></div>
+                <div class="profile-menu"><div class="profile-menu__initial">{{ session.user.name?.slice(0, 1).toUpperCase() }}</div><div><strong>{{ session.user.name }}</strong><small>{{ session.roleLabel }}</small></div><button class="text-button" type="button" @click="passwordDialogOpen = true">Cambiar contraseña</button><button class="text-button" type="button" @click="logout">Salir</button></div>
+            </header>
+
+            <div v-if="booting" class="workspace-loading"><div class="loading-line"></div><p>Actualizando la informacion institucional...</p></div>
+            <section v-else-if="bootError" class="boot-error"><p class="alert alert--error">{{ bootError }}</p><button class="button button--primary" type="button" @click="loadWorkspace">Reintentar</button></section>
+            <DashboardView v-else-if="view === 'dashboard' && session.canUseDocumentManagement" @open-expedients="view = 'expedients'" @create-expedient="createDialogOpen = true" @select-expedient="openExpedient" />
+            <ExpedientsWorkspace v-else-if="view === 'expedients' && session.canUseDocumentManagement" :session="session" @create-expedient="createDialogOpen = true" />
+            <HumanResourcesWorkspace v-else-if="view === 'human-resources' && session.canManageHumanResources" />
+            <AdministrationWorkspace v-else-if="session.isSuperAdministrator" />
+        </main>
+
+        <ExpedientCreateDialog v-if="session.canUseDocumentManagement" :open="createDialogOpen" @close="createDialogOpen = false" @created="createDialogOpen = false; view = 'expedients'" />
+        <AccountPasswordDialog v-if="passwordDialogOpen" @close="passwordDialogOpen = false" @changed="loadWorkspace" />
+    </div>
+</template>
