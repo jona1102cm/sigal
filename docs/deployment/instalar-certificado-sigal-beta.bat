@@ -5,7 +5,7 @@ rem Instalador de la autoridad certificadora interna de SIGAL Beta.
 rem Distribuya este archivo junto a sigal-beta-ca.crt, sin cambiar sus nombres.
 
 set "CERTIFICATE=%~dp0sigal-beta-ca.crt"
-set "SIGAL_URL=https://172.16.11.107"
+set "SIGAL_URL=https://172.16.11.225"
 set "EXPECTED_CERTIFICATE_SHA256=11E42EC68636BA96B2C6ECDF1E3976DC1D65956011E149275E8C3AF3E3159352"
 set "EXPECTED_THUMBPRINT=6B97A2785FE5494E4F82B624A6F460E13470288D"
 
