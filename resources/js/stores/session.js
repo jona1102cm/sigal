@@ -21,6 +21,7 @@ export const useSessionStore = defineStore('session', {
             return this.isSuperAdministrator || this.isHumanResourcesManager;
         },
         canUseDocumentManagement: (state) => state.user?.roles?.some((role) => ['super_administrator', 'observer', 'simple_user'].includes(role.code)) ?? false,
+        canCreateExpedients: (state) => state.user?.roles?.some((role) => ['super_administrator', 'simple_user'].includes(role.code)) ?? false,
         roleLabel: (state) => state.user?.roles?.map((role) => role.name).join(' · ') || 'Usuario del sistema',
     },
 
@@ -33,13 +34,27 @@ export const useSessionStore = defineStore('session', {
             }
 
             try {
-                const payload = await request('/auth/me');
-                this.user = payload.data;
+                await this.refresh();
             } catch {
-                setToken(null);
-                this.user = null;
+                // Un fallo transitorio de red no destruye el token; el siguiente enfoque vuelve a consultar.
             } finally {
                 this.ready = true;
+            }
+        },
+
+        async refresh() {
+            if (!getToken()) return null;
+
+            try {
+                const payload = await request('/auth/me');
+                this.user = payload.data;
+                return this.user;
+            } catch (error) {
+                if ([401, 403].includes(error.status)) {
+                    setToken(null);
+                    this.user = null;
+                }
+                throw error;
             }
         },
 

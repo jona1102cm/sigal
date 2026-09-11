@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\EnsureActiveSystemUser;
 use App\Http\Middleware\EnsurePasswordHasBeenChanged;
+use App\Http\Middleware\PreventApiResponseCaching;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -19,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Alias descriptivos utilizados por routes/api.php para las restricciones de sesión.
         $middleware->alias([
             'active.user' => EnsureActiveSystemUser::class,
+            'no.store' => PreventApiResponseCaching::class,
             'password.changed' => EnsurePasswordHasBeenChanged::class,
         ]);
     })

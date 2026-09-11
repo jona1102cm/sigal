@@ -64,7 +64,7 @@ class ExpedientLifecycleController extends Controller
 
     public function reopeningRequests(Request $request, Expedient $expedient): AnonymousResourceCollection
     {
-        $this->authorize('view', $expedient);
+        $this->authorize('viewReopeningHistory', $expedient);
 
         return ExpedientReopeningRequestResource::collection(
             $expedient->reopeningRequests()->latest('created_at')->paginate(),

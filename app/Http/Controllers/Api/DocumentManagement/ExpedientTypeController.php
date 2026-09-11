@@ -91,11 +91,15 @@ class ExpedientTypeController extends Controller
 
     public function documentTypes(Request $request): AnonymousResourceCollection
     {
+        $this->authorize('viewAny', ExpedientType::class);
+
         return DocumentTypeResource::collection(DocumentType::query()->active()->orderBy('name')->paginate());
     }
 
     public function confidentialityLevels(Request $request): AnonymousResourceCollection
     {
+        $this->authorize('viewAny', ExpedientType::class);
+
         return ConfidentialityLevelResource::collection(
             ConfidentialityLevel::query()->active()->orderBy('sort_order')->paginate(),
         );

@@ -1,7 +1,7 @@
 <script setup>
 /**
- * Vista operativa completa del expediente. Calcula acciones visibles desde la
- * oficina que posee el último movimiento y delega la validación definitiva al API.
+ * Vista operativa completa del expediente. Presenta exclusivamente las acciones
+ * autorizadas por las Policies que el API devuelve junto con el expediente.
  */
 import { computed, reactive, ref, watch } from 'vue';
 import RichTextEditor from './RichTextEditor.vue';
@@ -70,9 +70,12 @@ const currentHolderOfficeIds = computed(() => {
 });
 const holderOffices = computed(() => allOffices.value.filter((office) => currentHolderOfficeIds.value.includes(Number(office.id))));
 const myHolderOffices = computed(() => holderOffices.value.filter((office) => myOfficeIds.value.includes(Number(office.id))));
-const documentOffices = computed(() => myHolderOffices.value);
-const canUseAccess = computed(() => props.session.isSuperAdministrator);
-const canUseLifecycle = computed(() => myHolderOffices.value.length > 0);
+const permissions = computed(() => selected.value?.permissions ?? {});
+const documentOffices = computed(() => permissions.value.manage_documents ? myHolderOffices.value : []);
+const canUseAccess = computed(() => permissions.value.manage_access === true);
+const canUseLifecycle = computed(() => permissions.value.view_lifecycle === true
+    || permissions.value.request_reopening === true
+    || permissions.value.approve_reopening === true);
 const visibleTabs = computed(() => tabs.filter(([value]) => {
     if (value === 'access') return canUseAccess.value;
     if (value === 'lifecycle') return canUseLifecycle.value;
@@ -80,7 +83,7 @@ const visibleTabs = computed(() => tabs.filter(([value]) => {
 }));
 const hasManyDocumentOffices = computed(() => documentOffices.value.length > 1);
 const hasManyDocumentTypes = computed(() => documents.catalogs.documentTypes.length > 1);
-const canCreateDocuments = computed(() => documentOffices.value.length > 0);
+const canCreateDocuments = computed(() => permissions.value.manage_documents === true && documentOffices.value.length > 0);
 const officeToneNames = ['jade', 'ocean', 'indigo', 'violet', 'plum', 'ruby', 'terracotta', 'gold', 'olive', 'teal', 'slate', 'cocoa'];
 
 watch(selected, () => {
@@ -144,7 +147,8 @@ function movementRouteLabel(movement) {
 
 function recipientCanAct(movement, recipient) {
     // Una copia o una recepción histórica nunca debe presentar controles operativos.
-    return movement.id === latestMovement.value?.id
+    return permissions.value.act_on_movement === true
+        && movement.id === latestMovement.value?.id
         && recipient.recipient_kind === 'primary'
         && !recipientIsTerminal(recipient)
         && myOfficeIds.value.includes(Number(recipient.recipient_office?.id));
@@ -155,7 +159,9 @@ function recipientIsTerminal(recipient) {
 }
 
 function canManageDocument(document) {
-    return !document.is_initial && documentOffices.value.some((office) => Number(office.id) === Number(document.issuing_office?.id));
+    return permissions.value.manage_documents === true
+        && !document.is_initial
+        && documentOffices.value.some((office) => Number(office.id) === Number(document.issuing_office?.id));
 }
 
 function toggleRecipient(list, id) {
@@ -429,11 +435,11 @@ async function grantAccess() {
             <section v-if="activeTab === 'lifecycle'" class="tab-section">
                 <div class="section-heading"><div><p class="eyebrow">Resguardo institucional</p><h3>Ciclo de vida</h3></div></div>
                 <div class="lifecycle-stage"><span class="badge badge--large" :class="`badge--${selected.status}`">{{ selected.status_label }}</span><p>Las acciones se validan según la oficina, el cargo vigente y las reglas institucionales.</p></div>
-                <div v-if="!isTerminal" class="lifecycle-actions"><button v-if="selected.status !== 'archived'" class="button button--secondary" type="button" @click="lifecycleAction = 'archive'">Archivar</button><button v-if="selected.status === 'archived'" class="button button--secondary" type="button" @click="lifecycleAction = 'close'">Cerrar</button><button class="button button--danger" type="button" @click="lifecycleAction = 'void'">Anular</button></div>
+                <div v-if="!isTerminal" class="lifecycle-actions"><button v-if="permissions.archive && selected.status !== 'archived'" class="button button--secondary" type="button" @click="lifecycleAction = 'archive'">Archivar</button><button v-if="permissions.close && selected.status === 'archived'" class="button button--secondary" type="button" @click="lifecycleAction = 'close'">Cerrar</button><button v-if="permissions.void" class="button button--danger" type="button" @click="lifecycleAction = 'void'">Anular</button></div>
                 <form v-if="lifecycleAction" class="action-form" @submit.prevent="submitLifecycle"><h4>{{ lifecycleAction === 'archive' ? 'Archivar expediente' : lifecycleAction === 'close' ? 'Cerrar expediente' : 'Anular expediente' }}</h4><label class="field field--full"><span>Motivo de la acción</span><textarea v-model.trim="lifecycleReason" rows="3" required placeholder="Explique el fundamento institucional"></textarea></label><div class="inline-actions"><button class="button button--primary" :disabled="documents.busy[`lifecycle-${lifecycleAction}`]" type="submit">Confirmar acción</button><button class="button button--ghost" type="button" @click="lifecycleAction = null">Cancelar</button></div></form>
 
-                <div v-if="['archived', 'closed'].includes(selected.status)" class="reopening-area"><h4>Solicitud de reapertura</h4><p>La jefatura de la oficina responsable puede justificar una reapertura. OMAF decide la solicitud.</p><form @submit.prevent="submitReopening"><label class="field"><span>Justificación</span><textarea v-model.trim="reopeningReason" rows="3" required placeholder="Describa el antecedente que exige reabrir el trámite"></textarea></label><button class="button button--secondary" :disabled="documents.busy['reopening-request']" type="submit">Solicitar reapertura</button></form></div>
-                <div v-if="documents.reopeningRequests.length" class="request-list"><h4>Historial de reaperturas</h4><article v-for="request in documents.reopeningRequests" :key="request.id" class="request-card"><div><span class="badge" :class="`badge--request-${request.status}`">{{ request.status_label }}</span><p>{{ request.justification }}</p><small>Solicitada: {{ formatDate(request.requested_at, true) }}</small><small v-if="request.decision_note">Decisión: {{ request.decision_note }}</small></div><div v-if="request.status === 'pending'" class="decision-actions"><input v-model.trim="decisionNote" placeholder="Nota de decisión (opcional)"><button class="button button--primary" type="button" @click="decideReopening(request, 'approve')">Aprobar</button><button class="button button--ghost" type="button" @click="decideReopening(request, 'reject')">Rechazar</button></div></article></div>
+                <div v-if="permissions.request_reopening && ['archived', 'closed'].includes(selected.status)" class="reopening-area"><h4>Solicitud de reapertura</h4><p>La jefatura de la oficina responsable puede justificar una reapertura. OMAF decide la solicitud.</p><form @submit.prevent="submitReopening"><label class="field"><span>Justificación</span><textarea v-model.trim="reopeningReason" rows="3" required placeholder="Describa el antecedente que exige reabrir el trámite"></textarea></label><button class="button button--secondary" :disabled="documents.busy['reopening-request']" type="submit">Solicitar reapertura</button></form></div>
+                <div v-if="documents.reopeningRequests.length" class="request-list"><h4>Historial de reaperturas</h4><article v-for="request in documents.reopeningRequests" :key="request.id" class="request-card"><div><span class="badge" :class="`badge--request-${request.status}`">{{ request.status_label }}</span><p>{{ request.justification }}</p><small>Solicitada: {{ formatDate(request.requested_at, true) }}</small><small v-if="request.decision_note">Decisión: {{ request.decision_note }}</small></div><div v-if="permissions.approve_reopening && request.status === 'pending'" class="decision-actions"><input v-model.trim="decisionNote" placeholder="Nota de decisión (opcional)"><button class="button button--primary" type="button" @click="decideReopening(request, 'approve')">Aprobar</button><button class="button button--ghost" type="button" @click="decideReopening(request, 'reject')">Rechazar</button></div></article></div>
             </section>
 
             <section v-if="activeTab === 'access'" class="tab-section">

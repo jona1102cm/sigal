@@ -125,6 +125,38 @@ test('an internal entry derives the sender and origin office from the responsibl
     ]);
 });
 
+test('the detail exposes authoritative permissions and an ordinary office manager cannot archive', function () {
+    $this->user->currentOfficeMemberships()->update([
+        'membership_role' => OfficeMembershipRole::Manager->value,
+    ]);
+
+    Sanctum::actingAs($this->user);
+
+    $created = $this->postJson('/api/expedients', [
+        'expedient_type_id' => $this->expedientType->id,
+        'subject' => 'Trámite bajo custodia de una jefatura ordinaria',
+        'origin' => 'internal',
+        'responsible_office_id' => $this->office->id,
+        'received_on' => '2026-08-10',
+    ])->assertCreated();
+
+    $this->getJson("/api/expedients/{$created->json('data.id')}")
+        ->assertOk()
+        ->assertHeader('Cache-Control', 'max-age=0, must-revalidate, no-store, private')
+        ->assertHeader('Pragma', 'no-cache')
+        ->assertJsonPath('data.permissions.move', true)
+        ->assertJsonPath('data.permissions.manage_documents', true)
+        ->assertJsonPath('data.permissions.view_lifecycle', true)
+        ->assertJsonPath('data.permissions.manage_access', false)
+        ->assertJsonPath('data.permissions.archive', false)
+        ->assertJsonPath('data.permissions.close', false)
+        ->assertJsonPath('data.permissions.void', false);
+
+    $this->postJson("/api/expedients/{$created->json('data.id')}/archive", [
+        'reason' => 'Una jefatura común no posee la atribución de Archivo Central.',
+    ])->assertForbidden();
+});
+
 test('a documented internal entry permits an empty summary and derives the sole responsible office', function () {
     Sanctum::actingAs($this->user);
 

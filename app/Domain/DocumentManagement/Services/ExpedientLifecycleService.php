@@ -235,13 +235,6 @@ class ExpedientLifecycleService
 
         if ($actor->currentOfficeMemberships()
             ->whereIn('office_id', $holderOfficeIds)
-            ->where('membership_role', 'manager')
-            ->exists()) {
-            return;
-        }
-
-        if ($actor->currentOfficeMemberships()
-            ->whereIn('office_id', $holderOfficeIds)
             ->whereHas('office.capabilities', fn ($query) => $query->where('capability', $capability->value))
             ->exists()) {
             return;

@@ -104,6 +104,14 @@ test('a simple user registers routes for their office and confidential expedient
 
     Sanctum::actingAs($observer);
 
+    $this->postJson('/api/expedients', [
+        'expedient_type_id' => $expedientType->id,
+        'subject' => 'Intento de alta por un observador',
+        'origin' => 'internal',
+        'responsible_office_id' => $office->id,
+        'received_on' => '2026-08-02',
+    ])->assertForbidden();
+
     $this->getJson('/api/expedients')
         ->assertOk()
         ->assertJsonCount(1, 'data')
@@ -123,7 +131,14 @@ test('a simple user registers routes for their office and confidential expedient
 
     $this->getJson("/api/expedients/{$confidentialExpedient->id}")
         ->assertOk()
-        ->assertJsonPath('data.route_code', 'SIGAL-000002/2026-2027');
+        ->assertJsonPath('data.route_code', 'SIGAL-000002/2026-2027')
+        ->assertJsonPath('data.permissions.move', false)
+        ->assertJsonPath('data.permissions.manage_documents', false)
+        ->assertJsonPath('data.permissions.manage_access', false)
+        ->assertJsonPath('data.permissions.view_lifecycle', false);
+
+    $this->getJson("/api/expedients/{$confidentialExpedient->id}/reopening-requests")
+        ->assertForbidden();
 
     Sanctum::actingAs($administrator);
 

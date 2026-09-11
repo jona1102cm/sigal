@@ -13,6 +13,8 @@ const inboxScope = ref(documents.expedientScope);
 const status = ref('all');
 const priority = ref('all');
 let searchTimer = null;
+let refreshTimer = null;
+const AUTO_REFRESH_INTERVAL_MS = 60_000;
 
 const filteredExpedients = computed(() => documents.expedients.filter((expedient) => {
     const matchesStatus = status.value === 'all' || expedient.status === status.value;
@@ -21,6 +23,11 @@ const filteredExpedients = computed(() => documents.expedients.filter((expedient
 }));
 
 const statuses = computed(() => Array.from(new Map(documents.expedients.map((item) => [item.status, item.status_label])).entries()));
+const lastUpdatedLabel = computed(() => {
+    if (!documents.lastExpedientSyncAt) return 'Sin sincronizar';
+
+    return `Actualizado ${new Intl.DateTimeFormat('es-BO', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(documents.lastExpedientSyncAt))}`;
+});
 
 async function openExpedient(expedient) {
     try {
@@ -34,11 +41,41 @@ function formatDate(value) {
     return value ? new Intl.DateTimeFormat('es-BO', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(`${value}T12:00:00`)) : '—';
 }
 
-onMounted(() => {
-    documents.loadExpedients(1, search.value, inboxScope.value).catch(() => {});
+async function synchronizeInbox() {
+    if (document.visibilityState !== 'visible' || documents.loading) return;
+
+    try {
+        await documents.loadExpedients(
+            documents.pagination?.current_page ?? 1,
+            search.value,
+            inboxScope.value,
+            { silent: true },
+        );
+    } catch {
+        // La sincronización automática es silenciosa; el botón Actualizar conserva el error visible.
+    }
+}
+
+function handleVisibilityChange() {
+    if (document.visibilityState === 'visible') synchronizeInbox();
+}
+
+onMounted(async () => {
+    if (!documents.expedientsLoaded) {
+        await documents.loadExpedients(1, search.value, inboxScope.value).catch(() => {});
+    }
+
+    refreshTimer = window.setInterval(synchronizeInbox, AUTO_REFRESH_INTERVAL_MS);
+    window.addEventListener('focus', synchronizeInbox);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 });
 
-onBeforeUnmount(() => clearTimeout(searchTimer));
+onBeforeUnmount(() => {
+    clearTimeout(searchTimer);
+    window.clearInterval(refreshTimer);
+    window.removeEventListener('focus', synchronizeInbox);
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
+});
 
 watch(search, (value) => {
     // El debounce evita consultar el servidor por cada pulsación sin exigir Enter al usuario.
@@ -65,7 +102,7 @@ function setInboxScope(scope) {
                 <h1>Bandeja de expedientes</h1>
                 <p class="muted">{{ inboxScope === 'pending' ? 'Atienda primero las respuestas pendientes de su oficina.' : 'Consulte los expedientes ya finalizados o cerrados.' }}</p>
             </div>
-            <button class="button button--primary" type="button" @click="emit('create-expedient')">+ Registrar ingreso</button>
+            <button v-if="session.canCreateExpedients" class="button button--primary" type="button" @click="emit('create-expedient')">+ Registrar ingreso</button>
         </header>
 
         <p v-if="documents.error" class="alert alert--error" role="alert">{{ documents.error }}</p>
@@ -80,6 +117,7 @@ function setInboxScope(scope) {
                 <label class="filter-field"><span>Estado</span><SearchableSelect v-model="status" :options="[{ value: 'all', label: 'Todos los estados' }, ...statuses.map(([value, label]) => ({ value, label }))]" /><select v-show="false" v-model="status" disabled><option value="all">Todos los estados</option><option v-for="[value, label] in statuses" :key="value" :value="value">{{ label }}</option></select></label>
                 <label class="filter-field"><span>Prioridad</span><SearchableSelect v-model="priority" :options="[{ value: 'all', label: 'Todas' }, { value: 'normal', label: 'Normal' }, { value: 'high', label: 'Alta' }, { value: 'urgent', label: 'Urgente' }]" /><select v-show="false" v-model="priority" disabled><option value="all">Todas</option><option value="normal">Normal</option><option value="high">Alta</option><option value="urgent">Urgente</option></select></label>
                 <button class="button button--ghost" type="button" :disabled="documents.loading" @click="documents.loadExpedients(documents.pagination?.current_page ?? 1, search, inboxScope)">Actualizar</button>
+                <small class="muted" aria-live="polite">{{ lastUpdatedLabel }}</small>
             </div>
 
             <div v-if="documents.loading" class="empty-state">Cargando expedientes…</div>
@@ -103,6 +141,6 @@ function setInboxScope(scope) {
             <footer v-if="documents.pagination?.last_page > 1" class="pagination"><button class="button button--ghost" :disabled="documents.pagination.current_page <= 1" type="button" @click="documents.loadExpedients(documents.pagination.current_page - 1, search, inboxScope)">Anterior</button><span>Página {{ documents.pagination.current_page }} de {{ documents.pagination.last_page }}</span><button class="button button--ghost" :disabled="documents.pagination.current_page >= documents.pagination.last_page" type="button" @click="documents.loadExpedients(documents.pagination.current_page + 1, search, inboxScope)">Siguiente</button></footer>
         </section>
 
-        <ExpedientDetail v-if="documents.selected" :session="session" @close="documents.selected = null" />
+        <ExpedientDetail v-if="documents.selected" :session="session" @close="documents.clearSelected()" />
     </section>
 </template>

@@ -3,7 +3,7 @@
  * Shell principal autenticado: decide qué módulo puede ver el usuario y coordina
  * las cargas iniciales sin duplicar las reglas de autorización del backend.
  */
-import { computed, onMounted, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import AccountPasswordDialog from '../components/AccountPasswordDialog.vue';
 import AdministrationWorkspace from '../components/AdministrationWorkspace.vue';
 import DashboardView from '../components/DashboardView.vue';
@@ -27,6 +27,7 @@ const createDialogOpen = ref(false);
 const booting = ref(false);
 const bootError = ref(null);
 const passwordDialogOpen = ref(false);
+let refreshingSecurityContext = false;
 
 async function loadWorkspace() {
     booting.value = true;
@@ -68,6 +69,52 @@ async function logout() {
     view.value = 'dashboard';
 }
 
+function normalizeAuthorizedView() {
+    const documentViewWithoutAccess = ['dashboard', 'expedients'].includes(view.value) && !session.canUseDocumentManagement;
+    const humanResourcesViewWithoutAccess = view.value === 'human-resources' && !session.canManageHumanResources;
+    const administrationViewWithoutAccess = view.value === 'administration' && !session.isSuperAdministrator;
+
+    if (!documentViewWithoutAccess && !humanResourcesViewWithoutAccess && !administrationViewWithoutAccess) return;
+
+    if (session.canUseDocumentManagement) view.value = 'dashboard';
+    else if (session.canManageHumanResources) view.value = 'human-resources';
+    else if (session.isSuperAdministrator) view.value = 'administration';
+}
+
+async function refreshSecurityContext() {
+    if (!session.authenticated || refreshingSecurityContext) return;
+
+    refreshingSecurityContext = true;
+    const hadDocumentAccess = session.canUseDocumentManagement;
+    const hadHumanResourcesAccess = session.canManageHumanResources;
+    try {
+        await session.refresh();
+
+        if (hadDocumentAccess && !session.canUseDocumentManagement) documents.$reset();
+        if (!hadDocumentAccess && session.canUseDocumentManagement) {
+            await Promise.all([documents.loadCatalogs(), documents.loadExpedients()]);
+        }
+        if (hadHumanResourcesAccess && !session.canManageHumanResources) humanResources.$reset();
+        if (!hadHumanResourcesAccess && session.canManageHumanResources) {
+            await Promise.all([humanResources.loadBootstrap(), humanResources.loadEmployees()]);
+        }
+        if (!session.canCreateExpedients) createDialogOpen.value = false;
+
+        normalizeAuthorizedView();
+        if (session.canUseDocumentManagement && documents.selected) {
+            await documents.refreshSelected();
+        }
+    } catch {
+        if (!session.authenticated) {
+            documents.$reset();
+            humanResources.$reset();
+            view.value = 'dashboard';
+        }
+    } finally {
+        refreshingSecurityContext = false;
+    }
+}
+
 function toggleModule(module, targetView) {
     expandedModule.value = expandedModule.value === module ? null : module;
     view.value = targetView;
@@ -84,7 +131,10 @@ const viewContext = computed(() => ({
 onMounted(async () => {
     await session.restore();
     if (session.authenticated) await loadWorkspace();
+    window.addEventListener('focus', refreshSecurityContext);
 });
+
+onBeforeUnmount(() => window.removeEventListener('focus', refreshSecurityContext));
 </script>
 
 <template>
@@ -117,13 +167,14 @@ onMounted(async () => {
 
             <div v-if="booting" class="workspace-loading"><div class="loading-line"></div><p>Actualizando la informacion institucional...</p></div>
             <section v-else-if="bootError" class="boot-error"><p class="alert alert--error">{{ bootError }}</p><button class="button button--primary" type="button" @click="loadWorkspace">Reintentar</button></section>
-            <DashboardView v-else-if="view === 'dashboard' && session.canUseDocumentManagement" @open-expedients="view = 'expedients'" @create-expedient="createDialogOpen = true" @select-expedient="openExpedient" />
+            <DashboardView v-else-if="view === 'dashboard' && session.canUseDocumentManagement" :can-create-expedients="session.canCreateExpedients" @open-expedients="view = 'expedients'" @create-expedient="createDialogOpen = true" @select-expedient="openExpedient" />
             <ExpedientsWorkspace v-else-if="view === 'expedients' && session.canUseDocumentManagement" :session="session" @create-expedient="createDialogOpen = true" />
             <HumanResourcesWorkspace v-else-if="view === 'human-resources' && session.canManageHumanResources" />
             <AdministrationWorkspace v-else-if="session.isSuperAdministrator" />
+            <section v-else class="boot-error"><p class="alert alert--error">Su cuenta está activa, pero no tiene un módulo asignado. Solicite al administrador revisar sus roles vigentes.</p></section>
         </main>
 
-        <ExpedientCreateDialog v-if="session.canUseDocumentManagement" :open="createDialogOpen" @close="createDialogOpen = false" @created="createDialogOpen = false; view = 'expedients'" />
+        <ExpedientCreateDialog v-if="session.canCreateExpedients" :open="createDialogOpen" @close="createDialogOpen = false" @created="createDialogOpen = false; view = 'expedients'" />
         <AccountPasswordDialog v-if="passwordDialogOpen" @close="passwordDialogOpen = false" @changed="loadWorkspace" />
     </div>
 </template>

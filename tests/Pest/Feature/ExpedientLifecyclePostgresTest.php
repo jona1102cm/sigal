@@ -124,6 +124,13 @@ test('movements calculate the status and Archivo Central with OMAF completes the
         'action_note' => 'Archivo Central recibió la documentación concluida.',
     ])->assertOk();
 
+    $this->getJson("/api/expedients/{$expedient->id}")
+        ->assertOk()
+        ->assertJsonPath('data.permissions.archive', true)
+        ->assertJsonPath('data.permissions.close', true)
+        ->assertJsonPath('data.permissions.void', true)
+        ->assertJsonPath('data.permissions.view_lifecycle', true);
+
     $this->postJson("/api/expedients/{$expedient->id}/archive", [
         'reason' => 'Trámite concluido y remitido a Archivo Central.',
     ])->assertOk()
@@ -141,6 +148,11 @@ test('movements calculate the status and Archivo Central with OMAF completes the
     ])->assertCreated();
 
     Sanctum::actingAs($omafManager);
+
+    $this->getJson("/api/expedients/{$expedient->id}")
+        ->assertOk()
+        ->assertJsonPath('data.permissions.approve_reopening', true)
+        ->assertJsonPath('data.permissions.manage_access', false);
 
     $this->getJson("/api/expedients/{$expedient->id}/reopening-requests")
         ->assertOk()

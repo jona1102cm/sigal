@@ -48,6 +48,7 @@ export async function request(path, options = {}) {
     const { body, headers, ...requestOptions } = options;
     const response = await fetch(`${API_PREFIX}${path}`, {
         ...requestOptions,
+        cache: 'no-store',
         headers: buildHeaders(headers, body),
         body: body instanceof FormData || body === undefined ? body : JSON.stringify(body),
     });
@@ -82,7 +83,7 @@ export async function getAll(path) {
 
 /** Descarga un blob protegido sin exponer el token en una URL ni conservar URLs temporales. */
 export async function download(path, fileName) {
-    const response = await fetch(`${API_PREFIX}${path}`, { headers: buildHeaders() });
+    const response = await fetch(`${API_PREFIX}${path}`, { cache: 'no-store', headers: buildHeaders() });
 
     if (!response.ok) {
         const payload = await response.json().catch(() => null);

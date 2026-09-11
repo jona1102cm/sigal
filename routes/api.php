@@ -18,10 +18,10 @@ use App\Http\Controllers\Api\Users\UserController;
 use Illuminate\Support\Facades\Route;
 
 // El inicio de sesión es la única operación pública y limita intentos para mitigar fuerza bruta.
-Route::post('auth/login', [AuthenticationController::class, 'login'])->middleware('throttle:6,1');
+Route::post('auth/login', [AuthenticationController::class, 'login'])->middleware(['throttle:6,1', 'no.store']);
 
 // Toda operación posterior exige un token Sanctum perteneciente a una cuenta activa.
-Route::middleware(['auth:sanctum', 'active.user'])->group(function (): void {
+Route::middleware(['auth:sanctum', 'active.user', 'no.store'])->group(function (): void {
     // Estas rutas deben seguir disponibles con clave temporal para permitir cambiarla o cerrar sesión.
     Route::get('auth/me', [AuthenticationController::class, 'me']);
     Route::post('auth/logout', [AuthenticationController::class, 'logout']);

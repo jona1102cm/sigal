@@ -22,7 +22,11 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
         expedientSearch: '',
         expedientScope: 'pending',
         expedientLoadVersion: 0,
+        expedientsLoaded: false,
+        lastExpedientSyncAt: null,
         selected: null,
+        selectedLoadVersion: 0,
+        selectedCollectionsLoadVersion: 0,
         movements: [],
         documents: [],
         reopeningRequests: [],
@@ -78,11 +82,13 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
             });
         },
 
-        async loadExpedients(page = 1, search = this.expedientSearch, scope = this.expedientScope) {
+        async loadExpedients(page = 1, search = this.expedientSearch, scope = this.expedientScope, { silent = false } = {}) {
             const requestVersion = this.expedientLoadVersion + 1;
             this.expedientLoadVersion = requestVersion;
-            this.loading = true;
-            this.error = null;
+            if (!silent) {
+                this.loading = true;
+                this.error = null;
+            }
 
             try {
                 const query = new URLSearchParams({ page: String(page), scope });
@@ -93,8 +99,10 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
                 this.pagination = payload.meta ?? null;
                 this.expedientSearch = search;
                 this.expedientScope = scope;
+                this.expedientsLoaded = true;
+                this.lastExpedientSyncAt = new Date().toISOString();
             } catch (error) {
-                if (requestVersion === this.expedientLoadVersion) this.error = error.message;
+                if (requestVersion === this.expedientLoadVersion && !silent) this.error = error.message;
                 throw error;
             } finally {
                 if (requestVersion === this.expedientLoadVersion) this.loading = false;
@@ -103,24 +111,57 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
 
         async selectExpedient(expedient) {
             const id = typeof expedient === 'object' ? expedient.id : expedient;
+            const selectionVersion = this.selectedLoadVersion + 1;
+            this.selectedLoadVersion = selectionVersion;
+            this.busy = { ...this.busy, detail: true };
+            this.error = null;
 
-            return this.run('detail', async () => {
+            try {
                 const payload = await request(`/expedients/${id}`);
+                if (selectionVersion !== this.selectedLoadVersion) return null;
+
                 this.selected = payload.data;
-                await this.loadSelectedCollections();
+                this.movements = [];
+                this.documents = [];
+                this.reopeningRequests = [];
+                this.accessGrants = [];
+                await this.loadSelectedCollections(id, selectionVersion);
+
+                if (selectionVersion !== this.selectedLoadVersion) return null;
                 return this.selected;
-            });
+            } catch (error) {
+                if (selectionVersion === this.selectedLoadVersion) this.error = error.message;
+                throw error;
+            } finally {
+                if (selectionVersion === this.selectedLoadVersion) {
+                    this.busy = { ...this.busy, detail: false };
+                }
+            }
         },
 
-        async loadSelectedCollections() {
-            if (!this.selected) return;
+        async loadSelectedCollections(expedientId = this.selected?.id, selectionVersion = this.selectedLoadVersion) {
+            if (!expedientId) return;
 
-            const id = this.selected.id;
+            const id = Number(expedientId);
+            const collectionVersion = this.selectedCollectionsLoadVersion + 1;
+            this.selectedCollectionsLoadVersion = collectionVersion;
+            const lifecyclePermissions = this.selected?.permissions ?? {};
+            const canLoadReopeningHistory = lifecyclePermissions.view_lifecycle
+                || lifecyclePermissions.request_reopening
+                || lifecyclePermissions.approve_reopening;
             const [movements, documents, reopeningRequests] = await Promise.all([
                 request(`/expedients/${id}/movements`),
                 request(`/expedients/${id}/documents`),
-                request(`/expedients/${id}/reopening-requests`),
+                canLoadReopeningHistory
+                    ? request(`/expedients/${id}/reopening-requests`)
+                    : Promise.resolve({ data: [] }),
             ]);
+
+            if (
+                collectionVersion !== this.selectedCollectionsLoadVersion
+                || selectionVersion !== this.selectedLoadVersion
+                || Number(this.selected?.id) !== id
+            ) return;
 
             this.movements = list(movements);
             this.documents = list(documents);
@@ -131,6 +172,28 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
             if (!this.selected) return;
 
             return this.selectExpedient(this.selected.id);
+        },
+
+        async refreshSelectedAndInbox() {
+            await Promise.all([
+                this.refreshSelected(),
+                this.loadExpedients(
+                    this.pagination?.current_page ?? 1,
+                    this.expedientSearch,
+                    this.expedientScope,
+                    { silent: true },
+                ),
+            ]);
+        },
+
+        clearSelected() {
+            this.selectedLoadVersion += 1;
+            this.selectedCollectionsLoadVersion += 1;
+            this.selected = null;
+            this.movements = [];
+            this.documents = [];
+            this.reopeningRequests = [];
+            this.accessGrants = [];
         },
 
         async createExpedient(data) {
@@ -165,7 +228,7 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
         async createMovement(data) {
             return this.run('movement', async () => {
                 await request(`/expedients/${this.selected.id}/movements`, { method: 'POST', body: data });
-                await this.refreshSelected();
+                await this.refreshSelectedAndInbox();
             });
         },
 
@@ -175,8 +238,7 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
                     method: 'POST',
                     body: data,
                 });
-                await this.refreshSelected();
-                await this.loadExpedients(this.pagination?.current_page ?? 1);
+                await this.refreshSelectedAndInbox();
             });
         },
 
@@ -198,7 +260,7 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
                 }
 
                 const payload = await request(`/expedients/${this.selected.id}/documents`, { method: 'POST', body });
-                await this.refreshSelected();
+                await this.refreshSelectedAndInbox();
                 return payload.data;
             });
         },
@@ -256,6 +318,7 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
                     method: 'POST',
                     body: { movement_id: movementId },
                 });
+                await this.refreshSelected();
             });
         },
 
@@ -265,9 +328,8 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
                     method: 'POST',
                     body: { reason },
                 });
-                this.selected = payload.data;
-                await this.loadSelectedCollections();
-                await this.loadExpedients(this.pagination?.current_page ?? 1);
+                await this.refreshSelectedAndInbox();
+                return payload.data;
             });
         },
 
@@ -284,8 +346,7 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
                     method: 'POST',
                     body: { decision_note: decisionNote || null },
                 });
-                await this.refreshSelected();
-                await this.loadExpedients(this.pagination?.current_page ?? 1);
+                await this.refreshSelectedAndInbox();
             });
         },
 
@@ -457,11 +518,10 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
                 });
                 this.operationalResetSummary = payload.data;
                 this.expedients = [];
-                this.selected = null;
-                this.movements = [];
-                this.documents = [];
-                this.reopeningRequests = [];
-                this.accessGrants = [];
+                this.pagination = null;
+                this.expedientsLoaded = true;
+                this.lastExpedientSyncAt = new Date().toISOString();
+                this.clearSelected();
                 this.legislatures = [];
                 return payload.data;
             });

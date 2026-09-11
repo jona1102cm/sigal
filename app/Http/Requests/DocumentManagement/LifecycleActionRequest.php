@@ -10,9 +10,16 @@ class LifecycleActionRequest extends FormRequest
     public function authorize(): bool
     {
         $expedient = $this->route('expedient');
+        $ability = match ($this->route()?->getActionMethod()) {
+            'archive' => 'archive',
+            'close' => 'close',
+            'void' => 'void',
+            default => null,
+        };
 
         return $expedient instanceof Expedient
-            && ($this->user()?->can('manageLifecycle', $expedient) ?? false);
+            && $ability !== null
+            && ($this->user()?->can($ability, $expedient) ?? false);
     }
 
     public function rules(): array

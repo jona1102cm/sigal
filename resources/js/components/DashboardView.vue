@@ -3,6 +3,7 @@
 import { computed } from 'vue';
 import { useDocumentManagementStore } from '../stores/document-management';
 
+defineProps({ canCreateExpedients: { type: Boolean, default: false } });
 const emit = defineEmits(['open-expedients', 'create-expedient', 'select-expedient']);
 const documents = useDocumentManagementStore();
 
@@ -32,7 +33,7 @@ function formatDate(value) {
                 <h1>Buenos días</h1>
                 <p class="muted">Controle el avance de los expedientes bajo su alcance.</p>
             </div>
-            <button class="button button--primary" type="button" @click="emit('create-expedient')">+ Registrar ingreso</button>
+            <button v-if="canCreateExpedients" class="button button--primary" type="button" @click="emit('create-expedient')">+ Registrar ingreso</button>
         </header>
 
         <section class="metric-grid" aria-label="Resumen de expedientes">

@@ -3,6 +3,7 @@
 namespace App\Http\Resources\DocumentManagement;
 
 use App\Models\Expedient;
+use App\Policies\ExpedientPolicy;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -11,6 +12,12 @@ class ExpedientResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        $isDetail = $request->route('expedient') instanceof Expedient;
+        $user = $request->user();
+        $permissions = $isDetail && $user
+            ? app(ExpedientPolicy::class)->detailPermissions($user, $this->resource)
+            : [];
+
         return [
             'id' => $this->id,
             'route_number' => $this->route_number,
@@ -31,9 +38,11 @@ class ExpedientResource extends JsonResource
             'status' => $this->status->value,
             'status_label' => $this->status->label(),
             'current_holder_office_ids' => $this->when(
-                $request->route('expedient') instanceof Expedient,
+                $isDetail,
                 fn () => $this->currentHolderOfficeIds()->values()->all(),
             ),
+            // El frontend consume estas capacidades ya resueltas por las Policies; no replica reglas sensibles.
+            'permissions' => $this->when($isDetail, fn () => $permissions),
             'legislature' => $this->whenLoaded('legislature', fn () => [
                 'id' => $this->legislature->id,
                 'period_label' => $this->legislature->period_label,
