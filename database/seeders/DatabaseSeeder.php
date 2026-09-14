@@ -28,6 +28,8 @@ class DatabaseSeeder extends Seeder
             ]);
         }
 
+        $this->call(PermissionSeeder::class);
+
         // El orden importa: capacidades y catálogos pueden referenciar oficinas ya sembradas.
         $this->call(OrganizationSeeder::class);
         $this->call(DocumentManagementCatalogSeeder::class);

@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Domain\Authorization\Enums\PermissionCode;
 use App\Models\User;
 
 /** Autoriza la administración de identidades y protege la continuidad administrativa. */
@@ -9,7 +10,7 @@ class UserPolicy
 {
     public function viewAny(User $user): bool
     {
-        return $user->isActive() && $user->isSuperAdministrator();
+        return $user->hasPermission(PermissionCode::UsersManage);
     }
 
     public function view(User $user, User $subject): bool

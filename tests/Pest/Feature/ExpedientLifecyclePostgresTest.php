@@ -52,8 +52,8 @@ test('movements calculate the status and Archivo Central with OMAF completes the
 
     foreach ([
         [$sender, $rrhh, OfficeMembershipRole::Manager],
-        [$recipient, $juridical, OfficeMembershipRole::Official],
-        [$archiveOfficer, $archive, OfficeMembershipRole::Official],
+        [$recipient, $juridical, OfficeMembershipRole::Manager],
+        [$archiveOfficer, $archive, OfficeMembershipRole::Manager],
         [$omafManager, $omaf, OfficeMembershipRole::Manager],
     ] as [$user, $office, $role]) {
         OfficeMembership::query()->create([

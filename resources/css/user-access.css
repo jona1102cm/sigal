@@ -88,3 +88,29 @@
         width: 100%;
     }
 }
+
+.user-access-row__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .45rem; }
+.access-role-modal { width: min(100%, 58rem); }
+.role-checklist, .observer-scope-editor { display: grid; gap: .65rem; padding: 1rem 1.35rem; }
+.role-checklist { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.role-checklist .check-option, .observer-office-grid .check-option { border: 1px solid #dde8e2; border-radius: .6rem; background: #fbfdfc; padding: .65rem; }
+.check-option strong, .check-option small { display: block; }.check-option small { margin-top: .15rem; color: #778b82; }
+.observer-scope-editor { border-top: 1px solid #e5ede8; }.observer-scope-editor h3 { margin: 0; color: #294b40; }
+.observer-office-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .35rem; max-height: 17rem; overflow-y: auto; }
+.scope-preview, .security-notice { display: grid; gap: .25rem; border: 1px solid #cde1d7; border-radius: .65rem; background: #f1f8f4; padding: .75rem; color: #567167; font-size: .7rem; line-height: 1.45; }
+.scope-preview strong, .security-notice strong { color: #23604e; }
+.role-permission-administration { display: grid; gap: 1rem; }
+.role-selector { display: flex; flex-wrap: wrap; gap: .4rem; }
+.role-selector button { border: 1px solid #d8e5de; border-radius: 999px; background: white; padding: .52rem .8rem; color: #577267; font-size: .72rem; font-weight: 720; }
+.role-selector button.is-active { border-color: #26755f; background: #e9f5ef; color: #175b49; }
+.permission-matrix { display: grid; gap: .8rem; }
+.permission-module { overflow: hidden; border: 1px solid #dde8e2; border-radius: .8rem; background: white; }
+.permission-module > header { border-bottom: 1px solid #e7eeea; background: #f5f9f7; padding: .75rem 1rem; }
+.permission-module h3, .permission-section h4 { margin: 0; color: #2b5144; }.permission-module h3 { font-size: .9rem; }.permission-section h4 { font-size: .7rem; letter-spacing: .05em; text-transform: uppercase; }
+.permission-section { display: grid; gap: .5rem; padding: .8rem 1rem; }.permission-section + .permission-section { border-top: 1px solid #edf2ef; }
+.permission-option { display: flex; align-items: flex-start; gap: .55rem; }.permission-option input { margin-top: .12rem; accent-color: #176653; }.permission-option span, .permission-option strong, .permission-option small { display: block; }.permission-option strong { color: #416156; font-size: .74rem; }.permission-option small { margin-top: .14rem; color: #7b8e85; font-size: .66rem; line-height: 1.4; }.permission-option.is-protected { opacity: .55; }
+
+@media (max-width: 760px) {
+    .role-checklist, .observer-office-grid { grid-template-columns: 1fr; }
+    .user-access-row__actions { width: 100%; }
+}

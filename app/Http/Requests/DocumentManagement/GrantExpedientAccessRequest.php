@@ -21,7 +21,8 @@ class GrantExpedientAccessRequest extends FormRequest
             'user_id' => ['nullable', 'integer', 'exists:users,id'],
             'office_id' => ['nullable', 'integer', 'exists:offices,id'],
             'effective_from' => ['nullable', 'date'],
-            'reason' => ['nullable', 'string'],
+            'effective_to' => ['nullable', 'date', 'after_or_equal:effective_from'],
+            'reason' => ['required', 'string', 'max:2000'],
         ];
     }
 }

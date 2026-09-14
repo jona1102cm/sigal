@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Domain\Authorization\Enums\RoleCode;
+use App\Domain\Authorization\Services\ObserverOfficeScopeService;
 use App\Domain\DocumentManagement\Enums\ExpedientOrigin;
 use App\Domain\DocumentManagement\Enums\ExpedientPriority;
 use App\Domain\DocumentManagement\Enums\ExpedientStatus;
@@ -10,6 +11,7 @@ use App\Domain\DocumentManagement\Enums\MovementRecipientKind;
 use App\Domain\DocumentManagement\Enums\MovementRecipientStatus;
 use App\Domain\DocumentManagement\Enums\OfficeCapabilityCode;
 use App\Domain\DocumentManagement\Enums\SenderType;
+use App\Domain\DocumentManagement\Services\OfficeDocumentAccessService;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -169,47 +171,92 @@ class Expedient extends Model
         }
 
         $now = now();
-        $officeIds = $user->currentOfficeMemberships()->pluck('office_id');
+        $membershipOfficeIds = $user->currentOfficeMemberships()->pluck('office_id');
+        $automaticOfficeIds = app(OfficeDocumentAccessService::class)->automaticOfficeIds($user);
+        $observerVisibilityWindows = $user->hasActiveRole(RoleCode::Observer)
+            ? app(ObserverOfficeScopeService::class)->visibilityWindows($user)
+            : collect();
         $explicitAccessGrants = ExpedientAccessGrant::query()
             ->select('expedient_id')
             ->where('effective_from', '<=', $now)
             ->where(fn ($grant) => $grant
                 ->whereNull('effective_to')
                 ->orWhere('effective_to', '>', $now))
-            ->where(function ($grant) use ($user, $officeIds): void {
+            ->where(function ($grant) use ($user, $membershipOfficeIds): void {
                 $grant->where('user_id', $user->id);
 
-                if ($officeIds->isNotEmpty()) {
-                    $grant->orWhereIn('office_id', $officeIds);
+                if ($membershipOfficeIds->isNotEmpty()) {
+                    $grant->orWhereIn('office_id', $membershipOfficeIds);
                 }
             });
 
-        $query->where(function (Builder $visible) use ($user, $officeIds, $explicitAccessGrants): void {
+        $canApproveReopenings = $user->hasCurrentOfficeCapability(
+            OfficeCapabilityCode::ApproveReopenings,
+            requiresManager: true,
+        );
+
+        $query->where(function (Builder $visible) use ($user, $membershipOfficeIds, $automaticOfficeIds, $observerVisibilityWindows, $canApproveReopenings, $explicitAccessGrants): void {
             $visible->whereIn('id', $explicitAccessGrants);
 
-            $canViewAllStandardExpedients = $user->hasActiveRole(RoleCode::Observer)
-                || $user->hasCurrentOfficeCapability(OfficeCapabilityCode::ArchiveExpedients)
-                || $user->hasCurrentOfficeCapability(OfficeCapabilityCode::CloseExpedients)
-                || $user->hasCurrentOfficeCapability(OfficeCapabilityCode::VoidExpedients)
-                || $user->hasCurrentOfficeCapability(OfficeCapabilityCode::ApproveReopenings, requiresManager: true);
-
-            if ($canViewAllStandardExpedients) {
-                $visible->orWhereHas('confidentialityLevel', fn (Builder $level) => $level
-                    ->where('requires_explicit_access', false));
-
-                return;
-            }
-
-            $visible->orWhere(function (Builder $standard) use ($user, $officeIds): void {
+            $visible->orWhere(function (Builder $standard) use ($user, $membershipOfficeIds, $automaticOfficeIds, $observerVisibilityWindows, $canApproveReopenings): void {
                 $standard->whereHas('confidentialityLevel', fn (Builder $level) => $level
                     ->where('requires_explicit_access', false))
-                    ->where(function (Builder $participation) use ($user, $officeIds): void {
+                    ->where(function (Builder $participation) use ($user, $membershipOfficeIds, $automaticOfficeIds, $observerVisibilityWindows, $canApproveReopenings): void {
                         $participation->where('created_by', $user->id);
 
-                        if ($officeIds->isNotEmpty()) {
-                            $participation->orWhereIn('responsible_office_id', $officeIds);
+                        if ($automaticOfficeIds->isNotEmpty()) {
+                            $participation->orWhereIn('origin_office_id', $automaticOfficeIds)
+                                ->orWhereIn('responsible_office_id', $automaticOfficeIds)
+                                ->orWhereHas('movements', fn (Builder $movement) => $movement
+                                    ->whereIn('sender_office_id', $automaticOfficeIds))
+                                ->orWhereHas('movements.recipients', fn (Builder $recipient) => $recipient
+                                    ->whereIn('recipient_office_id', $automaticOfficeIds));
+                        }
+
+                        if ($membershipOfficeIds->isNotEmpty()) {
                             $participation->orWhereHas('movements.recipients', fn (Builder $recipient) => $recipient
-                                ->whereIn('recipient_office_id', $officeIds));
+                                ->whereIn('recipient_office_id', $membershipOfficeIds)
+                                ->whereHas('currentInternalAssignments', fn (Builder $assignment) => $assignment
+                                    ->where('user_id', $user->id)));
+                        }
+
+                        if ($observerVisibilityWindows->isNotEmpty()) {
+                            $participation->orWhere(function (Builder $observerAccess) use ($observerVisibilityWindows): void {
+                                foreach ($observerVisibilityWindows as $window) {
+                                    $officeIds = $window['office_ids'];
+                                    $visibleUntil = $window['visible_until'];
+
+                                    $observerAccess->orWhere(function (Builder $windowAccess) use ($officeIds, $visibleUntil): void {
+                                        $windowAccess->where(function (Builder $officeParticipation) use ($officeIds, $visibleUntil): void {
+                                            $officeParticipation->where(function (Builder $header) use ($officeIds, $visibleUntil): void {
+                                                $header->where(function (Builder $office) use ($officeIds): void {
+                                                    $office->whereIn('origin_office_id', $officeIds)
+                                                        ->orWhereIn('responsible_office_id', $officeIds);
+                                                });
+
+                                                if ($visibleUntil !== null) {
+                                                    $header->where('created_at', '<=', $visibleUntil);
+                                                }
+                                            })->orWhereHas('movements', function (Builder $movement) use ($officeIds, $visibleUntil): void {
+                                                $movement->where(function (Builder $route) use ($officeIds): void {
+                                                    $route->whereIn('sender_office_id', $officeIds)
+                                                        ->orWhereHas('recipients', fn (Builder $recipient) => $recipient
+                                                            ->whereIn('recipient_office_id', $officeIds));
+                                                });
+
+                                                if ($visibleUntil !== null) {
+                                                    $movement->where('sent_at', '<=', $visibleUntil);
+                                                }
+                                            });
+                                        });
+                                    });
+                                }
+                            });
+                        }
+
+                        if ($canApproveReopenings) {
+                            // OMAF recibe acceso transversal únicamente ante una solicitud concreta.
+                            $participation->orWhereHas('reopeningRequests');
                         }
                     });
             });

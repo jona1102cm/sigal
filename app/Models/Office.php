@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable(['parent_id', 'code', 'name', 'status', 'supports_staffing', 'requires_manager'])]
 /** Nodo recursivo del organigrama y fuente de jerarquía, dotación y responsabilidad. */
@@ -43,9 +44,13 @@ class Office extends Model
     /** @return HasMany<OfficeMembership, $this> */
     public function currentMemberships(): HasMany
     {
+        $now = now();
+
         return $this->memberships()
-            ->where('effective_from', '<=', now())
-            ->whereNull('effective_to');
+            ->where('effective_from', '<=', $now)
+            ->where(fn ($query) => $query
+                ->whereNull('effective_to')
+                ->orWhere('effective_to', '>', $now));
     }
 
     /** @return HasMany<OfficePosition, $this> */
@@ -58,6 +63,12 @@ class Office extends Model
     public function capabilities(): HasMany
     {
         return $this->hasMany(OfficeCapability::class);
+    }
+
+    /** @return HasOne<OfficeDocumentAccessSetting, $this> */
+    public function documentAccessSetting(): HasOne
+    {
+        return $this->hasOne(OfficeDocumentAccessSetting::class);
     }
 
     /** @param Builder<Office> $query */

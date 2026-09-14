@@ -28,7 +28,6 @@ let searchTimer = null;
 
 const academicSuggestions = ['Licenciatura', 'Egresado', 'Tecnico Superior', 'Tecnico Medio', 'Bachiller', 'Maestria', 'Doctorado'];
 const officeOptions = computed(() => humanResources.bootstrap.offices.map((office) => ({ value: office.id, label: `${office.code} - ${office.name}` })));
-const roleOptions = computed(() => humanResources.bootstrap.roles.map((role) => ({ value: role.code, label: role.name })));
 const positionOptions = computed(() => (humanResources.positionsByOffice[form.office_id] ?? []).map((position) => ({ value: position.id, label: `${position.name} - ${position.membership_role_label}` })));
 const selectedPosition = computed(() => (humanResources.positionsByOffice[form.office_id] ?? [])
     .find((position) => position.id === Number(form.office_position_id)) ?? null);
@@ -284,7 +283,7 @@ function formatAmount(value) {
                     <label class="field"><span>Oficina *</span><SearchableSelect v-model="form.office_id" :options="officeOptions" placeholder="Seleccione una oficina" /></label><label class="field"><span>Cargo *</span><SearchableSelect v-model="form.office_position_id" :options="positionOptions" :disabled="!form.office_id || humanResources.busy[`positions-${form.office_id}`]" :placeholder="form.office_id ? 'Seleccione un cargo' : 'Seleccione primero la oficina'" /></label>
                     <div class="field field--static"><span>No existe el cargo?</span><button class="button button--ghost" type="button" :disabled="!form.office_id" @click="openPosition()">+ Crear cargo para esta oficina</button></div>
                     <div class="field field--static"><span>Clasificación del cargo</span><strong>{{ selectedPosition?.membership_role_label || 'Seleccione un cargo' }}</strong><button v-if="selectedPosition" class="text-button" type="button" @click="openPosition(selectedPosition)">Corregir cargo</button></div>
-                    <label class="field field--full"><span>Rol inicial en SIGAL *</span><SearchableSelect v-model="form.role" :options="roleOptions" /></label>
+                    <div class="field field--static field--full"><span>Rol inicial en SIGAL</span><strong>Usuario simple</strong><small>Los roles privilegiados se asignan después desde Administración, con trazabilidad independiente del contrato.</small></div>
                 </div></section>
                 <footer class="modal__actions"><button class="button button--ghost" type="button" @click="closeRecord">Cancelar</button><button class="button button--primary" type="submit" :disabled="humanResources.busy['register-employee']">{{ humanResources.busy['register-employee'] ? 'Registrando...' : 'Guardar kardex y contratacion' }}</button></footer>
             </form>

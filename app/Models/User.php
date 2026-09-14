@@ -77,9 +77,13 @@ class User extends Authenticatable
     /** @return HasMany<OfficeMembership, $this> */
     public function currentOfficeMemberships(): HasMany
     {
+        $now = now();
+
         return $this->officeMemberships()
-            ->where('effective_from', '<=', now())
-            ->whereNull('effective_to');
+            ->where('effective_from', '<=', $now)
+            ->where(fn ($query) => $query
+                ->whereNull('effective_to')
+                ->orWhere('effective_to', '>', $now));
     }
 
     /** @return HasMany<Expedient, $this> */

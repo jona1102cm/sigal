@@ -61,8 +61,11 @@ Servicios principales:
 |---|---|
 | `AuthenticationService` | Login, logout y cambio de contraseña. |
 | `UserManagementService` | Cuenta, estado, reset temporal y roles históricos. |
+| `RolePermissionService` | Lectura y reemplazo auditado de la matriz de permisos de roles fijos. |
+| `ObserverOfficeScopeService` | Alcance jerárquico e histórico de cada observador. |
 | `LegislatureService` | Período único activo y Directiva histórica. |
 | `OfficeService` | Árbol organizacional y membresías. |
+| `OfficeHierarchyService` | Expansión consistente de oficinas raíz y todas sus dependencias. |
 | `HumanResourcesService` | Kardex, contrato, cuenta, cargo, membresía y archivos. |
 | `EmployeeImportWorkbookReader` | Lectura segura de la estructura XLSX. |
 | `EmployeeBulkImportService` | Validación/importación masiva con reglas del alta manual. |
@@ -73,6 +76,8 @@ Servicios principales:
 | `ExpedientMovementService` | Tenencia, destinatarios y estados por oficina. |
 | `ExpedientLifecycleService` | Archivo, cierre, anulación y reapertura. |
 | `ExpedientAccessService` | Concesiones extraordinarias y su cierre. |
+| `OfficeDocumentAccessService` | Modalidad persistente y equipo operativo autorizado por la jefatura. |
+| `ExpedientInternalAssignmentService` | Responsable único y colaboradores históricos de cada llegada. |
 | `NumberSequenceService` | Reserva concurrente de numeración. |
 | `OperationalResetService` | Limpieza controlada de datos de prueba. |
 | `ActivityLogger` | Registro uniforme de eventos auditables. |
@@ -95,7 +100,7 @@ Los Resources evitan exponer accidentalmente todas las columnas y estabilizan no
 
 ### `Domain/Authorization`
 
-Contiene roles, estados de usuario, datos de sesión y gestión de identidad. `HasSystemRoles` centraliza consultas de asignaciones vigentes para no comparar una columna de rol inexistente.
+Contiene roles, permisos, estados de usuario, alcance del observador, datos de sesión y gestión de identidad. `HasSystemRoles` centraliza roles y permisos vigentes; el superadministrador obtiene siempre todas las capacidades y su matriz no es editable.
 
 ### `Domain/Audit`
 
@@ -107,15 +112,15 @@ Valida años consecutivos, exclusividad de activa e intervalos de Directiva. Act
 
 ### `Domain/Organization`
 
-Impide ciclos del organigrama, dependencia de nodos inválidos e inactivación destructiva. Las membresías se cierran con fecha; no se eliminan.
+Impide ciclos del organigrama, dependencia de nodos inválidos e inactivación destructiva. Las membresías se cierran con fecha; no se eliminan. La jerarquía también expande, desde las mismas relaciones, las dependencias incluidas en un alcance de observación.
 
 ### `Domain/HumanResources`
 
-Orquesta el agregado más amplio del sistema. La cuenta es reutilizable y el contrato es histórico. Las tareas de consola llaman al mismo servicio para activar o vencer contratos.
+Orquesta el agregado más amplio del sistema. La cuenta es reutilizable y el contrato es histórico. Toda alta manual o masiva desde RR. HH. asigna únicamente `simple_user`; elevar privilegios es una operación administrativa posterior. Las tareas de consola llaman al mismo servicio para activar o vencer contratos.
 
 ### `Domain/DocumentManagement`
 
-Se divide en servicios pequeños porque numeración, documentos, movimientos, acceso y ciclo de vida tienen permisos e invariantes diferentes. Los servicios coordinadores componen operaciones sin duplicar reglas internas.
+Se divide en servicios pequeños porque numeración, documentos, movimientos, acceso, distribución interna y ciclo de vida tienen permisos e invariantes diferentes. La Policy combina permiso general, visibilidad por oficina/observador, confidencialidad y capacidad operativa. Los servicios coordinadores componen operaciones sin duplicar reglas internas.
 
 ### `Domain/Administration`
 

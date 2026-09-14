@@ -28,12 +28,16 @@ vendor/bin/pest --configuration=pest.xml --filter="texto del escenario"
 ## Cobertura funcional actual
 
 - Acceso: roles históricos, inactivación, revocación y reset temporal.
+- Autorización avanzada: matriz de permisos de roles fijos, protección del Superadministrador y altas de RR. HH. limitadas a Usuario simple.
+- Observación: oficinas raíz, dependencias, retiro con consulta histórica y bloqueo de confidenciales sin concesión explícita.
+- Distribución interna: exclusividad del responsable por llegada, colaboradores de lectura, equipo permanente y oficinas sin jefatura.
+- Autorización: matriz de permisos de roles fijos, alcance jerárquico/histórico del observador y excepción confidencial mediante concesión expresa.
 - Legislaturas: exclusividad activa, Directiva y restricciones PostgreSQL.
 - Organización: árbol, membresías y reglas del organigrama sembrado.
 - RR. HH.: alta coordinada, reutilización, cargos responsables, cierre programado, reset e importación XLSX.
 - Catálogos/numeración: configuración y correlativos consecutivos.
 - Entrada documental: documento inicial, adjuntos, oficina derivada y resumen opcional.
-- Flujo: tenencia, devolución, destinatarios múltiples, finalización individual e informativos sin respuesta.
+- Flujo: tenencia, devolución, destinatarios múltiples, finalización individual, informativos sin respuesta y distribución interna por responsable único/equipo/oficina sin jefatura.
 - Documentos: revisiones, emisión inmutable y correcciones con número conservado.
 - Ciclo de vida: estados agregados, archivo/cierre/anulación y reapertura.
 - Seguridad de contenido: sanitización del editor enriquecido.

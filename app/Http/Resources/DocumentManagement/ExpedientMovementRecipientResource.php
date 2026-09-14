@@ -33,6 +33,21 @@ class ExpedientMovementRecipientResource extends JsonResource
                 'id' => $this->completedBy->id,
                 'name' => $this->completedBy->name,
             ]),
+            'internal_assignments' => $this->whenLoaded('internalAssignments', fn () => $this->internalAssignments
+                ->map(fn ($assignment) => [
+                    'id' => $assignment->id,
+                    'user_id' => $assignment->user_id,
+                    'name' => $assignment->user->name,
+                    'assignment_role' => $assignment->assignment_role->value,
+                    'assignment_role_label' => $assignment->assignment_role->label(),
+                    'assigned_by' => $assignment->assignedBy === null ? null : [
+                        'id' => $assignment->assignedBy->id,
+                        'name' => $assignment->assignedBy->name,
+                    ],
+                    'effective_from' => $assignment->effective_from->toIso8601String(),
+                    'effective_to' => $assignment->effective_to?->toIso8601String(),
+                    'is_current' => $assignment->effective_to === null || $assignment->effective_to->isFuture(),
+                ])->values()),
         ];
     }
 }

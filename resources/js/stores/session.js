@@ -15,13 +15,26 @@ export const useSessionStore = defineStore('session', {
     getters: {
         authenticated: (state) => Boolean(state.user),
         mustChangePassword: (state) => state.user?.must_change_password === true,
+        hasPermission: (state) => (code) => state.user?.permissions?.includes(code) ?? false,
         isSuperAdministrator: (state) => state.user?.roles?.some((role) => role.code === 'super_administrator') ?? false,
         isHumanResourcesManager: (state) => state.user?.roles?.some((role) => role.code === 'human_resources_manager') ?? false,
         canManageHumanResources() {
-            return this.isSuperAdministrator || this.isHumanResourcesManager;
+            return this.hasPermission('human_resources.employees.view');
         },
-        canUseDocumentManagement: (state) => state.user?.roles?.some((role) => ['super_administrator', 'observer', 'simple_user'].includes(role.code)) ?? false,
-        canCreateExpedients: (state) => state.user?.roles?.some((role) => ['super_administrator', 'simple_user'].includes(role.code)) ?? false,
+        canViewDashboard() {
+            return this.hasPermission('dashboard.view');
+        },
+        canUseDocumentManagement() {
+            return this.hasPermission('document_management.expedients.view');
+        },
+        canCreateExpedients() {
+            return this.hasPermission('document_management.expedients.create');
+        },
+        canConfigureOfficeAccess() {
+            return this.hasPermission('document_management.office_access.configure')
+                && (this.isSuperAdministrator || (this.user?.office_memberships ?? []).some((membership) => membership.membership_role === 'manager'));
+        },
+        canUseAdministration: (state) => state.user?.permissions?.some((permission) => permission.startsWith('administration.')) ?? false,
         roleLabel: (state) => state.user?.roles?.map((role) => role.name).join(' · ') || 'Usuario del sistema',
     },
 

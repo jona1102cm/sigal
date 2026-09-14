@@ -20,6 +20,8 @@ const queuedFiles = ref([]);
 const lifecycleAction = ref(null);
 const editingDocumentId = ref(null);
 const correctionForId = ref(null);
+const assignmentRecipientId = ref(null);
+const internalAssignmentForm = reactive({ responsible_user_id: '', collaborator_user_ids: [] });
 
 const documentForm = reactive({
     document_type_id: '',
@@ -35,7 +37,7 @@ const editDocumentForm = reactive({ title: '', content: '', office_reference: ''
 const lifecycleReason = ref('');
 const reopeningReason = ref('');
 const decisionNote = ref('');
-const accessForm = reactive({ target: 'office', office_id: '', user_id: '', effective_from: '', reason: '' });
+const accessForm = reactive({ target: 'office', office_id: '', user_id: '', effective_from: '', effective_to: '', reason: '' });
 
 const tabs = [
     ['summary', 'Resumen'],
@@ -93,6 +95,7 @@ watch(selected, () => {
     queuedFiles.value = [];
     lifecycleAction.value = null;
     error.value = null;
+    assignmentRecipientId.value = null;
 }, { flush: 'post' });
 
 watch([documentOffices, () => documents.catalogs.documentTypes.length], () => {
@@ -152,6 +155,48 @@ function recipientCanAct(movement, recipient) {
         && recipient.recipient_kind === 'primary'
         && !recipientIsTerminal(recipient)
         && myOfficeIds.value.includes(Number(recipient.recipient_office?.id));
+}
+
+function recipientCanBeAssigned(movement, recipient) {
+    return permissions.value.manage_internal_assignments === true
+        && movement.id === latestMovement.value?.id
+        && recipient.recipient_kind === 'primary'
+        && !recipientIsTerminal(recipient)
+        && (permissions.value.internal_assignment_office_ids ?? []).map(Number).includes(Number(recipient.recipient_office?.id));
+}
+
+async function openInternalAssignment(recipient) {
+    try {
+        const data = await documents.loadInternalAssignment(recipient.id);
+        assignmentRecipientId.value = recipient.id;
+        internalAssignmentForm.responsible_user_id = data.assignments.find((assignment) => assignment.assignment_role === 'responsible')?.user_id ?? '';
+        internalAssignmentForm.collaborator_user_ids = data.assignments
+            .filter((assignment) => assignment.assignment_role === 'collaborator')
+            .map((assignment) => Number(assignment.user_id));
+    } catch (exception) {
+        error.value = exception.message;
+    }
+}
+
+function toggleCollaborator(userId) {
+    const id = Number(userId);
+    const index = internalAssignmentForm.collaborator_user_ids.indexOf(id);
+    if (index >= 0) internalAssignmentForm.collaborator_user_ids.splice(index, 1);
+    else internalAssignmentForm.collaborator_user_ids.push(id);
+}
+
+async function saveInternalAssignment() {
+    try {
+        const recipientId = assignmentRecipientId.value;
+        assignmentRecipientId.value = null;
+        await documents.saveInternalAssignment(recipientId, {
+            responsible_user_id: Number(internalAssignmentForm.responsible_user_id),
+            collaborator_user_ids: internalAssignmentForm.collaborator_user_ids,
+        });
+    } catch (exception) {
+        assignmentRecipientId.value = documents.internalAssignment?.recipient_id ?? assignmentRecipientId.value;
+        error.value = exception.message;
+    }
 }
 
 function recipientIsTerminal(recipient) {
@@ -320,9 +365,10 @@ async function grantAccess() {
             user_id: accessForm.target === 'user' ? Number(accessForm.user_id) : null,
             office_id: accessForm.target === 'office' ? Number(accessForm.office_id) : null,
             effective_from: accessForm.effective_from || null,
-            reason: accessForm.reason || null,
+            effective_to: accessForm.effective_to || null,
+            reason: accessForm.reason,
         });
-        Object.assign(accessForm, { target: 'office', office_id: '', user_id: '', effective_from: '', reason: '' });
+        Object.assign(accessForm, { target: 'office', office_id: '', user_id: '', effective_from: '', effective_to: '', reason: '' });
     } catch (exception) {
         error.value = exception.message;
     }
@@ -383,10 +429,16 @@ async function grantAccess() {
                             <small v-if="movement.documents?.length">Documento que acompaña la derivación: {{ movement.documents.map((document) => document.title).join(', ') }}</small>
                             <div class="recipient-list">
                                 <div v-for="recipient in movement.recipients" :key="recipient.id" class="recipient-row">
-                                    <div><span class="recipient-kind">{{ recipient.recipient_kind_label }}</span><strong>{{ officeLabel(recipient.recipient_office) }}</strong><small v-if="recipient.action_note">{{ recipient.action_note }}</small></div>
+                                    <div><span class="recipient-kind">{{ recipient.recipient_kind_label }}</span><strong>{{ officeLabel(recipient.recipient_office) }}</strong><small v-if="recipient.action_note">{{ recipient.action_note }}</small><small v-for="assignment in (recipient.internal_assignments ?? []).filter((item) => item.is_current)" :key="assignment.id" class="internal-assignment-label">{{ assignment.assignment_role_label }}: {{ assignment.name }} · asignado por {{ assignment.assigned_by?.name || 'SIGAL' }}</small><button v-if="recipientCanBeAssigned(movement, recipient)" class="text-button" type="button" @click="openInternalAssignment(recipient)">Distribuir internamente</button></div>
                                     <div class="recipient-row__status"><span class="badge" :class="`badge--recipient-${recipient.status}`">{{ recipient.status_label }}</span><SearchableSelect v-if="recipientCanAct(movement, recipient) && !recipientIsTerminal(recipient) && !isDocumentLocked" :model-value="recipient.status" :disabled="documents.busy[`recipient-${recipient.id}`]" :options="[{ value: 'received', label: 'Recibido' }, { value: 'in_process', label: 'En proceso' }, { value: 'responded', label: 'Respondido' }, { value: 'completed', label: 'Finalizar mi participación' }, { value: 'returned', label: 'Devuelto' }, { value: 'rejected', label: 'Rechazado' }]" @update:model-value="updateRecipient(recipient, $event)" /><select v-show="false" :value="recipient.status" disabled><option value="received">Recibido</option><option value="in_process">En proceso</option><option value="responded">Respondido</option><option value="completed">Finalizar mi participación</option><option value="returned">Devuelto</option><option value="rejected">Rechazado</option></select></div>
                                 </div>
                             </div>
+                            <form v-if="assignmentRecipientId && movement.recipients.some((recipient) => recipient.id === assignmentRecipientId) && documents.internalAssignment" class="internal-assignment-form" @submit.prevent="saveInternalAssignment">
+                                <div><p class="eyebrow">Distribución interna</p><h4>{{ officeLabel(documents.internalAssignment.office) }}</h4><p class="muted">Esta asignación queda en el historial y no crea una nueva derivación entre oficinas.</p></div>
+                                <label class="field"><span>Responsable operativo</span><SearchableSelect v-model="internalAssignmentForm.responsible_user_id" :options="documents.internalAssignment.members.map((member) => ({ value: member.user_id, label: `${member.name} · ${member.position_title}` }))" placeholder="Seleccione un responsable" /></label>
+                                <div class="recipient-picker"><span>Colaboradores de lectura <small>Opcional</small></span><div><label v-for="member in documents.internalAssignment.members.filter((item) => Number(item.user_id) !== Number(internalAssignmentForm.responsible_user_id))" :key="member.user_id" class="check-option"><input type="checkbox" :checked="internalAssignmentForm.collaborator_user_ids.includes(Number(member.user_id))" @change="toggleCollaborator(member.user_id)"><span>{{ member.name }} · {{ member.position_title }}</span></label></div></div>
+                                <div class="inline-actions"><button class="button button--primary" type="submit" :disabled="!internalAssignmentForm.responsible_user_id || documents.busy[`internal-assignment-${assignmentRecipientId}`]">Guardar distribución</button><button class="button button--ghost" type="button" @click="assignmentRecipientId = null">Cancelar</button></div>
+                            </form>
                         </article>
                     </li>
                 </ol>
@@ -444,7 +496,7 @@ async function grantAccess() {
 
             <section v-if="activeTab === 'access'" class="tab-section">
                 <div v-if="!canUseAccess" class="empty-state">Las concesiones de acceso están disponibles únicamente para superadministradores.</div>
-                <template v-else><div class="section-heading"><div><p class="eyebrow">Confidencialidad</p><h3>Concesiones de acceso</h3></div></div><form class="action-form" @submit.prevent="grantAccess"><div class="segmented-control"><button type="button" :class="{ 'is-active': accessForm.target === 'office' }" @click="accessForm.target = 'office'">Oficina</button><button type="button" :class="{ 'is-active': accessForm.target === 'user' }" @click="accessForm.target = 'user'">Usuario</button></div><label v-if="accessForm.target === 'office'" class="field"><span>Oficina autorizada</span><SearchableSelect v-model="accessForm.office_id" :options="allOffices.map((office) => ({ value: office.id, label: officeOptionLabel(office) }))" placeholder="Seleccione una oficina" /><select v-show="false" v-model="accessForm.office_id" disabled><option value="" disabled>Seleccione una oficina</option><option v-for="office in allOffices" :key="office.id" :value="office.id">{{ officeOptionLabel(office) }}</option></select></label><label v-else class="field"><span>Usuario autorizado</span><SearchableSelect v-model="accessForm.user_id" :options="documents.users.map((user) => ({ value: user.id, label: `${user.name} - ${user.email}` }))" placeholder="Seleccione un usuario" /><select v-show="false" v-model="accessForm.user_id" disabled><option value="" disabled>Seleccione un usuario</option><option v-for="user in documents.users" :key="user.id" :value="user.id">{{ user.name }} · {{ user.email }}</option></select></label><label class="field"><span>Vigente desde</span><input v-model="accessForm.effective_from" type="date"></label><label class="field field--full"><span>Motivo</span><textarea v-model.trim="accessForm.reason" rows="2" placeholder="Motivo de la concesión"></textarea></label><button class="button button--primary" :disabled="documents.busy['grant-access']" type="submit">Conceder acceso</button></form><div v-if="!documents.accessGrants.length" class="empty-state">No hay concesiones registradas.</div><div v-else class="grant-list"><article v-for="grant in documents.accessGrants" :key="grant.id" class="grant-row"><div><strong>{{ grant.user?.name || officeLabel(grant.office) }}</strong><small>Vigente desde {{ formatDate(grant.effective_from, true) }}{{ grant.effective_to ? ` hasta ${formatDate(grant.effective_to, true)}` : '' }}</small><small v-if="grant.reason">{{ grant.reason }}</small></div><button v-if="!grant.effective_to" class="text-button text-button--danger" type="button" @click="documents.closeAccessGrant(grant.id)">Cerrar acceso</button></article></div></template>
+                <template v-else><div class="section-heading"><div><p class="eyebrow">Confidencialidad</p><h3>Concesiones de acceso</h3><p class="muted">Un expediente confidencial permanece oculto para observadores y oficinas hasta que exista una concesión expresa vigente.</p></div></div><form class="action-form" @submit.prevent="grantAccess"><div class="segmented-control"><button type="button" :class="{ 'is-active': accessForm.target === 'office' }" @click="accessForm.target = 'office'">Oficina</button><button type="button" :class="{ 'is-active': accessForm.target === 'user' }" @click="accessForm.target = 'user'">Usuario</button></div><label v-if="accessForm.target === 'office'" class="field"><span>Oficina autorizada</span><SearchableSelect v-model="accessForm.office_id" :options="allOffices.map((office) => ({ value: office.id, label: officeOptionLabel(office) }))" placeholder="Seleccione una oficina" /></label><label v-else class="field"><span>Usuario autorizado</span><SearchableSelect v-model="accessForm.user_id" :options="documents.users.map((user) => ({ value: user.id, label: `${user.name} - ${user.email}` }))" placeholder="Seleccione un usuario" /></label><label class="field"><span>Vigente desde</span><input v-model="accessForm.effective_from" type="date"></label><label class="field"><span>Vigente hasta <small>Opcional</small></span><input v-model="accessForm.effective_to" type="date" :min="accessForm.effective_from || undefined"></label><label class="field field--full"><span>Motivo de la concesión</span><textarea v-model.trim="accessForm.reason" rows="2" required placeholder="Justifique el acceso extraordinario"></textarea></label><button class="button button--primary" :disabled="documents.busy['grant-access']" type="submit">Conceder acceso</button></form><div v-if="!documents.accessGrants.length" class="empty-state">No hay concesiones registradas.</div><div v-else class="grant-list"><article v-for="grant in documents.accessGrants" :key="grant.id" class="grant-row"><div><strong>{{ grant.user?.name || officeLabel(grant.office) }}</strong><small>Vigente desde {{ formatDate(grant.effective_from, true) }}{{ grant.effective_to ? ` hasta ${formatDate(grant.effective_to, true)}` : '' }}</small><small v-if="grant.reason">{{ grant.reason }}</small></div><button v-if="!grant.effective_to || new Date(grant.effective_to) > new Date()" class="text-button text-button--danger" type="button" @click="documents.closeAccessGrant(grant.id)">Cerrar acceso</button></article></div></template>
             </section>
         </div>
     </aside>

@@ -80,12 +80,14 @@ flowchart LR
 
 Roles vigentes:
 
-- `super_administrator`: administración completa.
+- `super_administrator`: administración completa; su matriz total es inmutable.
 - `human_resources_manager`: gestión del módulo de RR. HH. sin control global.
-- `observer`: consulta transversal del flujo documental.
-- `simple_user`: acceso limitado a su creación, oficina y jerarquía autorizada.
+- `observer`: consulta integral de expedientes dentro de oficinas raíz seleccionadas y sus dependencias.
+- `simple_user`: acceso limitado por permisos, oficina, custodia y distribución interna.
 
-`user_role_assignments` conserva inicio y cierre. No se reemplaza el historial con una columna simple en `users`. `UserManagementService` protege además la continuidad del último superadministrador activo.
+`user_role_assignments` conserva inicio y cierre. No se reemplaza el historial con una columna simple en `users`. `permissions` y `permission_role` forman una matriz configurable de vistas y acciones para los cuatro roles fijos; las Policies vuelven a limitar los datos concretos. `UserManagementService` protege además la continuidad del último superadministrador activo.
+
+El observador recibe una o más oficinas raíz. `OfficeHierarchyService` incluye sus descendientes y la interfaz los previsualiza antes de guardar. Al retirar alcance, `observer_office_scopes` conserva la consulta histórica de expedientes vistos hasta ese momento, sin incorporar expedientes futuros. Reservados y confidenciales requieren además una concesión expresa de superadministración.
 
 ### 4.2 Auditoría
 
@@ -105,7 +107,7 @@ La jerarquía sirve tanto para mostrar el organigrama como para resolver visibil
 
 ### 4.5 Recursos Humanos
 
-El alta coordinada por `HumanResourcesService` registra o reutiliza al funcionario, crea contrato, habilita la cuenta, asigna rol y membresía. La operación es transaccional: una falla impide datos parciales.
+El alta coordinada por `HumanResourcesService` registra o reutiliza al funcionario, crea contrato, habilita la cuenta, asigna el rol Usuario simple y abre membresía. La operación es transaccional: una falla impide datos parciales. La elevación a otro rol se realiza después, exclusivamente desde Administración.
 
 Reglas centrales:
 
@@ -139,6 +141,8 @@ La tenencia se determina por el último movimiento, no por quién creó el exped
 
 Los estados por destinatario permiten que cada oficina finalice su propia participación. El estado global se deriva de la combinación del último movimiento: derivado, pendiente, en proceso, respondido parcial/completo u observado.
 
+La llegada a una oficina se distribuye según una configuración persistente. En `manager_assignment`, la jefatura ve y controla inicialmente la llegada, designa un responsable operativo único y colaboradores de lectura; después solo el responsable puede responder o derivar, mientras la jefatura conserva lectura y reasignación. En `authorized_team`, la jefatura y el equipo seleccionado pueden operar las llegadas siguientes. Las oficinas sin responsable usan `all_members`. Cada cambio conserva intervalos históricos y aparece dentro del historial del expediente, pero no crea una derivación entre oficinas.
+
 Los documentos tienen borrador, emisión y correcciones. Una vez emitidos no se sobrescriben. `document_revisions` conserva contenido/versiones y `document_attachments` metadatos/hash. `NumberSequenceService` usa bloqueos para reservar números sin colisiones concurrentes.
 
 ### 4.7 Reinicio operativo
@@ -147,7 +151,7 @@ Los documentos tienen borrador, emisión y correcciones. Una vez emitidos no se 
 
 ## 5. Frontend
 
-`SigalApp.vue` es el shell autenticado: navegación modular, carga inicial y selección de workspace. La interfaz no usa un router cliente; cambia el workspace activo mediante estado local y abre el detalle de expediente como vista de trabajo completa.
+`SigalApp.vue` es el shell autenticado: navegación modular por permisos, carga inicial y selección de workspace. La interfaz no usa un router cliente; cambia el workspace activo mediante estado local y abre el detalle de expediente como vista de trabajo completa. Restaura la sesión al recuperar foco y cada 60 segundos para reflejar cambios de rol o permiso sin recarga manual.
 
 Los stores son fachadas del API:
 
@@ -157,6 +161,8 @@ Los stores son fachadas del API:
 - `legislatures.js`: legislaturas y Directiva.
 
 `SearchableSelect.vue` estandariza selects filtrables; `RichTextEditor.vue` encapsula edición enriquecida; el backend siempre vuelve a validar y sanear su contenido.
+
+La bandeja documental se refresca después de cada mutación, al recuperar foco, al volver visible la pestaña y periódicamente. El middleware `no.store` marca las respuestas autenticadas para que navegador y proxy no reutilicen datos de bandeja o permisos obsoletos.
 
 ## 6. Persistencia, concurrencia y archivos
 
@@ -197,12 +203,12 @@ Para una entidad o proceso nuevo:
 ## 9. Diagnóstico rápido
 
 - `401`: revisar token y sesión.
-- `403`: revisar Policy, rol y membresía vigente.
+- `403`: revisar permiso efectivo, Policy, membresía vigente, alcance/confidencialidad y asignación interna.
 - `422`: leer `errors` de la respuesta; no reemplazar la validación con mensajes genéricos.
 - Bandeja vacía: confirmar contrato/membresía, destinatario del último movimiento y filtro de pendientes/finalizados.
 - Numeración inesperada: revisar legislatura activa y secuencia de oficina.
 - Contrato no activado/vencido: revisar scheduler y zona `America/La_Paz`.
 - Archivo no visible: revisar volumen `storage`, permisos y metadatos del adjunto.
-- Frontend antiguo: recompilar Vite y limpiar caché del navegador/Nginx.
+- Frontend antiguo: recompilar Vite; las respuestas funcionales ya usan `no-store`, pero los assets versionados pueden requerir publicar el nuevo `public/build` y recargar una vez.
 
 Los procedimientos completos están en [operations/soporte.md](operations/soporte.md).

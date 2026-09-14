@@ -32,7 +32,7 @@ function documentedEntryActor(Office $office): User
     OfficeMembership::query()->create([
         'office_id' => $office->id,
         'user_id' => $user->id,
-        'membership_role' => OfficeMembershipRole::Official,
+        'membership_role' => OfficeMembershipRole::Manager,
         'effective_from' => now(),
         'assigned_by' => $user->id,
     ]);

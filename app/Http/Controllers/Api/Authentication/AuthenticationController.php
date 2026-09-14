@@ -28,13 +28,13 @@ class AuthenticationController extends Controller
         return response()->json([
             'token' => $session->plainTextToken,
             'token_type' => 'Bearer',
-            'user' => new UserResource($session->user->load(['currentRoleAssignments.role', 'currentOfficeMemberships.office'])),
+            'user' => new UserResource($session->user->load(['currentRoleAssignments.role.permissions', 'currentOfficeMemberships.office'])),
         ]);
     }
 
     public function me(Request $request): UserResource
     {
-        return new UserResource($request->user()->fresh(['currentRoleAssignments.role', 'currentOfficeMemberships.office']));
+        return new UserResource($request->user()->fresh(['currentRoleAssignments.role.permissions', 'currentOfficeMemberships.office']));
     }
 
     public function logout(Request $request): JsonResponse
@@ -60,7 +60,7 @@ class AuthenticationController extends Controller
         return response()->json([
             'token' => $session->plainTextToken,
             'token_type' => 'Bearer',
-            'user' => new UserResource($session->user->load(['currentRoleAssignments.role', 'currentOfficeMemberships.office'])),
+            'user' => new UserResource($session->user->load(['currentRoleAssignments.role.permissions', 'currentOfficeMemberships.office'])),
         ]);
     }
 }

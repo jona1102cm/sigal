@@ -28,7 +28,16 @@ class ExpedientMovementController extends Controller
 
         return ExpedientMovementResource::collection(
             $expedient->movements()
-                ->with(['senderOffice', 'sentBy', 'recipients.recipientOffice', 'recipients.receivedBy', 'recipients.completedBy', 'documents'])
+                ->with([
+                    'senderOffice',
+                    'sentBy',
+                    'recipients.recipientOffice',
+                    'recipients.receivedBy',
+                    'recipients.completedBy',
+                    'recipients.internalAssignments.user',
+                    'recipients.internalAssignments.assignedBy',
+                    'documents',
+                ])
                 ->latest('sent_at')
                 ->latest('id')
                 ->paginate(),

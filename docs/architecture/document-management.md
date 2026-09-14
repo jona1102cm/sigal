@@ -30,8 +30,18 @@ Estado: **backend e interfaz web implementados**.
 
 - Los expedientes se crean inicialmente con nivel `interno`. El catálogo distingue Público institucional, Interno, Reservado y Confidencial; los dos últimos requieren concesiones expresas de acceso.
 - Para un expediente confidencial solo acceden los superadministradores y los usuarios u oficinas con una concesión explícita vigente. El rol observador no reemplaza esa concesión.
-- En expedientes no confidenciales, el observador tiene visibilidad global; el usuario simple ve lo creado por él, lo asignado a su oficina y, como jefe, las actuaciones de sus dependientes. Archivo Central y OMAF conservan la visibilidad necesaria para sus capacidades institucionales.
+- En expedientes no confidenciales, cada observador ve el expediente completo únicamente cuando alguna oficina participante pertenece a las raíces de observación que le asignó superadministración o a sus dependencias. El alcance se registra por intervalos: al retirar una oficina, conserva consulta histórica sobre los expedientes que ya alcanzó, pero no incorpora actuaciones futuras ajenas al nuevo alcance.
+- El usuario simple solo accede a expedientes creados por él o que llegaron a una de sus oficinas, sujeto además a la modalidad interna configurada para esa oficina. Archivo Central y OMAF conservan la visibilidad estrictamente necesaria para sus capacidades institucionales.
 - Las concesiones de acceso, su inicio y cierre, quedan conservadas para auditoría.
+
+## Distribución dentro de una oficina
+
+- La llegada a una oficina y la asignación a un funcionario son hechos distintos. La primera es una derivación interinstitucional; la segunda queda como historial interno auditable y no crea un movimiento adicional.
+- En una oficina que exige jefatura, su responsable vigente elige una modalidad persistente: **asignación individual por la jefatura** o **equipo autorizado permanente**.
+- En asignación individual, inicialmente solo la jefatura puede actuar. Para cada llegada designa un único responsable operativo y, opcionalmente, colaboradores de lectura. Una vez asignado otro responsable, solo ese funcionario responde, documenta y deriva; la jefatura conserva lectura y capacidad de reasignar.
+- En equipo autorizado, la jefatura y los funcionarios seleccionados pueden operar las llegadas de la oficina. La lista queda vigente para los expedientes siguientes hasta que la jefatura la modifique.
+- Las oficinas que admiten funcionarios pero no requieren responsable usan automáticamente **todos los miembros**; actualmente corresponde a Asesores del Pleno y Asesores de Presidencia.
+- Estas reglas controlan lectura y operación, pero nunca amplían un expediente confidencial. El acceso reservado o confidencial continúa requiriendo una concesión expresa de superadministración.
 
 ## Documentos, versiones y adjuntos
 
@@ -57,6 +67,8 @@ Todos requieren autenticación Sanctum y un usuario activo. El prefijo real depe
 - `POST /expedient-entries` para registrar el ingreso documentado; `GET|POST /expedients`, `GET /expedients/{expedient}`
 - `GET|POST /expedients/{expedient}/movements`
 - `POST /expedients/{expedient}/movement-recipients/{recipient}/status`
+- `GET|PUT /expedients/{expedient}/movement-recipients/{recipient}/internal-assignments`
+- `GET|PUT /document-management/offices/{office}/access-setting`
 - `POST /expedients/{expedient}/archive`, `/close`, `/void`
 - `POST /expedients/{expedient}/reopening-requests` y sus acciones `/approve` o `/reject`
 - `GET|POST /expedients/{expedient}/documents`

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\HumanResources;
 
 use App\Domain\Audit\DTOs\RequestAuditContext;
 use App\Domain\Audit\Services\ActivityLogger;
+use App\Domain\Authorization\Enums\PermissionCode;
 use App\Domain\Authorization\Enums\RoleCode;
 use App\Domain\HumanResources\DTOs\CreateOfficePositionData;
 use App\Domain\HumanResources\DTOs\RegisterEmployeeContractData;
@@ -50,9 +51,7 @@ class HumanResourcesController extends Controller
     public function bootstrap(Request $request): JsonResponse
     {
         $this->authorize('viewAny', Employee::class);
-        $actor = $request->user();
-        $roles = collect(RoleCode::cases())
-            ->reject(fn (RoleCode $role) => $role === RoleCode::SuperAdministrator && ! $actor->isSuperAdministrator())
+        $roles = collect([RoleCode::SimpleUser])
             ->map(fn (RoleCode $role) => ['code' => $role->value, 'name' => $role->label()])
             ->values();
         $offices = Office::query()->active()->supportingStaffing()->orderBy('code')->get(['id', 'code', 'name']);
@@ -143,7 +142,7 @@ class HumanResourcesController extends Controller
 
     public function importTemplate(Request $request): BinaryFileResponse
     {
-        $this->authorize('create', Employee::class);
+        abort_unless($request->user()->hasPermission(PermissionCode::HumanResourcesImport), 403);
         $template = resource_path('templates/plantilla-importacion-funcionarios-sigal.xlsx');
         abort_unless(is_file($template), 500, 'La plantilla de importacion no esta disponible.');
 
@@ -163,6 +162,7 @@ class HumanResourcesController extends Controller
 
     public function import(ImportEmployeesRequest $request): JsonResponse
     {
+        abort_unless($request->user()->hasPermission(PermissionCode::HumanResourcesImport), 403);
         $result = $this->employeeBulkImportService->import(
             $request->file('file'),
             $request->user(),
@@ -243,6 +243,7 @@ class HumanResourcesController extends Controller
 
     public function storePosition(StoreOfficePositionRequest $request): JsonResponse
     {
+        abort_unless($request->user()->hasPermission(PermissionCode::HumanResourcesPositions), 403);
         $position = $this->humanResourcesService->createOfficePosition(
             CreateOfficePositionData::fromValidated($request->validated()),
             $request->user(),
@@ -256,6 +257,8 @@ class HumanResourcesController extends Controller
 
     public function updatePosition(UpdateOfficePositionRequest $request, OfficePosition $officePosition): OfficePositionResource
     {
+        abort_unless($request->user()->hasPermission(PermissionCode::HumanResourcesPositions), 403);
+
         return new OfficePositionResource($this->humanResourcesService->updateOfficePosition(
             $officePosition,
             UpdateOfficePositionData::fromValidated($request->validated()),

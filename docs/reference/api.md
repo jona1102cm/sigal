@@ -37,6 +37,9 @@ Las respuestas de colección usan `data`, `links` y `meta` de paginación. Los e
 | POST | `/users/{user}/emergency-password-reset` | Genera una clave temporal de un solo proceso. |
 | POST | `/users/{user}/roles` | Abre una asignación histórica de rol. |
 | DELETE | `/users/{user}/roles/{role}` | Cierra la asignación vigente. |
+| GET | `/authorization/roles` | Obtiene roles fijos, permisos agrupados y matriz actual. |
+| PUT | `/authorization/roles/{role}/permissions` | Sustituye la matriz de un rol editable. |
+| GET/PUT | `/users/{user}/observer-office-scope` | Consulta o reemplaza raíces de observación y previsualiza dependencias. |
 
 ## Recursos Humanos
 
@@ -67,6 +70,7 @@ Las respuestas de colección usan `data`, `links` y `meta` de paginación. Los e
 | POST | `/offices/{office}/inactivate` | Inactiva si no rompe dependencias. |
 | GET/POST | `/offices/{office}/memberships` | Lista o asigna membresía. |
 | POST | `/offices/{office}/memberships/{membership}/close` | Cierra membresía. |
+| GET/PUT | `/document-management/offices/{office}/access-setting` | Consulta o configura modalidad y equipo documental de la oficina. |
 
 ## Catálogos documentales
 
@@ -89,6 +93,7 @@ Las respuestas de colección usan `data`, `links` y `meta` de paginación. Los e
 | GET | `/expedients/{expedient}` | Detalle autorizado. |
 | GET/POST | `/expedients/{expedient}/movements` | Historial o nueva derivación. |
 | POST | `/expedients/{expedient}/movement-recipients/{recipient}/status` | Acción de una oficina destinataria. |
+| GET/PUT | `/expedients/{expedient}/movement-recipients/{recipient}/internal-assignments` | Consulta o reemplaza responsable único y colaboradores de una llegada. |
 | GET/POST | `/expedients/{expedient}/access-grants` | Lista o concede acceso extraordinario. |
 | POST | `/expedients/{expedient}/access-grants/{grant}/close` | Cierra concesión. |
 | POST | `/expedients/{expedient}/archive` | Archiva con motivo. |

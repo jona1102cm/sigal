@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Domain\Authorization\Enums\PermissionCode;
 use App\Models\Expedient;
 use App\Models\ExpedientType;
 use App\Models\Legislature;
@@ -36,6 +37,6 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Expedient::class, ExpedientPolicy::class);
         Gate::policy(Office::class, OfficePolicy::class);
         Gate::policy(User::class, UserPolicy::class);
-        Gate::define('perform-operational-reset', fn (User $user): bool => $user->isActive() && $user->isSuperAdministrator());
+        Gate::define('perform-operational-reset', fn (User $user): bool => $user->hasPermission(PermissionCode::OperationalResetManage));
     }
 }

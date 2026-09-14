@@ -18,6 +18,7 @@ class UserResource extends JsonResource
             'status' => $this->status->value,
             'status_label' => $this->status->label(),
             'must_change_password' => $this->must_change_password,
+            'permissions' => $this->permissionCodes(),
             'roles' => $this->whenLoaded('currentRoleAssignments', fn () => $this->currentRoleAssignments
                 ->map(fn ($assignment) => [
                     'code' => $assignment->role->code,

@@ -223,7 +223,11 @@ class UserManagementService
             }
 
             $oldValues = $this->roleAssignmentSnapshot($assignment->load('role'));
-            $assignment->update(['effective_to' => now()]);
+            $endedAt = now();
+            $assignment->update(['effective_to' => $endedAt]);
+            if ($roleCode === RoleCode::Observer) {
+                $assignment->observerOfficeScopes()->whereNull('effective_to')->update(['effective_to' => $endedAt]);
+            }
 
             $this->activityLogger->record(
                 event: 'user.role_removed',

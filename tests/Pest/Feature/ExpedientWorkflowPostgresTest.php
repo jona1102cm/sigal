@@ -7,6 +7,7 @@ use App\Models\ConfidentialityLevel;
 use App\Models\Expedient;
 use App\Models\ExpedientType;
 use App\Models\Legislature;
+use App\Models\ObserverOfficeScope;
 use App\Models\Office;
 use App\Models\OfficeMembership;
 use App\Models\Role;
@@ -44,7 +45,7 @@ test('a simple user registers routes for their office and confidential expedient
         'assigned_by' => $simpleUser->id,
         'effective_from' => now(),
     ]);
-    UserRoleAssignment::query()->create([
+    $observerAssignment = UserRoleAssignment::query()->create([
         'user_id' => $observer->id,
         'role_id' => $observerRole->id,
         'assigned_by' => $observer->id,
@@ -58,10 +59,16 @@ test('a simple user registers routes for their office and confidential expedient
     ]);
 
     $office = Office::query()->where('code', 'RRHH')->firstOrFail();
+    ObserverOfficeScope::query()->create([
+        'user_role_assignment_id' => $observerAssignment->id,
+        'office_id' => $office->id,
+        'assigned_by' => $administrator->id,
+        'effective_from' => now(),
+    ]);
     OfficeMembership::query()->create([
         'office_id' => $office->id,
         'user_id' => $simpleUser->id,
-        'membership_role' => OfficeMembershipRole::Official,
+        'membership_role' => OfficeMembershipRole::Manager,
         'effective_from' => now(),
         'assigned_by' => $simpleUser->id,
     ]);

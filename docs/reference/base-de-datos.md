@@ -11,7 +11,10 @@ PostgreSQL es la fuente persistente. Las migraciones de `database/migrations` so
 | `password_reset_tokens` | Infraestructura de recuperación Laravel. |
 | `sessions` | Sesiones cuando se usa driver de base. |
 | `roles` | Catálogo de roles. |
+| `permissions` | Catálogo estable de vistas y acciones autorizables. |
+| `permission_role` | Matriz auditable de permisos asignados a cada rol fijo. |
 | `user_role_assignments` | Rol histórico con inicio, cierre y actor. |
+| `observer_office_scopes` | Raíces de observación por intervalo; sus dependencias se resuelven desde el organigrama. |
 | `activity_logs` | Auditoría inmutable de seguridad/dominio. |
 | `cache`, `cache_locks` | Caché/locks de infraestructura. |
 | `jobs`, `job_batches`, `failed_jobs` | Cola y fallos de trabajos. |
@@ -33,6 +36,8 @@ Existe protección para una sola legislatura activa y para impedir solapamiento 
 |---|---|
 | `offices` | Árbol institucional, código, estado y reglas de dotación/responsable. |
 | `office_memberships` | Pertenencia histórica usuario-oficina. |
+| `office_document_access_settings` | Modalidad persistente con la que una oficina distribuye sus llegadas. |
+| `office_document_access_authorizations` | Equipo permanente autorizado por una jefatura, con vigencia histórica. |
 | `employees` | Kardex personal único por CI. |
 | `office_positions` | Cargos propios de cada oficina. |
 | `employment_contracts` | Contratación, vigencia, tipo, monto, cargo, oficina y asignaciones creadas. |
@@ -62,9 +67,10 @@ Los contadores se actualizan con bloqueo pesimista. No calcular el siguiente nú
 | `expedient_access_grants` | Acceso extraordinario temporal a usuario u oficina. |
 | `expedient_movements` | Derivación emitida por una oficina. |
 | `expedient_movement_recipients` | Destinatario primario/copia y estado independiente. |
+| `expedient_internal_assignments` | Responsable operativo único y colaboradores de lectura para una llegada, con historial. |
 | `expedient_reopening_requests` | Solicitud y decisión de reapertura. |
 
-La tenencia vigente se obtiene del último movimiento y sus destinatarios; no debe inferirse solo desde `responsible_office_id`, que conserva contexto del alta.
+La tenencia vigente se obtiene del último movimiento y sus destinatarios; no debe inferirse solo desde `responsible_office_id`, que conserva contexto del alta. La asignación interna no cambia esa tenencia ni genera una nueva derivación: restringe qué miembro de la oficina puede operar la llegada.
 
 ## Documentos y archivos
 

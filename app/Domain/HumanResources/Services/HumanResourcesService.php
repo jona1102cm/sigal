@@ -52,7 +52,7 @@ class HumanResourcesService
 
         try {
             return DB::transaction(function () use ($data, $attachments, $actor, $context, &$storedPaths): EmployeeRegistrationResult {
-                $this->assertAssignableRole($data->role, $actor);
+                $this->assertAssignableRole($data->role);
 
                 $employee = Employee::query()
                     ->where('identity_card', $data->identityCard)
@@ -666,11 +666,11 @@ class HumanResourcesService
         return CarbonImmutable::parse($contract->starts_on->format('Y-m-d'), 'America/La_Paz')->startOfDay();
     }
 
-    private function assertAssignableRole(RoleCode $role, User $actor): void
+    private function assertAssignableRole(RoleCode $role): void
     {
-        if ($role === RoleCode::SuperAdministrator && ! $actor->isSuperAdministrator()) {
+        if ($role !== RoleCode::SimpleUser) {
             throw ValidationException::withMessages([
-                'role' => 'Solo un superadministrador puede asignar ese rol.',
+                'role' => 'Toda cuenta creada desde Recursos Humanos debe iniciar como Usuario simple. Los roles privilegiados se asignan posteriormente desde Administración.',
             ]);
         }
     }

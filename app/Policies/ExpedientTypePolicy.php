@@ -2,7 +2,7 @@
 
 namespace App\Policies;
 
-use App\Domain\Authorization\Enums\RoleCode;
+use App\Domain\Authorization\Enums\PermissionCode;
 use App\Models\ExpedientType;
 use App\Models\User;
 
@@ -11,16 +11,12 @@ class ExpedientTypePolicy
 {
     public function viewAny(User $user): bool
     {
-        return $user->isActive() && (
-            $user->isSuperAdministrator()
-            || $user->hasActiveRole(RoleCode::Observer)
-            || $user->hasActiveRole(RoleCode::SimpleUser)
-        );
+        return $user->hasPermission(PermissionCode::ExpedientsView);
     }
 
     public function create(User $user): bool
     {
-        return $user->isActive() && $user->isSuperAdministrator();
+        return $user->hasPermission(PermissionCode::ExpedientTypesManage);
     }
 
     public function update(User $user, ExpedientType $expedientType): bool

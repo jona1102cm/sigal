@@ -2,7 +2,7 @@
 
 namespace App\Policies;
 
-use App\Domain\Authorization\Enums\RoleCode;
+use App\Domain\Authorization\Enums\PermissionCode;
 use App\Models\Office;
 use App\Models\User;
 
@@ -11,17 +11,14 @@ class OfficePolicy
 {
     public function viewAny(User $user): bool
     {
-        return $user->isActive() && $user->isSuperAdministrator();
+        return $user->hasPermission(PermissionCode::OrganizationManage);
     }
 
     /** The operational directory intentionally exposes no memberships or hierarchy details. */
     public function viewDirectory(User $user): bool
     {
-        return $user->isActive() && (
-            $user->isSuperAdministrator()
-            || $user->hasActiveRole(RoleCode::Observer)
-            || $user->hasActiveRole(RoleCode::SimpleUser)
-        );
+        return $user->hasPermission(PermissionCode::ExpedientsView)
+            || $user->hasPermission(PermissionCode::HumanResourcesView);
     }
 
     public function view(User $user, Office $office): bool
@@ -42,5 +39,11 @@ class OfficePolicy
     public function manageMemberships(User $user, Office $office): bool
     {
         return $this->viewAny($user);
+    }
+
+    public function configureDocumentAccess(User $user, Office $office): bool
+    {
+        return $user->hasPermission(PermissionCode::OfficeAccessConfigure)
+            && ($user->isSuperAdministrator() || $user->isCurrentManagerOfOffice($office->id));
     }
 }

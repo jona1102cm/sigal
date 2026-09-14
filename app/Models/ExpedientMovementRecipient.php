@@ -7,6 +7,7 @@ use App\Domain\DocumentManagement\Enums\MovementRecipientStatus;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'expedient_movement_id',
@@ -54,5 +55,17 @@ class ExpedientMovementRecipient extends Model
     public function completedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'completed_by');
+    }
+
+    public function internalAssignments(): HasMany
+    {
+        return $this->hasMany(ExpedientInternalAssignment::class);
+    }
+
+    public function currentInternalAssignments(): HasMany
+    {
+        return $this->internalAssignments()
+            ->where('effective_from', '<=', now())
+            ->where(fn ($query) => $query->whereNull('effective_to')->orWhere('effective_to', '>', now()));
     }
 }

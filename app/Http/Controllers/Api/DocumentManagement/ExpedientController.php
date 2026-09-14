@@ -5,16 +5,19 @@ namespace App\Http\Controllers\Api\DocumentManagement;
 use App\Domain\Audit\DTOs\RequestAuditContext;
 use App\Domain\Audit\Services\ActivityLogger;
 use App\Domain\Authorization\Enums\RoleCode;
+use App\Domain\Authorization\Services\ObserverOfficeScopeService;
 use App\Domain\DocumentManagement\DTOs\CreateExpedientData;
 use App\Domain\DocumentManagement\DTOs\CreateExpedientMovementData;
 use App\Domain\DocumentManagement\Enums\ExpedientStatus;
 use App\Domain\DocumentManagement\Enums\MovementRecipientKind;
 use App\Domain\DocumentManagement\Enums\MovementRecipientStatus;
 use App\Domain\DocumentManagement\Services\ExpedientRegistrationService;
+use App\Domain\DocumentManagement\Services\OfficeDocumentAccessService;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\DocumentManagement\StoreExpedientRequest;
 use App\Http\Resources\DocumentManagement\ExpedientResource;
 use App\Models\Expedient;
+use App\Models\ExpedientInternalAssignment;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -82,24 +85,37 @@ class ExpedientController extends Controller
     /** @param Builder<Expedient> $query */
     private function applyInboxScope(Builder $query, User $user, string $scope): void
     {
-        $officeIds = $user->currentOfficeMemberships()->pluck('office_id')->map(fn ($id) => (int) $id);
-        $canReviewEveryOffice = $user->isSuperAdministrator()
-            || $user->hasActiveRole(RoleCode::Observer);
+        $officeIds = app(OfficeDocumentAccessService::class)->automaticOfficeIds($user);
+        if ($user->hasActiveRole(RoleCode::Observer)) {
+            $officeIds = $officeIds
+                ->merge(app(ObserverOfficeScopeService::class)->effectiveOfficeIds($user))
+                ->unique()
+                ->values();
+        }
 
-        if (! $canReviewEveryOffice && $officeIds->isEmpty()) {
+        $canReviewEveryOffice = $user->isSuperAdministrator();
+        $membershipOfficeIds = $user->currentOfficeMemberships()->pluck('office_id');
+        $hasInternalAssignments = $membershipOfficeIds->isNotEmpty() && ExpedientInternalAssignment::query()
+            ->where('user_id', $user->id)
+            ->where('effective_from', '<=', now())
+            ->where(fn ($assignment) => $assignment->whereNull('effective_to')->orWhere('effective_to', '>', now()))
+            ->whereHas('recipient', fn ($recipient) => $recipient->whereIn('recipient_office_id', $membershipOfficeIds))
+            ->exists();
+
+        if (! $canReviewEveryOffice && $officeIds->isEmpty() && ! $hasInternalAssignments) {
             $query->whereRaw('1 = 0');
 
             return;
         }
 
         if ($scope === 'finalized') {
-            $query->where(function (Builder $finalized) use ($officeIds, $canReviewEveryOffice): void {
+            $query->where(function (Builder $finalized) use ($officeIds, $canReviewEveryOffice, $user): void {
                 $finalized->whereIn('status', [
                     ExpedientStatus::FullyResponded->value,
                     ExpedientStatus::Archived->value,
                     ExpedientStatus::Closed->value,
                     ExpedientStatus::Voided->value,
-                ])->orWhere(function (Builder $participation) use ($officeIds, $canReviewEveryOffice): void {
+                ])->orWhere(function (Builder $participation) use ($officeIds, $canReviewEveryOffice, $user): void {
                     $this->whereCurrentRecipientMatches(
                         $participation,
                         [
@@ -111,6 +127,7 @@ class ExpedientController extends Controller
                         $officeIds,
                         $canReviewEveryOffice,
                         false,
+                        $user->id,
                     );
                 });
             });
@@ -118,8 +135,8 @@ class ExpedientController extends Controller
             return;
         }
 
-        $query->where(function (Builder $pending) use ($officeIds, $canReviewEveryOffice): void {
-            $pending->where(function (Builder $participation) use ($officeIds, $canReviewEveryOffice): void {
+        $query->where(function (Builder $pending) use ($officeIds, $canReviewEveryOffice, $user): void {
+            $pending->where(function (Builder $participation) use ($officeIds, $canReviewEveryOffice, $user): void {
                 $this->whereCurrentRecipientMatches(
                     $participation,
                     [
@@ -130,6 +147,7 @@ class ExpedientController extends Controller
                     $officeIds,
                     $canReviewEveryOffice,
                     true,
+                    $user->id,
                 );
             })->orWhere(function (Builder $unrouted) use ($officeIds, $canReviewEveryOffice): void {
                 $unrouted->doesntHave('movements');
@@ -154,8 +172,9 @@ class ExpedientController extends Controller
         Collection $officeIds,
         bool $canReviewEveryOffice,
         bool $requiresResponse,
+        int $userId,
     ): void {
-        $query->whereExists(function ($recipient) use ($statuses, $officeIds, $canReviewEveryOffice, $requiresResponse): void {
+        $query->whereExists(function ($recipient) use ($statuses, $officeIds, $canReviewEveryOffice, $requiresResponse, $userId): void {
             $recipient->selectRaw('1')
                 ->from('expedient_movements as current_movement')
                 ->join('expedient_movement_recipients as current_recipient', 'current_recipient.expedient_movement_id', '=', 'current_movement.id')
@@ -169,7 +188,25 @@ class ExpedientController extends Controller
             }
 
             if (! $canReviewEveryOffice) {
-                $recipient->whereIn('current_recipient.recipient_office_id', $officeIds);
+                $recipient->where(function ($access) use ($officeIds, $userId): void {
+                    if ($officeIds->isNotEmpty()) {
+                        $access->whereIn('current_recipient.recipient_office_id', $officeIds);
+                    } else {
+                        $access->whereRaw('1 = 0');
+                    }
+
+                    $access->orWhereExists(function ($assignment) use ($userId): void {
+                        $assignment->selectRaw('1')
+                            ->from('expedient_internal_assignments as internal_assignment')
+                            ->whereColumn('internal_assignment.expedient_movement_recipient_id', 'current_recipient.id')
+                            ->where('internal_assignment.user_id', $userId)
+                            ->where('internal_assignment.effective_from', '<=', now())
+                            ->where(function ($active): void {
+                                $active->whereNull('internal_assignment.effective_to')
+                                    ->orWhere('internal_assignment.effective_to', '>', now());
+                            });
+                    });
+                });
             }
         });
     }

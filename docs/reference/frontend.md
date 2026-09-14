@@ -6,11 +6,11 @@
 
 ## Shell y navegación
 
-`pages/SigalApp.vue` controla autenticación visible, menú lateral, workspace activo, carga inicial y diálogos globales. Los módulos se muestran según permisos derivados de la sesión:
+`pages/SigalApp.vue` controla autenticación visible, menú lateral, workspace activo, carga inicial y diálogos globales. Los módulos se muestran según los códigos de permiso entregados por `/auth/me`, no solo por el nombre del rol:
 
-- Gestión documental para usuarios operativos.
-- Recursos Humanos para superadministración o rol de RR. HH.
-- Administración institucional solo para superadministración.
+- Gestión documental cuando existe permiso de consulta, registro, proceso o configuración de oficina.
+- Recursos Humanos según permisos separados de consulta, kardex, importación, cargos y contratos.
+- Administración institucional según cada capacidad administrativa; usuarios y matriz de permisos siguen reservados a superadministración.
 
 El menú colapsable conserva poco espacio cuando está contraído y cada módulo despliega únicamente sus subopciones. El detalle de expediente sustituye la bandeja dentro del área principal para disponer del ancho completo.
 
@@ -18,11 +18,11 @@ El menú colapsable conserva poco espacio cuando está contraído y cada módulo
 
 ### `stores/session.js`
 
-Mantiene token/usuario, restaura `/auth/me`, calcula roles y expone banderas de capacidad. El token se almacena en `sessionStorage`: se elimina al cerrar la pestaña/sesión y se revoca en servidor al cerrar sesión, inactivar cuenta o cambiar clave.
+Mantiene token/usuario, restaura `/auth/me`, conserva los permisos efectivos y expone banderas de capacidad. El token se almacena en `sessionStorage`: se elimina al cerrar la pestaña/sesión y se revoca en servidor al cerrar sesión, inactivar cuenta o cambiar clave. El shell actualiza `/auth/me` al recuperar foco y cada 60 segundos para reflejar cambios administrativos sin exigir recarga manual.
 
 ### `stores/document-management.js`
 
-Mantiene catálogos, bandeja activa/finalizada, filtros, expediente seleccionado, documentos, movimientos y carga. Tras una mutación vuelve a consultar el detalle/bandeja necesarios para que la interfaz refleje la autoridad del servidor.
+Mantiene catálogos, bandeja activa/finalizada, filtros, expediente seleccionado, documentos, movimientos y carga. Tras una mutación vuelve a consultar el detalle/bandeja necesarios para que la interfaz refleje la autoridad del servidor. La bandeja también se sincroniza al recuperar foco, al volver visible la pestaña y cada 60 segundos; las respuestas autenticadas usan política `no-store` para evitar datos obsoletos del navegador o proxy.
 
 ### `stores/human-resources.js`
 
@@ -60,7 +60,9 @@ No consumir `fetch` directamente desde un componente salvo una razón documentad
 | `HumanResourcesWorkspace` | Kardex, contratos, foto, cargos y edición. |
 | `EmployeeBulkImportDialog` | Descarga de plantilla, carga y resultado de importación. |
 | `AdministrationWorkspace` | Contenedor de usuarios, organización, legislaturas, catálogos y reset. |
-| `UserAccessAdministration` | Usuarios, estado, roles y reset de emergencia. |
+| `UserAccessAdministration` | Usuarios, estado, roles, alcance del observador y reset de emergencia. |
+| `RolePermissionAdministration` | Matriz de vistas/acciones de los cuatro roles fijos. |
+| `OfficeDocumentAccessWorkspace` | Modalidad persistente y equipo autorizado de las oficinas dirigidas por el usuario. |
 | `OrganizationAdministration` | Oficinas y organigrama. |
 | `LegislatureAdministration` | Legislaturas y Directiva. |
 | `ExpedientTypeAdministration` | Catálogo de tipos de expediente. |

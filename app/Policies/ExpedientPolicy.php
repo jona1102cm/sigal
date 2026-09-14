@@ -2,9 +2,10 @@
 
 namespace App\Policies;
 
-use App\Domain\Authorization\Enums\RoleCode;
+use App\Domain\Authorization\Enums\PermissionCode;
 use App\Domain\DocumentManagement\Enums\ExpedientStatus;
 use App\Domain\DocumentManagement\Enums\OfficeCapabilityCode;
+use App\Domain\DocumentManagement\Services\OfficeDocumentAccessService;
 use App\Domain\Organization\Enums\OfficeMembershipRole;
 use App\Models\Expedient;
 use App\Models\User;
@@ -18,11 +19,7 @@ class ExpedientPolicy
 {
     public function viewAny(User $user): bool
     {
-        return $user->isActive() && (
-            $user->isSuperAdministrator()
-            || $user->hasActiveRole(RoleCode::Observer)
-            || $user->hasActiveRole(RoleCode::SimpleUser)
-        );
+        return $user->hasPermission(PermissionCode::ExpedientsView);
     }
 
     public function view(User $user, Expedient $expedient): bool
@@ -33,9 +30,7 @@ class ExpedientPolicy
 
     public function create(User $user): bool
     {
-        return $user->isActive() && (
-            $user->isSuperAdministrator() || $user->hasActiveRole(RoleCode::SimpleUser)
-        );
+        return $user->hasPermission(PermissionCode::ExpedientsCreate);
     }
 
     public function move(User $user, Expedient $expedient): bool
@@ -56,6 +51,13 @@ class ExpedientPolicy
     public function manageDocuments(User $user, Expedient $expedient): bool
     {
         return $this->move($user, $expedient);
+    }
+
+    public function manageInternalAssignments(User $user, Expedient $expedient): bool
+    {
+        return $this->view($user, $expedient)
+            && $user->hasPermission(PermissionCode::OfficeAccessConfigure)
+            && app(OfficeDocumentAccessService::class)->canManageInternalAssignments($user, $expedient);
     }
 
     public function viewLifecycle(User $user, Expedient $expedient): bool
@@ -108,7 +110,7 @@ class ExpedientPolicy
      * Resuelve de una sola vez las capacidades del detalle para evitar consultas
      * repetidas y garantizar que API, Policies e interfaz compartan la misma matriz.
      *
-     * @return array<string, bool>
+     * @return array<string, mixed>
      */
     public function detailPermissions(User $user, Expedient $expedient): array
     {
@@ -124,6 +126,8 @@ class ExpedientPolicy
             'void' => false,
             'request_reopening' => false,
             'approve_reopening' => false,
+            'manage_internal_assignments' => false,
+            'internal_assignment_office_ids' => [],
         ];
 
         if (! $canView) {
@@ -133,22 +137,33 @@ class ExpedientPolicy
         $holderOfficeIds = $expedient->currentHolderOfficeIds();
         $memberships = $user->currentOfficeMemberships()->with('office.capabilities')->get();
         $holderMemberships = $memberships->whereIn('office_id', $holderOfficeIds);
-        $isHeld = $holderMemberships->isNotEmpty();
-        $canMove = $isHeld && ! in_array($expedient->status, [
-            ExpedientStatus::Archived,
-            ExpedientStatus::Closed,
-            ExpedientStatus::Voided,
-        ], true);
+        $canOperate = $user->hasPermission(PermissionCode::ExpedientsProcess)
+            && app(OfficeDocumentAccessService::class)->canOperateExpedient($user, $expedient);
+        $canMove = $canOperate
+            && ! in_array($expedient->status, [
+                ExpedientStatus::Archived,
+                ExpedientStatus::Closed,
+                ExpedientStatus::Voided,
+            ], true);
 
         return [
             ...$permissions,
             'move' => $canMove,
             'act_on_movement' => $canMove,
             'manage_documents' => $canMove,
-            'view_lifecycle' => $isHeld,
-            'archive' => $isHeld && $this->membershipsHaveCapability($holderMemberships, OfficeCapabilityCode::ArchiveExpedients),
-            'close' => $isHeld && $this->membershipsHaveCapability($holderMemberships, OfficeCapabilityCode::CloseExpedients),
-            'void' => $isHeld && $this->membershipsHaveCapability($holderMemberships, OfficeCapabilityCode::VoidExpedients),
+            // Archivar no elimina la custodia: Archivo Central todavía debe poder
+            // cerrar el trámite y consultar el historial de ciclo de vida.
+            'view_lifecycle' => $canOperate,
+            'manage_internal_assignments' => $this->manageInternalAssignments($user, $expedient),
+            'internal_assignment_office_ids' => app(OfficeDocumentAccessService::class)
+                ->manageableInternalAssignmentOfficeIds($user, $expedient)->all(),
+            'archive' => $canMove && $this->membershipsHaveCapability($holderMemberships, OfficeCapabilityCode::ArchiveExpedients),
+            'close' => $canOperate
+                && ! in_array($expedient->status, [ExpedientStatus::Closed, ExpedientStatus::Voided], true)
+                && $this->membershipsHaveCapability($holderMemberships, OfficeCapabilityCode::CloseExpedients),
+            'void' => $canOperate
+                && $expedient->status !== ExpedientStatus::Voided
+                && $this->membershipsHaveCapability($holderMemberships, OfficeCapabilityCode::VoidExpedients),
             'request_reopening' => $memberships->contains(fn ($membership) => (int) $membership->office_id === (int) $expedient->responsible_office_id
                 && $membership->membership_role === OfficeMembershipRole::Manager),
             'approve_reopening' => $memberships->contains(fn ($membership) => $membership->membership_role === OfficeMembershipRole::Manager

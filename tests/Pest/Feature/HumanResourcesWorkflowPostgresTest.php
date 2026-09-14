@@ -179,6 +179,31 @@ test('a human resources registration creates one employee, account, contract, me
         ->assertJsonValidationErrors('identity_card');
 });
 
+test('every account created from human resources starts as a simple user even for a superadministrator', function () {
+    $administrator = humanResourcesAdministrator();
+    Sanctum::actingAs($administrator);
+    $office = Office::query()->where('code', 'RRHH')->firstOrFail();
+    $position = OfficePosition::query()->create([
+        'office_id' => $office->id,
+        'name' => 'Profesional de control de accesos',
+        'membership_role' => 'official',
+        'created_by' => $administrator->id,
+    ]);
+
+    $this->getJson('/api/human-resources/bootstrap')
+        ->assertOk()
+        ->assertJsonCount(1, 'data.roles')
+        ->assertJsonPath('data.roles.0.code', RoleCode::SimpleUser->value);
+
+    $this->postJson('/api/human-resources/employees', humanResourcesPayload($position, [
+        'identity_card' => '8123499',
+        'role' => RoleCode::Observer->value,
+    ]))->assertUnprocessable()
+        ->assertJsonValidationErrors('role');
+
+    expect(Employee::query()->where('identity_card', '8123499')->exists())->toBeFalse();
+});
+
 test('finishing a contract retains the person and reuses the inactive account on a later contract', function () {
     $administrator = humanResourcesAdministrator();
     Sanctum::actingAs($administrator);
@@ -259,7 +284,8 @@ test('the independent human resources account can access its module but not gene
     Sanctum::actingAs($humanResourcesUser);
 
     $this->getJson('/api/human-resources/bootstrap')->assertOk()
-        ->assertJsonPath('data.roles.0.code', RoleCode::HumanResourcesManager->value);
+        ->assertJsonCount(1, 'data.roles')
+        ->assertJsonPath('data.roles.0.code', RoleCode::SimpleUser->value);
     $this->getJson('/api/users')->assertForbidden();
 });
 
@@ -344,11 +370,12 @@ test('a human resources administrator can import employees from the Excel templa
         'contacto_emergencia', 'tipo_contrato', 'monto_contrato', 'fecha_inicio_contrato', 'fecha_fin_contrato', 'codigo_oficina',
         'cargo', 'rol',
     ];
+    $templateHeaders = array_slice($headers, 0, 19);
 
     $response = $this->post('/api/human-resources/employees/import', [
         'file' => employeeImportWorkbook([
-            $headers,
-            ['9000001', 'María Elena', 'Vargas Suárez', '70000001', null, null, null, '1990-06-12', null, 'Licenciatura', 'Ingeniera de Sistemas', null, null, 'Eventual', '5200.00', today()->toDateString(), null, 'Oficina de Importación', 'Técnico de Importación', 'Usuario simple'],
+            $templateHeaders,
+            ['9000001', 'María Elena', 'Vargas Suárez', '70000001', null, null, null, '1990-06-12', null, 'Licenciatura', 'Ingeniera de Sistemas', null, null, 'Eventual', '5200.00', today()->toDateString(), null, 'Oficina de Importación', 'Técnico de Importación'],
         ]),
     ], ['Accept' => 'application/json']);
 
@@ -392,5 +419,7 @@ test('an authorized administrator can download the import template and its heade
 
     expect($rows[1][0])->toBe('carnet_de_identidad')
         ->and($rows[1][13])->toBe('tipo_contrato')
-        ->and($rows[1][19])->toBe('rol');
+        ->and($rows[1][18])->toBe('cargo')
+        ->and($rows[1])->toHaveCount(19)
+        ->and($rows[1])->not->toContain('rol');
 });

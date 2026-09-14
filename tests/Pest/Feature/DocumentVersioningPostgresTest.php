@@ -46,7 +46,7 @@ test('documents preserve draft revisions and issue immutable corrected versions 
     OfficeMembership::query()->create([
         'office_id' => $office->id,
         'user_id' => $author->id,
-        'membership_role' => OfficeMembershipRole::Official,
+        'membership_role' => OfficeMembershipRole::Manager,
         'effective_from' => now(),
         'assigned_by' => $author->id,
     ]);

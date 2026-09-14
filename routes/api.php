@@ -3,13 +3,17 @@
 use App\Domain\Authorization\Enums\RoleCode;
 use App\Http\Controllers\Api\Administration\OperationalResetController;
 use App\Http\Controllers\Api\Authentication\AuthenticationController;
+use App\Http\Controllers\Api\Authorization\ObserverOfficeScopeController;
+use App\Http\Controllers\Api\Authorization\RolePermissionController;
 use App\Http\Controllers\Api\DocumentManagement\DocumentController;
 use App\Http\Controllers\Api\DocumentManagement\DocumentedExpedientEntryController;
 use App\Http\Controllers\Api\DocumentManagement\ExpedientAccessController;
 use App\Http\Controllers\Api\DocumentManagement\ExpedientController;
+use App\Http\Controllers\Api\DocumentManagement\ExpedientInternalAssignmentController;
 use App\Http\Controllers\Api\DocumentManagement\ExpedientLifecycleController;
 use App\Http\Controllers\Api\DocumentManagement\ExpedientMovementController;
 use App\Http\Controllers\Api\DocumentManagement\ExpedientTypeController;
+use App\Http\Controllers\Api\DocumentManagement\OfficeDocumentAccessController;
 use App\Http\Controllers\Api\DocumentManagement\OfficeDocumentSequenceController;
 use App\Http\Controllers\Api\HumanResources\HumanResourcesController;
 use App\Http\Controllers\Api\Legislatures\LegislatureController;
@@ -40,6 +44,10 @@ Route::middleware(['auth:sanctum', 'active.user', 'no.store'])->group(function (
         Route::post('users/{user}/roles', [UserController::class, 'assignRole']);
         Route::delete('users/{user}/roles/{role}', [UserController::class, 'removeRole'])
             ->whereIn('role', array_column(RoleCode::cases(), 'value'));
+        Route::get('authorization/roles', [RolePermissionController::class, 'index']);
+        Route::put('authorization/roles/{role}/permissions', [RolePermissionController::class, 'update']);
+        Route::get('users/{user}/observer-office-scope', [ObserverOfficeScopeController::class, 'show']);
+        Route::put('users/{user}/observer-office-scope', [ObserverOfficeScopeController::class, 'update']);
 
         // Operación excepcional para limpiar datos beta; la Policy la restringe a superadministración.
         Route::get('administration/operational-reset/summary', [OperationalResetController::class, 'summary']);
@@ -73,6 +81,8 @@ Route::middleware(['auth:sanctum', 'active.user', 'no.store'])->group(function (
         Route::get('offices/{office}/memberships', [OfficeController::class, 'memberships']);
         Route::post('offices/{office}/memberships', [OfficeController::class, 'assignMembership']);
         Route::post('offices/{office}/memberships/{membership}/close', [OfficeController::class, 'closeMembership']);
+        Route::get('document-management/offices/{office}/access-setting', [OfficeDocumentAccessController::class, 'show']);
+        Route::put('document-management/offices/{office}/access-setting', [OfficeDocumentAccessController::class, 'update']);
 
         // Catálogos que normalizan la clasificación de expedientes y documentos.
         Route::get('expedient-types', [ExpedientTypeController::class, 'index']);
@@ -93,6 +103,8 @@ Route::middleware(['auth:sanctum', 'active.user', 'no.store'])->group(function (
         Route::get('expedients/{expedient}/movements', [ExpedientMovementController::class, 'index']);
         Route::post('expedients/{expedient}/movements', [ExpedientMovementController::class, 'store']);
         Route::post('expedients/{expedient}/movement-recipients/{recipient}/status', [ExpedientMovementController::class, 'updateRecipientStatus']);
+        Route::get('expedients/{expedient}/movement-recipients/{recipient}/internal-assignments', [ExpedientInternalAssignmentController::class, 'show']);
+        Route::put('expedients/{expedient}/movement-recipients/{recipient}/internal-assignments', [ExpedientInternalAssignmentController::class, 'update']);
         Route::post('expedients/{expedient}/archive', [ExpedientLifecycleController::class, 'archive']);
         Route::post('expedients/{expedient}/close', [ExpedientLifecycleController::class, 'close']);
         Route::post('expedients/{expedient}/void', [ExpedientLifecycleController::class, 'void']);

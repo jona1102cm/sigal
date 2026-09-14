@@ -31,6 +31,10 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
         documents: [],
         reopeningRequests: [],
         accessGrants: [],
+        authorizationMatrix: null,
+        observerScopes: {},
+        officeAccessSetting: null,
+        internalAssignment: null,
         users: [],
         administrationOffices: [],
         selectedOffice: null,
@@ -125,6 +129,7 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
                 this.documents = [];
                 this.reopeningRequests = [];
                 this.accessGrants = [];
+                this.internalAssignment = null;
                 await this.loadSelectedCollections(id, selectionVersion);
 
                 if (selectionVersion !== this.selectedLoadVersion) return null;
@@ -194,6 +199,7 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
             this.documents = [];
             this.reopeningRequests = [];
             this.accessGrants = [];
+            this.internalAssignment = null;
         },
 
         async createExpedient(data) {
@@ -373,6 +379,103 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
                     user: payload.data,
                     temporaryPassword: payload.temporary_password,
                 };
+            });
+        },
+
+        async assignUserRole(userId, role) {
+            return this.run(`user-role-${userId}-${role}`, async () => {
+                await request(`/users/${userId}/roles`, { method: 'POST', body: { role } });
+                await this.loadUsers(true);
+            });
+        },
+
+        async removeUserRole(userId, role) {
+            return this.run(`user-role-${userId}-${role}`, async () => {
+                await request(`/users/${userId}/roles/${role}`, { method: 'DELETE' });
+                await this.loadUsers(true);
+                if (role === 'observer') {
+                    const scopes = { ...this.observerScopes };
+                    delete scopes[userId];
+                    this.observerScopes = scopes;
+                }
+            });
+        },
+
+        async loadAuthorizationMatrix(force = false) {
+            if (this.authorizationMatrix && !force) return this.authorizationMatrix;
+
+            return this.run('authorization-matrix', async () => {
+                const payload = await request('/authorization/roles');
+                this.authorizationMatrix = payload.data;
+                return this.authorizationMatrix;
+            });
+        },
+
+        async saveRolePermissions(roleId, permissions) {
+            return this.run(`role-permissions-${roleId}`, async () => {
+                await request(`/authorization/roles/${roleId}/permissions`, {
+                    method: 'PUT',
+                    body: { permissions },
+                });
+                return this.loadAuthorizationMatrix(true);
+            });
+        },
+
+        async loadObserverScope(userId) {
+            return this.run(`observer-scope-${userId}`, async () => {
+                const payload = await request(`/users/${userId}/observer-office-scope`);
+                this.observerScopes = { ...this.observerScopes, [userId]: payload.data };
+                return payload.data;
+            });
+        },
+
+        async saveObserverScope(userId, officeIds) {
+            return this.run(`observer-scope-${userId}`, async () => {
+                const payload = await request(`/users/${userId}/observer-office-scope`, {
+                    method: 'PUT',
+                    body: { office_ids: officeIds },
+                });
+                this.observerScopes = { ...this.observerScopes, [userId]: payload.data };
+                return payload.data;
+            });
+        },
+
+        async loadOfficeAccessSetting(officeId) {
+            return this.run(`office-access-${officeId}`, async () => {
+                const payload = await request(`/document-management/offices/${officeId}/access-setting`);
+                this.officeAccessSetting = payload.data;
+                return payload.data;
+            });
+        },
+
+        async saveOfficeAccessSetting(officeId, data) {
+            return this.run(`office-access-${officeId}`, async () => {
+                const payload = await request(`/document-management/offices/${officeId}/access-setting`, {
+                    method: 'PUT',
+                    body: data,
+                });
+                this.officeAccessSetting = payload.data;
+                return payload.data;
+            });
+        },
+
+        async loadInternalAssignment(recipientId) {
+            return this.run(`internal-assignment-${recipientId}`, async () => {
+                const payload = await request(`/expedients/${this.selected.id}/movement-recipients/${recipientId}/internal-assignments`);
+                this.internalAssignment = payload.data;
+                return payload.data;
+            });
+        },
+
+        async saveInternalAssignment(recipientId, data) {
+            return this.run(`internal-assignment-${recipientId}`, async () => {
+                const payload = await request(`/expedients/${this.selected.id}/movement-recipients/${recipientId}/internal-assignments`, {
+                    method: 'PUT',
+                    body: data,
+                });
+                this.internalAssignment = payload.data;
+                await this.refreshSelectedAndInbox();
+                return payload.data;
             });
         },
 

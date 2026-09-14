@@ -47,7 +47,7 @@ class ExpedientAccessService
                 ->where('expedient_id', $expedient->id)
                 ->when($data->userId !== null, fn ($query) => $query->where('user_id', $data->userId))
                 ->when($data->officeId !== null, fn ($query) => $query->where('office_id', $data->officeId))
-                ->whereNull('effective_to')
+                ->where(fn ($query) => $query->whereNull('effective_to')->orWhere('effective_to', '>', now()))
                 ->lockForUpdate()
                 ->first();
 
@@ -63,6 +63,7 @@ class ExpedientAccessService
                 'office_id' => $data->officeId,
                 'granted_by' => $actor->id,
                 'effective_from' => $data->effectiveFrom,
+                'effective_to' => $data->effectiveTo,
                 'reason' => $data->reason,
             ]);
 
