@@ -17,6 +17,11 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        // SIGAL es una SPA sin formulario de acceso servido por Laravel. Al no
+        // redirigir invitados, cualquier endpoint API devuelve 401 aunque el
+        // cliente omita accidentalmente la cabecera Accept: application/json.
+        $middleware->redirectGuestsTo(null);
+
         // Alias descriptivos utilizados por routes/api.php para las restricciones de sesión.
         $middleware->alias([
             'active.user' => EnsureActiveSystemUser::class,

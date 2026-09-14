@@ -7,6 +7,12 @@ use App\Models\UserRoleAssignment;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 
+test('an unauthenticated API request returns 401 even without an Accept header', function () {
+    $this->get('/api/auth/me')
+        ->assertUnauthorized()
+        ->assertJson(['message' => 'Unauthenticated.']);
+});
+
 test('a superadministrator can manage access while inactive users lose access and retain history', function () {
     try {
         DB::connection()->getPdo();
