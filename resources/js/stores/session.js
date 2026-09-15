@@ -34,6 +34,12 @@ export const useSessionStore = defineStore('session', {
             return this.hasPermission('document_management.office_access.configure')
                 && (this.isSuperAdministrator || (this.user?.office_memberships ?? []).some((membership) => membership.membership_role === 'manager'));
         },
+        canUseWarehouse() {
+            return this.hasPermission('warehouse.requests.view');
+        },
+        canCreateWarehouseRequest() {
+            return this.hasPermission('warehouse.requests.create');
+        },
         canUseAdministration: (state) => state.user?.permissions?.some((permission) => permission.startsWith('administration.')) ?? false,
         roleLabel: (state) => state.user?.roles?.map((role) => role.name).join(' · ') || 'Usuario del sistema',
     },

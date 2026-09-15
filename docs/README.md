@@ -19,6 +19,7 @@ Este directorio es la fuente técnica de referencia del sistema. Describe el com
 - [Organización institucional](architecture/organization.md)
 - [Recursos Humanos](architecture/human-resources.md)
 - [Gestión documental](architecture/document-management.md)
+- [Almacenes](architecture/warehouse.md)
 
 ## Documentación junto al código
 

@@ -34,5 +34,6 @@ class DatabaseSeeder extends Seeder
         $this->call(OrganizationSeeder::class);
         $this->call(DocumentManagementCatalogSeeder::class);
         $this->call(OfficeCapabilitySeeder::class);
+        $this->call(WarehouseCatalogSeeder::class);
     }
 }

@@ -134,4 +134,25 @@ Las respuestas de colección usan `data`, `links` y `meta` de paginación. Los e
 | GET | `/administration/operational-reset/summary` | Previsualiza registros afectados. |
 | POST | `/administration/operational-reset` | Ejecuta limpieza beta confirmada. |
 
+## Almacenes
+
+| Método | Ruta | Uso |
+|---|---|---|
+| GET | `/warehouse/bootstrap` | Unidades, categorías, materiales y capacidades de interfaz. |
+| POST/PATCH | `/warehouse/categories[/{warehouseCategory}]` | Crea o actualiza categorías. |
+| POST/PATCH | `/warehouse/items[/{warehouseItem}]` | Crea o actualiza materiales. |
+| GET | `/warehouse/items/{warehouseItem}/movements` | Consulta el kardex del material. |
+| POST | `/warehouse/items/{warehouseItem}/adjustments` | Registra un ajuste justificado. |
+| GET/POST | `/warehouse/receipts` | Lista o registra ingresos con factura/nota. |
+| GET | `/warehouse/receipts/{warehouseReceipt}` | Consulta un ingreso y sus respaldos. |
+| GET/POST | `/warehouse/material-requests` | Lista o prepara una solicitud documental. |
+| GET/PATCH | `/warehouse/material-requests/{materialRequest}` | Consulta o edita un borrador. |
+| POST | `/warehouse/material-requests/{materialRequest}/submit` | Presenta y activa el conducto regular. |
+| POST | `/warehouse/material-requests/{materialRequest}/decisions` | Aprueba, observa o rechaza en la etapa vigente. |
+| POST | `/warehouse/material-requests/{materialRequest}/revisions` | Corrige una solicitud observada y la reenvía. |
+| POST | `/warehouse/material-requests/{materialRequest}/delivery` | Define la entrega o el cierre sin atención. |
+| POST | `/warehouse/material-requests/{materialRequest}/receiver-authorization` | Autoriza un receptor alterno para esa entrega. |
+| POST | `/warehouse/material-requests/{materialRequest}/confirm-receipt` | Confirma, genera el acta oficial y cierra. |
+| GET | `/warehouse/material-requests/{materialRequest}/act` | Obtiene el acta digital autorizada. |
+
 Para conocer reglas de cada payload, consultar el Form Request asociado en `app/Http/Requests` y sus pruebas. Ese código es la fuente exacta cuando este resumen no incluya un campo nuevo.

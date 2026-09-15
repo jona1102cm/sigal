@@ -18,7 +18,8 @@ class OfficePolicy
     public function viewDirectory(User $user): bool
     {
         return $user->hasPermission(PermissionCode::ExpedientsView)
-            || $user->hasPermission(PermissionCode::HumanResourcesView);
+            || $user->hasPermission(PermissionCode::HumanResourcesView)
+            || $user->hasPermission(PermissionCode::WarehouseView);
     }
 
     public function view(User $user, Office $office): bool

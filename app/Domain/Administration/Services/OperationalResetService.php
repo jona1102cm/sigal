@@ -34,6 +34,9 @@ class OperationalResetService
             'employment_contracts' => DB::table('employment_contracts')->count(),
             'employee_attachments' => DB::table('employee_attachments')->count(),
             'office_memberships' => DB::table('office_memberships')->count(),
+            'material_requests' => DB::table('material_requests')->count(),
+            'warehouse_receipts' => DB::table('warehouse_receipts')->count(),
+            'warehouse_stock_movements' => DB::table('warehouse_stock_movements')->count(),
         ];
     }
 
@@ -51,6 +54,18 @@ class OperationalResetService
                 $preservedUserIds !== [],
                 fn ($query) => $query->whereNotIn('id', $preservedUserIds),
             )->pluck('id')->all();
+
+            DB::table('warehouse_stock_movements')->delete();
+            DB::table('warehouse_delivery_lines')->delete();
+            DB::table('warehouse_deliveries')->delete();
+            DB::table('warehouse_receipt_attachments')->delete();
+            DB::table('warehouse_receipt_lines')->delete();
+            DB::table('warehouse_receipts')->delete();
+            DB::table('material_request_decisions')->delete();
+            DB::table('material_request_items')->delete();
+            DB::table('material_requests')->delete();
+            DB::table('warehouse_number_sequences')->delete();
+            DB::table('warehouse_items')->update(['stock_on_hand' => 0]);
 
             DB::table('document_expedient_movement')->delete();
             DB::table('document_attachments')->delete();
@@ -140,6 +155,10 @@ class OperationalResetService
             ...DB::table('employee_attachments')->get([
                 'disk',
                 'path',
+            ])->all(),
+            ...DB::table('warehouse_receipt_attachments')->get([
+                'storage_disk as disk',
+                'storage_path as path',
             ])->all(),
         ];
     }

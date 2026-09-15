@@ -3,7 +3,7 @@
  * Shell principal autenticado: decide qué módulo puede ver el usuario y coordina
  * las cargas iniciales sin duplicar las reglas de autorización del backend.
  */
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
 import AccountPasswordDialog from '../components/AccountPasswordDialog.vue';
 import AdministrationWorkspace from '../components/AdministrationWorkspace.vue';
 import DashboardView from '../components/DashboardView.vue';
@@ -13,13 +13,16 @@ import HumanResourcesWorkspace from '../components/HumanResourcesWorkspace.vue';
 import LoginScreen from '../components/LoginScreen.vue';
 import OfficeDocumentAccessWorkspace from '../components/OfficeDocumentAccessWorkspace.vue';
 import PasswordChangeScreen from '../components/PasswordChangeScreen.vue';
+import WarehouseWorkspace from '../components/WarehouseWorkspace.vue';
 import { useDocumentManagementStore } from '../stores/document-management';
 import { useHumanResourcesStore } from '../stores/human-resources';
 import { useSessionStore } from '../stores/session';
+import { useWarehouseStore } from '../stores/warehouse';
 
 const session = useSessionStore();
 const documents = useDocumentManagementStore();
 const humanResources = useHumanResourcesStore();
+const warehouse = useWarehouseStore();
 const view = ref('dashboard');
 const mobileMenuOpen = ref(false);
 const sidebarCollapsed = ref(false);
@@ -28,6 +31,7 @@ const createDialogOpen = ref(false);
 const booting = ref(false);
 const bootError = ref(null);
 const passwordDialogOpen = ref(false);
+const warehouseWorkspace = ref(null);
 let refreshingSecurityContext = false;
 let securityRefreshTimer = null;
 const SECURITY_REFRESH_INTERVAL_MS = 60_000;
@@ -41,11 +45,13 @@ async function loadWorkspace() {
         const loads = [];
         if (session.canUseDocumentManagement) loads.push(documents.loadCatalogs(), documents.loadExpedients());
         if (session.canManageHumanResources) loads.push(humanResources.loadBootstrap(), humanResources.loadEmployees());
+        if (session.canUseWarehouse) loads.push(warehouse.loadBootstrap(), warehouse.loadRequests());
         await Promise.all(loads);
 
         if (!session.canViewDashboard) {
             if (session.canUseDocumentManagement) view.value = 'expedients';
             else if (session.canManageHumanResources) view.value = 'human-resources';
+            else if (session.canUseWarehouse) view.value = 'warehouse';
             else if (session.canUseAdministration) view.value = 'administration';
         }
     } catch (error) {
@@ -69,10 +75,18 @@ async function openExpedient(expedient) {
     }
 }
 
+async function openWarehouseRequest() {
+    view.value = 'warehouse';
+    expandedModule.value = 'warehouse';
+    await nextTick();
+    warehouseWorkspace.value?.openNewRequest();
+}
+
 async function logout() {
     await session.logout();
     documents.$reset();
     humanResources.$reset();
+    warehouse.$reset();
     view.value = 'dashboard';
 }
 
@@ -81,13 +95,15 @@ function normalizeAuthorizedView() {
     const documentViewWithoutAccess = view.value === 'expedients' && !session.canUseDocumentManagement;
     const officeSettingsWithoutAccess = view.value === 'office-access' && !session.canConfigureOfficeAccess;
     const humanResourcesViewWithoutAccess = view.value === 'human-resources' && !session.canManageHumanResources;
+    const warehouseViewWithoutAccess = view.value === 'warehouse' && !session.canUseWarehouse;
     const administrationViewWithoutAccess = view.value === 'administration' && !session.canUseAdministration;
 
-    if (!dashboardWithoutAccess && !documentViewWithoutAccess && !officeSettingsWithoutAccess && !humanResourcesViewWithoutAccess && !administrationViewWithoutAccess) return;
+    if (!dashboardWithoutAccess && !documentViewWithoutAccess && !officeSettingsWithoutAccess && !humanResourcesViewWithoutAccess && !warehouseViewWithoutAccess && !administrationViewWithoutAccess) return;
 
     if (session.canViewDashboard) view.value = 'dashboard';
     else if (session.canUseDocumentManagement) view.value = 'expedients';
     else if (session.canManageHumanResources) view.value = 'human-resources';
+    else if (session.canUseWarehouse) view.value = 'warehouse';
     else if (session.isSuperAdministrator) view.value = 'administration';
 }
 
@@ -97,6 +113,7 @@ async function refreshSecurityContext() {
     refreshingSecurityContext = true;
     const hadDocumentAccess = session.canUseDocumentManagement;
     const hadHumanResourcesAccess = session.canManageHumanResources;
+    const hadWarehouseAccess = session.canUseWarehouse;
     try {
         await session.refresh();
 
@@ -108,6 +125,10 @@ async function refreshSecurityContext() {
         if (!hadHumanResourcesAccess && session.canManageHumanResources) {
             await Promise.all([humanResources.loadBootstrap(), humanResources.loadEmployees()]);
         }
+        if (hadWarehouseAccess && !session.canUseWarehouse) warehouse.$reset();
+        if (!hadWarehouseAccess && session.canUseWarehouse) {
+            await Promise.all([warehouse.loadBootstrap(), warehouse.loadRequests()]);
+        }
         if (!session.canCreateExpedients) createDialogOpen.value = false;
 
         normalizeAuthorizedView();
@@ -118,6 +139,7 @@ async function refreshSecurityContext() {
         if (!session.authenticated) {
             documents.$reset();
             humanResources.$reset();
+            warehouse.$reset();
             view.value = 'dashboard';
         }
     } finally {
@@ -136,6 +158,7 @@ const viewContext = computed(() => ({
     expedients: 'Gestion documental',
     'office-access': 'Configuración documental',
     'human-resources': 'Recursos Humanos',
+    warehouse: 'Almacenes',
     administration: 'Administracion',
 }[view.value] || 'SIGAL'));
 
@@ -168,6 +191,7 @@ onBeforeUnmount(() => {
                 <button v-if="session.canViewDashboard" type="button" :class="{ 'is-active': view === 'dashboard' }" @click="view = 'dashboard'; mobileMenuOpen = false"><span aria-hidden="true">D</span><span class="sidebar__nav-label">Inicio</span></button>
                 <section v-if="session.canUseDocumentManagement" class="sidebar__module" :class="{ 'is-active': ['expedients', 'office-access'].includes(view) }"><button class="sidebar__module-button" type="button" :aria-expanded="expandedModule === 'document-management'" @click="toggleModule('document-management', 'expedients')"><span aria-hidden="true">GD</span><span class="sidebar__nav-label">Gestion documental</span><em class="sidebar__module-chevron" aria-hidden="true">{{ expandedModule === 'document-management' ? '-' : '+' }}</em></button><template v-if="expandedModule === 'document-management'"><button class="sidebar__subnav" type="button" :class="{ 'is-active': view === 'expedients' }" @click="view = 'expedients'; mobileMenuOpen = false"><span class="sidebar__nav-label">Bandeja de expedientes</span></button><button v-if="session.canConfigureOfficeAccess" class="sidebar__subnav" type="button" :class="{ 'is-active': view === 'office-access' }" @click="view = 'office-access'; mobileMenuOpen = false"><span class="sidebar__nav-label">Acceso de mi oficina</span></button></template></section>
                 <section v-if="session.canManageHumanResources" class="sidebar__module" :class="{ 'is-active': view === 'human-resources' }"><button class="sidebar__module-button" type="button" :aria-expanded="expandedModule === 'human-resources'" @click="toggleModule('human-resources', 'human-resources')"><span aria-hidden="true">RH</span><span class="sidebar__nav-label">Recursos Humanos</span><em class="sidebar__module-chevron" aria-hidden="true">{{ expandedModule === 'human-resources' ? '-' : '+' }}</em></button><button v-if="expandedModule === 'human-resources'" class="sidebar__subnav" type="button" :class="{ 'is-active': view === 'human-resources' }" @click="view = 'human-resources'; mobileMenuOpen = false"><span class="sidebar__nav-label">Funcionarios y contratos</span></button></section>
+                <section v-if="session.canUseWarehouse" class="sidebar__module" :class="{ 'is-active': view === 'warehouse' }"><button class="sidebar__module-button" type="button" :aria-expanded="expandedModule === 'warehouse'" @click="toggleModule('warehouse', 'warehouse')"><span aria-hidden="true">AL</span><span class="sidebar__nav-label">Almacenes</span><em class="sidebar__module-chevron" aria-hidden="true">{{ expandedModule === 'warehouse' ? '-' : '+' }}</em></button><button v-if="expandedModule === 'warehouse'" class="sidebar__subnav" type="button" :class="{ 'is-active': view === 'warehouse' }" @click="view = 'warehouse'; mobileMenuOpen = false"><span class="sidebar__nav-label">Solicitudes y existencias</span></button></section>
                 <section v-if="session.canUseAdministration" class="sidebar__module" :class="{ 'is-active': view === 'administration' }"><button class="sidebar__module-button" type="button" :aria-expanded="expandedModule === 'administration'" @click="toggleModule('administration', 'administration')"><span aria-hidden="true">AD</span><span class="sidebar__nav-label">Administracion</span><em class="sidebar__module-chevron" aria-hidden="true">{{ expandedModule === 'administration' ? '-' : '+' }}</em></button><button v-if="expandedModule === 'administration'" class="sidebar__subnav" type="button" :class="{ 'is-active': view === 'administration' }" @click="view = 'administration'; mobileMenuOpen = false"><span class="sidebar__nav-label">Institucion y catalogos</span></button></section>
             </nav>
             <div class="sidebar__footer"><span class="status-dot status-dot--success"></span><span class="sidebar__label">Sesion protegida</span></div>
@@ -182,10 +206,11 @@ onBeforeUnmount(() => {
 
             <div v-if="booting" class="workspace-loading"><div class="loading-line"></div><p>Actualizando la informacion institucional...</p></div>
             <section v-else-if="bootError" class="boot-error"><p class="alert alert--error">{{ bootError }}</p><button class="button button--primary" type="button" @click="loadWorkspace">Reintentar</button></section>
-            <DashboardView v-else-if="view === 'dashboard' && session.canViewDashboard" :can-create-expedients="session.canCreateExpedients" @open-expedients="view = 'expedients'" @create-expedient="createDialogOpen = true" @select-expedient="openExpedient" />
+            <DashboardView v-else-if="view === 'dashboard' && session.canViewDashboard" :can-create-expedients="session.canCreateExpedients" :can-create-warehouse-request="session.canCreateWarehouseRequest" @open-expedients="view = 'expedients'" @create-expedient="createDialogOpen = true" @create-warehouse-request="openWarehouseRequest" @select-expedient="openExpedient" />
             <ExpedientsWorkspace v-else-if="view === 'expedients' && session.canUseDocumentManagement" :session="session" @create-expedient="createDialogOpen = true" />
             <OfficeDocumentAccessWorkspace v-else-if="view === 'office-access' && session.canConfigureOfficeAccess" />
             <HumanResourcesWorkspace v-else-if="view === 'human-resources' && session.canManageHumanResources" />
+            <WarehouseWorkspace v-else-if="view === 'warehouse' && session.canUseWarehouse" ref="warehouseWorkspace" :session="session" />
             <AdministrationWorkspace v-else-if="session.canUseAdministration" />
             <section v-else class="boot-error"><p class="alert alert--error">Su cuenta está activa, pero no tiene un módulo asignado. Solicite al administrador revisar sus roles vigentes.</p></section>
         </main>

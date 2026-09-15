@@ -3,8 +3,8 @@
 import { computed } from 'vue';
 import { useDocumentManagementStore } from '../stores/document-management';
 
-defineProps({ canCreateExpedients: { type: Boolean, default: false } });
-const emit = defineEmits(['open-expedients', 'create-expedient', 'select-expedient']);
+defineProps({ canCreateExpedients: { type: Boolean, default: false }, canCreateWarehouseRequest: { type: Boolean, default: false } });
+const emit = defineEmits(['open-expedients', 'create-expedient', 'select-expedient', 'create-warehouse-request']);
 const documents = useDocumentManagementStore();
 
 const metrics = computed(() => {
@@ -33,7 +33,7 @@ function formatDate(value) {
                 <h1>Buenos días</h1>
                 <p class="muted">Controle el avance de los expedientes bajo su alcance.</p>
             </div>
-            <button v-if="canCreateExpedients" class="button button--primary" type="button" @click="emit('create-expedient')">+ Registrar ingreso</button>
+            <div class="inline-actions"><button v-if="canCreateWarehouseRequest" class="button button--ghost" type="button" @click="emit('create-warehouse-request')">Solicitar material</button><button v-if="canCreateExpedients" class="button button--primary" type="button" @click="emit('create-expedient')">+ Registrar ingreso</button></div>
         </header>
 
         <section class="metric-grid" aria-label="Resumen de expedientes">

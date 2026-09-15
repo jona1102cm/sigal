@@ -20,6 +20,11 @@ enum PermissionCode: string
     case HumanResourcesImport = 'human_resources.employees.import';
     case HumanResourcesPositions = 'human_resources.positions.manage';
     case HumanResourcesContracts = 'human_resources.contracts.manage';
+    case WarehouseView = 'warehouse.requests.view';
+    case WarehouseRequest = 'warehouse.requests.create';
+    case WarehouseApprove = 'warehouse.requests.approve';
+    case WarehouseOperate = 'warehouse.operations.manage';
+    case WarehouseCatalogManage = 'warehouse.catalog.manage';
     case LegislaturesManage = 'administration.legislatures.manage';
     case OrganizationManage = 'administration.organization.manage';
     case ExpedientTypesManage = 'administration.expedient_types.manage';
@@ -40,6 +45,11 @@ enum PermissionCode: string
             self::HumanResourcesImport => 'Importar funcionarios desde Excel',
             self::HumanResourcesPositions => 'Administrar cargos de oficina',
             self::HumanResourcesContracts => 'Administrar contratos y vigencias',
+            self::WarehouseView => 'Ver solicitudes de materiales autorizadas',
+            self::WarehouseRequest => 'Crear solicitudes de materiales',
+            self::WarehouseApprove => 'Aprobar, observar, rechazar o derivar solicitudes',
+            self::WarehouseOperate => 'Registrar ingresos, entregas y movimientos de almacén',
+            self::WarehouseCatalogManage => 'Administrar categorías, unidades y materiales',
             self::LegislaturesManage => 'Administrar legislaturas y Directiva',
             self::OrganizationManage => 'Administrar organigrama y oficinas',
             self::ExpedientTypesManage => 'Administrar tipos de expediente',
@@ -56,6 +66,8 @@ enum PermissionCode: string
             self::ExpedientsView, self::ExpedientsCreate, self::ExpedientsProcess, self::OfficeAccessConfigure => 'Gestión documental',
             self::HumanResourcesView, self::HumanResourcesManage, self::HumanResourcesImport,
             self::HumanResourcesPositions, self::HumanResourcesContracts => 'Recursos Humanos',
+            self::WarehouseView, self::WarehouseRequest, self::WarehouseApprove,
+            self::WarehouseOperate, self::WarehouseCatalogManage => 'Almacenes',
             default => 'Administración',
         };
     }
@@ -69,6 +81,9 @@ enum PermissionCode: string
             self::HumanResourcesView, self::HumanResourcesManage, self::HumanResourcesImport => 'Funcionarios y kardex',
             self::HumanResourcesPositions => 'Cargos',
             self::HumanResourcesContracts => 'Contratos',
+            self::WarehouseView, self::WarehouseRequest, self::WarehouseApprove => 'Solicitudes',
+            self::WarehouseOperate => 'Ingresos, entregas y kardex',
+            self::WarehouseCatalogManage => 'Catálogo de materiales',
             self::LegislaturesManage => 'Legislaturas y Directiva',
             self::OrganizationManage => 'Organigrama y oficinas',
             self::ExpedientTypesManage => 'Tipos de expediente',
@@ -84,6 +99,8 @@ enum PermissionCode: string
             self::ExpedientsView => 'La visibilidad real también se limita por oficina, asignación, confidencialidad y alcance de observación.',
             self::ExpedientsProcess => 'No permite actuar si la oficina o el funcionario no poseen la custodia vigente.',
             self::OfficeAccessConfigure => 'La Policy exige además ser responsable vigente de la oficina.',
+            self::WarehouseApprove => 'La acción concreta también exige responsabilidad, pertenencia y tenencia vigentes.',
+            self::WarehouseOperate, self::WarehouseCatalogManage => 'La Policy restringe la operación a Activos Fijos y Almacenes.',
             self::UsersManage, self::RolePermissionsManage => 'Capacidad reservada al rol Superadministrador.',
             default => 'Habilita esta vista o acción; el backend vuelve a validar el alcance de los datos.',
         };
@@ -109,6 +126,7 @@ enum PermissionCode: string
             RoleCode::Observer => [
                 self::DashboardView,
                 self::ExpedientsView,
+                self::WarehouseView,
             ],
             RoleCode::SimpleUser => [
                 self::DashboardView,
@@ -116,6 +134,11 @@ enum PermissionCode: string
                 self::ExpedientsCreate,
                 self::ExpedientsProcess,
                 self::OfficeAccessConfigure,
+                self::WarehouseView,
+                self::WarehouseRequest,
+                self::WarehouseApprove,
+                self::WarehouseOperate,
+                self::WarehouseCatalogManage,
             ],
         };
     }

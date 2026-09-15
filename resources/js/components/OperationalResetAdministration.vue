@@ -3,9 +3,11 @@
 import { onMounted, ref } from 'vue';
 import { useDocumentManagementStore } from '../stores/document-management';
 import { useHumanResourcesStore } from '../stores/human-resources';
+import { useWarehouseStore } from '../stores/warehouse';
 
 const documents = useDocumentManagementStore();
 const humanResources = useHumanResourcesStore();
+const warehouse = useWarehouseStore();
 const confirmationOpen = ref(false);
 const confirmation = ref('');
 const completed = ref(null);
@@ -15,6 +17,7 @@ onMounted(() => documents.loadOperationalResetSummary().catch(() => {}));
 async function performReset() {
     completed.value = await documents.performOperationalReset(confirmation.value);
     humanResources.$reset();
+    warehouse.$reset();
     confirmation.value = '';
     confirmationOpen.value = false;
     await Promise.all([documents.loadCatalogs(), documents.loadOperationalResetSummary()]);
@@ -28,7 +31,7 @@ async function performReset() {
         </header>
 
         <p v-if="documents.error" class="alert alert--error" role="alert">{{ documents.error }}</p>
-        <p v-if="completed" class="alert alert--success" role="status">Reinicio completado: {{ completed.expedients }} expedientes, {{ completed.documents }} documentos y {{ completed.employees }} funcionarios retirados.</p>
+        <p v-if="completed" class="alert alert--success" role="status">Reinicio completado: {{ completed.expedients }} expedientes, {{ completed.documents }} documentos, {{ completed.material_requests }} solicitudes de materiales y {{ completed.employees }} funcionarios retirados.</p>
 
         <div class="operational-reset__grid">
             <article class="operational-reset__card">
@@ -39,7 +42,7 @@ async function performReset() {
             <article class="operational-reset__card operational-reset__card--danger">
                 <p class="eyebrow">Se elimina</p>
                 <h3>Información de operación y prueba</h3>
-                <ul><li>Expedientes, documentos, movimientos y archivos adjuntos.</li><li>Legislaturas, Directiva y numeraciones emitidas.</li><li>Funcionarios, contratos, membresías y sus respaldos.</li><li>Sesiones, tareas pendientes y cuentas no técnicas.</li></ul>
+                <ul><li>Expedientes, documentos, movimientos y archivos adjuntos.</li><li>Solicitudes, ingresos, entregas y kardex de prueba de Almacenes.</li><li>Legislaturas, Directiva y numeraciones emitidas.</li><li>Funcionarios, contratos, membresías y sus respaldos.</li><li>Sesiones, tareas pendientes y cuentas no técnicas.</li></ul>
             </article>
         </div>
 

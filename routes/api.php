@@ -19,6 +19,9 @@ use App\Http\Controllers\Api\HumanResources\HumanResourcesController;
 use App\Http\Controllers\Api\Legislatures\LegislatureController;
 use App\Http\Controllers\Api\Organization\OfficeController;
 use App\Http\Controllers\Api\Users\UserController;
+use App\Http\Controllers\Api\Warehouse\MaterialRequestController;
+use App\Http\Controllers\Api\Warehouse\WarehouseCatalogController;
+use App\Http\Controllers\Api\Warehouse\WarehouseReceiptController;
 use Illuminate\Support\Facades\Route;
 
 // El inicio de sesión es la única operación pública y limita intentos para mitigar fuerza bruta.
@@ -134,5 +137,30 @@ Route::middleware(['auth:sanctum', 'active.user', 'no.store'])->group(function (
         Route::post('legislatures/{legislature}/activate', [LegislatureController::class, 'activate']);
         Route::post('legislatures/{legislature}/inactivate', [LegislatureController::class, 'inactivate']);
         Route::post('legislatures/{legislature}/board-assignments', [LegislatureController::class, 'replaceBoardMember']);
+
+        // Almacenes reutiliza el expediente como trazabilidad y conserva separado el kardex físico.
+        Route::get('warehouse/bootstrap', [WarehouseCatalogController::class, 'bootstrap']);
+        Route::post('warehouse/categories', [WarehouseCatalogController::class, 'storeCategory']);
+        Route::patch('warehouse/categories/{warehouseCategory}', [WarehouseCatalogController::class, 'updateCategory']);
+        Route::post('warehouse/items', [WarehouseCatalogController::class, 'storeItem']);
+        Route::patch('warehouse/items/{warehouseItem}', [WarehouseCatalogController::class, 'updateItem']);
+        Route::get('warehouse/items/{warehouseItem}/movements', [WarehouseReceiptController::class, 'stockMovements']);
+        Route::post('warehouse/items/{warehouseItem}/adjustments', [WarehouseReceiptController::class, 'adjust']);
+        Route::get('warehouse/receipts', [WarehouseReceiptController::class, 'index']);
+        Route::post('warehouse/receipts', [WarehouseReceiptController::class, 'store']);
+        Route::get('warehouse/receipts/{warehouseReceipt}', [WarehouseReceiptController::class, 'show']);
+        Route::get('warehouse/receipts/{warehouseReceipt}/attachments/{attachment}/download', [WarehouseReceiptController::class, 'downloadAttachment']);
+        Route::get('warehouse/material-requests', [MaterialRequestController::class, 'index']);
+        Route::post('warehouse/material-requests', [MaterialRequestController::class, 'store']);
+        Route::get('warehouse/material-requests/{materialRequest}', [MaterialRequestController::class, 'show']);
+        Route::patch('warehouse/material-requests/{materialRequest}', [MaterialRequestController::class, 'update']);
+        Route::post('warehouse/material-requests/{materialRequest}/submit', [MaterialRequestController::class, 'submit']);
+        Route::post('warehouse/material-requests/{materialRequest}/decisions', [MaterialRequestController::class, 'decide']);
+        Route::post('warehouse/material-requests/{materialRequest}/revisions', [MaterialRequestController::class, 'revise']);
+        Route::post('warehouse/material-requests/{materialRequest}/delivery', [MaterialRequestController::class, 'decideDelivery']);
+        Route::get('warehouse/material-requests/{materialRequest}/eligible-receivers', [MaterialRequestController::class, 'eligibleReceivers']);
+        Route::post('warehouse/material-requests/{materialRequest}/receiver-authorization', [MaterialRequestController::class, 'authorizeReceiver']);
+        Route::post('warehouse/material-requests/{materialRequest}/confirm-receipt', [MaterialRequestController::class, 'confirmReceipt']);
+        Route::get('warehouse/material-requests/{materialRequest}/act', [MaterialRequestController::class, 'act']);
     });
 });
