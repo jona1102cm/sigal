@@ -43,6 +43,12 @@ beforeEach(function (): void {
         'status' => 'active',
         'activated_at' => now(),
     ]);
+    expect(Role::query()
+        ->where('code', RoleCode::SuperAdministrator->value)
+        ->firstOrFail()
+        ->permissions()
+        ->where('module', 'Almacenes')
+        ->count())->toBe(5);
 
     $this->requester = warehouseUser('SIS', OfficeMembershipRole::Official);
     $this->requesterManager = warehouseUser('SIS');
