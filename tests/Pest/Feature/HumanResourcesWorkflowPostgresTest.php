@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Models\UserRoleAssignment;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 
@@ -122,13 +123,16 @@ test('a human resources registration creates one employee, account, contract, me
         ->assertJsonPath('data.profile_photo.document_type', 'profile_photo')
         ->assertJsonPath('data.open_contract.contract_amount', '5350.50')
         ->assertJsonPath('data.open_contract.office_position.id', $position->id)
-        ->assertJsonPath('credentials.email', '8123456@sigal.local');
+        ->assertJsonPath('credentials.email', '8123456@sigal.local')
+        ->assertJsonPath('credentials.temporary_password', '8123456MEVS');
 
     $employee = Employee::query()->where('identity_card', '8123456')->firstOrFail();
     $user = $employee->user()->firstOrFail();
     $contract = $employee->openContract()->firstOrFail();
 
     expect($user->isActive())->toBeTrue()
+        ->and($user->must_change_password)->toBeTrue()
+        ->and(Hash::check('8123456MEVS', $user->password))->toBeTrue()
         ->and($contract->contract_type->value)->toBe('eventual');
     $this->assertDatabaseHas('office_memberships', [
         'employment_contract_id' => $contract->id,
@@ -177,6 +181,50 @@ test('a human resources registration creates one employee, account, contract, me
     $this->postJson('/api/human-resources/employees', humanResourcesPayload($position, ['identity_card' => '8123457']))
         ->assertUnprocessable()
         ->assertJsonValidationErrors('identity_card');
+});
+
+test('an employee must replace the identity based initial password before using SIGAL', function () {
+    $administrator = humanResourcesAdministrator();
+    Sanctum::actingAs($administrator);
+    $office = Office::query()->create(['code' => 'FIRST-LOGIN', 'name' => 'Oficina de primer acceso']);
+    $position = OfficePosition::query()->create([
+        'office_id' => $office->id,
+        'name' => 'Profesional de primer acceso',
+        'membership_role' => 'official',
+        'created_by' => $administrator->id,
+    ]);
+
+    $registration = $this->postJson('/api/human-resources/employees', humanResourcesPayload($position, [
+        'identity_card' => '8123456-1A',
+    ]))->assertCreated()
+        ->assertJsonPath('credentials.temporary_password', '8123456-1AMEVS');
+
+    app('auth')->forgetGuards();
+    $login = $this->postJson('/api/auth/login', [
+        'email' => $registration->json('credentials.email'),
+        'password' => '8123456-1AMEVS',
+    ])->assertOk()
+        ->assertJsonPath('user.must_change_password', true);
+    $temporaryToken = $login->json('token');
+
+    $this->getJson('/api/expedients', ['Authorization' => "Bearer {$temporaryToken}"])
+        ->assertForbidden()
+        ->assertJsonPath('code', 'password_change_required');
+
+    $passwordChange = $this->postJson('/api/auth/password', [
+        'current_password' => '8123456-1AMEVS',
+        'password' => 'Definitiva!2026Segura',
+        'password_confirmation' => 'Definitiva!2026Segura',
+    ], ['Authorization' => "Bearer {$temporaryToken}"])
+        ->assertOk()
+        ->assertJsonPath('user.must_change_password', false);
+
+    $this->getJson('/api/expedients', ['Authorization' => 'Bearer '.$passwordChange->json('token')])
+        ->assertOk();
+
+    $employeeUser = User::query()->where('employee_id', $registration->json('data.id'))->firstOrFail();
+    expect($employeeUser->must_change_password)->toBeFalse()
+        ->and(Hash::check('Definitiva!2026Segura', $employeeUser->password))->toBeTrue();
 });
 
 test('every account created from human resources starts as a simple user even for a superadministrator', function () {
@@ -381,7 +429,8 @@ test('a human resources administrator can import employees from the Excel templa
 
     $response->assertCreated()
         ->assertJsonPath('data.imported_count', 1)
-        ->assertJsonPath('data.credentials.0.email', '9000001@sigal.local');
+        ->assertJsonPath('data.credentials.0.email', '9000001@sigal.local')
+        ->assertJsonPath('data.credentials.0.temporary_password', '9000001MEVS');
     $this->assertDatabaseHas('employees', ['identity_card' => '9000001', 'first_names' => 'MARÍA ELENA']);
     $this->assertDatabaseHas('employment_contracts', ['office_position_id' => $position->id]);
     $this->assertDatabaseHas('activity_logs', ['event' => 'human_resources.employee_import.completed']);

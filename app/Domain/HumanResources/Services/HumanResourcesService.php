@@ -37,7 +37,10 @@ use Illuminate\Validation\ValidationException;
  */
 class HumanResourcesService
 {
-    public function __construct(private readonly ActivityLogger $activityLogger) {}
+    public function __construct(
+        private readonly ActivityLogger $activityLogger,
+        private readonly EmployeeInitialPasswordGenerator $initialPasswordGenerator,
+    ) {}
 
     /**
      * @param  array<string, UploadedFile|null>  $attachments
@@ -135,7 +138,11 @@ class HumanResourcesService
                         ]);
                     }
 
-                    $temporaryPassword = Str::password(20, symbols: true);
+                    $temporaryPassword = $this->initialPasswordGenerator->generate(
+                        $employee->identity_card,
+                        $employee->first_names,
+                        $employee->last_names,
+                    );
                     $user = User::query()->create([
                         'employee_id' => $employee->id,
                         'name' => $employee->fullName(),

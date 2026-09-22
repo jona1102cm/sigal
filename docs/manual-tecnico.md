@@ -113,6 +113,8 @@ Reglas centrales:
 
 - CI sin duplicados para identificar a una persona que pudo trabajar antes.
 - Nombres y apellidos normalizados en mayúsculas.
+- Toda cuenta nueva de funcionario recibe como contraseña inicial el CI completo —incluido su complemento— seguido por las iniciales ASCII en mayúsculas de todos sus nombres y apellidos; por ejemplo, `8123456MEVS` para María Elena Vargas Suárez.
+- La cuenta nace con `must_change_password = true`: puede iniciar sesión, pero el middleware solo permite cambiar la contraseña o cerrar sesión hasta que registre una clave definitiva.
 - Un solo contrato vigente por funcionario.
 - Cargos filtrados por oficina.
 - Contratos futuros activan acceso al llegar su fecha.
