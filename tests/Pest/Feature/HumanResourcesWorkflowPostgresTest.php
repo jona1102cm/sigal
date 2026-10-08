@@ -449,6 +449,52 @@ test('a human resources administrator can import employees from the Excel templa
     $this->assertDatabaseMissing('employees', ['identity_card' => '9000003']);
 });
 
+test('the employee import accepts full office names and reports row errors in Spanish', function () {
+    $administrator = humanResourcesAdministrator();
+    Sanctum::actingAs($administrator);
+    $office = Office::query()->create([
+        'code' => 'IMP-NOMBRE-LARGO',
+        'name' => 'Sección de Servicios Informáticos y Administración de Sistemas Institucionales',
+    ]);
+    $position = OfficePosition::query()->create([
+        'office_id' => $office->id,
+        'name' => 'Técnico de Sistemas',
+        'membership_role' => 'official',
+        'created_by' => $administrator->id,
+    ]);
+    $headers = [
+        'carnet_de_identidad', 'nombres', 'apellidos', 'celular', 'correo_electronico', 'direccion', 'numero_cua',
+        'fecha_nacimiento', 'libreta_servicio_militar', 'grado_academico', 'profesion', 'tipo_sangre',
+        'contacto_emergencia', 'tipo_contrato', 'monto_contrato', 'fecha_inicio_contrato', 'fecha_fin_contrato', 'codigo_oficina',
+        'cargo',
+    ];
+
+    $this->post('/api/human-resources/employees/import', [
+        'file' => employeeImportWorkbook([
+            $headers,
+            ['9300001', 'Luis', 'Mendoza', '73000001', null, null, null, '1990-03-15', null, 'Licenciatura', 'Ingeniero de Sistemas', null, null, 'TGN', null, today()->toDateString(), null, $office->name, $position->name],
+        ]),
+    ], ['Accept' => 'application/json'])
+        ->assertCreated()
+        ->assertJsonPath('data.imported_count', 1);
+
+    $invalid = $this->post('/api/human-resources/employees/import', [
+        'file' => employeeImportWorkbook([
+            $headers,
+            [null, 'Ana', 'Ríos', null, null, null, null, null, null, 'Licenciatura', 'Abogada', null, null, 'Eventual', null, today()->toDateString(), null, $office->name, $position->name],
+        ]),
+    ], ['Accept' => 'application/json']);
+
+    $invalid->assertUnprocessable()->assertJsonValidationErrors('file');
+    $messages = implode(' ', $invalid->json('errors.file'));
+
+    expect($messages)
+        ->toContain('El campo carnet de identidad es obligatorio.')
+        ->toContain('El campo celular es obligatorio.')
+        ->toContain('El campo fecha de nacimiento es obligatorio.')
+        ->not->toContain('validation.');
+});
+
 test('an import preflights missing positions and creates each classified position only on confirmation', function () {
     $administrator = humanResourcesAdministrator();
     Sanctum::actingAs($administrator);

@@ -105,6 +105,30 @@ class EmployeeBulkImportService
         'rol' => 'role',
     ];
 
+    /** @var array<string, string> */
+    private const ATTRIBUTE_NAMES = [
+        'identity_card' => 'carnet de identidad',
+        'first_names' => 'nombres',
+        'last_names' => 'apellidos',
+        'mobile_phone' => 'celular',
+        'email' => 'correo electrónico',
+        'address' => 'dirección',
+        'cua_number' => 'número CUA',
+        'birth_date' => 'fecha de nacimiento',
+        'military_service_booklet' => 'libreta de servicio militar',
+        'academic_degree' => 'grado académico',
+        'profession' => 'profesión',
+        'blood_type' => 'tipo de sangre',
+        'emergency_contact' => 'contacto de emergencia',
+        'contract_type' => 'tipo de contrato',
+        'contract_amount' => 'monto del contrato',
+        'starts_on' => 'fecha de inicio del contrato',
+        'ends_on' => 'fecha de fin del contrato',
+        'office_code' => 'oficina',
+        'position_name' => 'cargo',
+        'role' => 'rol',
+    ];
+
     public function __construct(
         private readonly EmployeeImportWorkbookReader $workbookReader,
         private readonly HumanResourcesService $humanResourcesService,
@@ -152,7 +176,12 @@ class EmployeeBulkImportService
             }
 
             $data = $this->normalise($record);
-            $validator = Validator::make($data, $this->rules());
+            $validator = Validator::make(
+                $data,
+                $this->rules(),
+                $this->validationMessages(),
+                self::ATTRIBUTE_NAMES,
+            );
 
             if ($validator->fails()) {
                 $errors[] = $this->rowError($rowNumber, implode(' ', $validator->errors()->all()));
@@ -483,9 +512,27 @@ class EmployeeBulkImportService
             'contract_amount' => ['nullable', 'numeric', 'min:0', 'decimal:0,2'],
             'starts_on' => ['required', 'date_format:Y-m-d'],
             'ends_on' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:starts_on'],
-            'office_code' => ['required', 'string', 'max:50'],
+            'office_code' => ['required', 'string', 'max:255'],
             'position_name' => ['required', 'string', 'max:255'],
             'role' => ['nullable', Rule::enum(RoleCode::class)],
+        ];
+    }
+
+    /** @return array<string, string> */
+    private function validationMessages(): array
+    {
+        return [
+            'required' => 'El campo :attribute es obligatorio.',
+            'string' => 'El campo :attribute debe contener texto.',
+            'max.string' => 'El campo :attribute no debe superar :max caracteres.',
+            'email' => 'El campo :attribute debe contener un correo electrónico válido.',
+            'date_format' => 'El campo :attribute debe tener el formato AAAA-MM-DD.',
+            'before' => 'El campo :attribute debe ser una fecha anterior a hoy.',
+            'enum' => 'El valor seleccionado en :attribute no es válido.',
+            'numeric' => 'El campo :attribute debe ser un número.',
+            'min.numeric' => 'El campo :attribute debe ser mayor o igual a :min.',
+            'decimal' => 'El campo :attribute debe tener entre :min y :max decimales.',
+            'after_or_equal' => 'El campo :attribute debe ser una fecha posterior o igual a :date.',
         ];
     }
 
