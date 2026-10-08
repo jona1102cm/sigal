@@ -133,12 +133,17 @@ export const useHumanResourcesStore = defineStore('humanResources', {
             });
         },
 
-        async importEmployees(file) {
+        async importEmployees(file, positionResolutions = []) {
             return this.run('employee-import', async () => {
                 const body = new FormData();
                 body.append('file', file);
+                if (positionResolutions.length) {
+                    body.append('position_resolutions', JSON.stringify(positionResolutions));
+                }
                 const payload = await request('/human-resources/employees/import', { method: 'POST', body });
-                await this.loadEmployees();
+                if (!payload.data.requires_position_resolution) {
+                    await this.loadEmployees();
+                }
                 return payload.data;
             });
         },

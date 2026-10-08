@@ -163,18 +163,38 @@ class HumanResourcesController extends Controller
     public function import(ImportEmployeesRequest $request): JsonResponse
     {
         abort_unless($request->user()->hasPermission(PermissionCode::HumanResourcesImport), 403);
+        $positionResolutions = $request->validated('position_resolutions', []);
+
+        if ($positionResolutions !== []) {
+            abort_unless($request->user()->hasPermission(PermissionCode::HumanResourcesPositions), 403);
+        }
+
         $result = $this->employeeBulkImportService->import(
             $request->file('file'),
             $request->user(),
             RequestAuditContext::fromRequest($request),
+            $positionResolutions,
         );
 
         if (! $result->isSuccessful()) {
             throw ValidationException::withMessages(['file' => $result->errors]);
         }
 
+        if ($result->requiresPositionResolution()) {
+            return response()->json([
+                'data' => [
+                    'requires_position_resolution' => true,
+                    'missing_positions' => $result->missingPositions,
+                    'imported_count' => 0,
+                    'credentials' => [],
+                ],
+            ]);
+        }
+
         return response()->json([
             'data' => [
+                'requires_position_resolution' => false,
+                'missing_positions' => [],
                 'imported_count' => $result->importedCount,
                 'credentials' => $result->credentials,
             ],

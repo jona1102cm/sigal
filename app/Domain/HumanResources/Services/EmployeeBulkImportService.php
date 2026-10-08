@@ -5,13 +5,17 @@ namespace App\Domain\HumanResources\Services;
 use App\Domain\Audit\DTOs\RequestAuditContext;
 use App\Domain\Audit\Services\ActivityLogger;
 use App\Domain\Authorization\Enums\RoleCode;
+use App\Domain\HumanResources\DTOs\CreateOfficePositionData;
 use App\Domain\HumanResources\DTOs\EmployeeBulkImportResult;
 use App\Domain\HumanResources\DTOs\RegisterEmployeeContractData;
+use App\Domain\HumanResources\DTOs\UpdateOfficePositionData;
 use App\Domain\HumanResources\Enums\ContractType;
+use App\Domain\Organization\Enums\OfficeMembershipRole;
 use App\Models\Office;
 use App\Models\OfficePosition;
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -107,8 +111,15 @@ class EmployeeBulkImportService
         private readonly ActivityLogger $activityLogger,
     ) {}
 
-    public function import(UploadedFile $file, User $actor, RequestAuditContext $context): EmployeeBulkImportResult
-    {
+    /**
+     * @param  array<int, array{key: string, membership_role: string}>  $positionResolutions
+     */
+    public function import(
+        UploadedFile $file,
+        User $actor,
+        RequestAuditContext $context,
+        array $positionResolutions = [],
+    ): EmployeeBulkImportResult {
         $rows = $this->workbookReader->read($file);
         [$headerRow, $columns] = $this->columns($rows);
         $missingColumns = array_values(array_diff(self::REQUIRED_COLUMNS, array_keys($columns)));
@@ -122,6 +133,12 @@ class EmployeeBulkImportService
         $records = [];
         $errors = [];
         $seenIdentityCards = [];
+        $missingPositions = [];
+        $officeCatalog = Office::query()
+            ->active()
+            ->supportingStaffing()
+            ->with(['positions' => fn ($query) => $query->withExists('contracts')])
+            ->get();
 
         foreach ($rows as $rowNumber => $row) {
             if ($rowNumber === $headerRow) {
@@ -152,18 +169,43 @@ class EmployeeBulkImportService
             }
 
             $seenIdentityCards[$identityCardKey] = $rowNumber;
-            $position = $this->positionFor($data['office_code'], $data['position_name']);
+            $positionSelection = $this->positionFor(
+                $data['office_code'],
+                $data['position_name'],
+                $officeCatalog,
+            );
 
-            if ($position instanceof ValidationException) {
-                $errors[] = $this->rowError($rowNumber, implode(' ', $position->errors()['office_position'] ?? $position->errors()['office_code'] ?? ['Oficina o cargo inválido.']));
+            if ($positionSelection instanceof ValidationException) {
+                $errors[] = $this->rowError($rowNumber, implode(' ', $positionSelection->errors()['office_position'] ?? $positionSelection->errors()['office_code'] ?? ['Oficina o cargo inválido.']));
 
                 continue;
+            }
+
+            $position = $positionSelection['position'];
+            $missingPositionKey = null;
+
+            if ($position === null) {
+                $missingPositionKey = $this->missingPositionKey(
+                    $positionSelection['office']->id,
+                    $data['position_name'],
+                );
+
+                if (! isset($missingPositions[$missingPositionKey])) {
+                    $missingPositions[$missingPositionKey] = $this->missingPositionDefinition(
+                        $missingPositionKey,
+                        $positionSelection['office'],
+                        $data['position_name'],
+                    );
+                }
+
+                $missingPositions[$missingPositionKey]['rows'][] = $rowNumber;
             }
 
             $records[] = [
                 'row' => $rowNumber,
                 'data' => $data,
-                'office_position_id' => $position->id,
+                'office_position_id' => $position?->id,
+                'missing_position_key' => $missingPositionKey,
             ];
         }
 
@@ -179,23 +221,58 @@ class EmployeeBulkImportService
             return new EmployeeBulkImportResult(0, [], $errors);
         }
 
-        return $this->persist($records, $actor, $context);
+        if ($missingPositions !== [] && $positionResolutions === []) {
+            return new EmployeeBulkImportResult(
+                importedCount: 0,
+                credentials: [],
+                missingPositions: array_values($missingPositions),
+            );
+        }
+
+        [$resolutionMap, $resolutionErrors] = $this->validatedPositionResolutions(
+            $missingPositions,
+            $positionResolutions,
+        );
+
+        if ($resolutionErrors !== []) {
+            $this->recordRejectedImport($actor, $context, count($records), $resolutionErrors);
+
+            return new EmployeeBulkImportResult(0, [], $resolutionErrors);
+        }
+
+        return $this->persist($records, $missingPositions, $resolutionMap, $actor, $context);
     }
 
     /**
-     * @param  array<int, array{row: int, data: array<string, string|null>, office_position_id: int}>  $records
+     * @param  array<int, array{row: int, data: array<string, string|null>, office_position_id: int|null, missing_position_key: string|null}>  $records
+     * @param  array<string, array{key: string, office_id: int, office_code: string, office_name: string, position_name: string, rows: array<int, int>, office_requires_manager: bool, existing_manager_position: array{id: int, name: string, has_contracts: bool}|null}>  $missingPositions
+     * @param  array<string, OfficeMembershipRole>  $resolutionMap
      */
-    private function persist(array $records, User $actor, RequestAuditContext $context): EmployeeBulkImportResult
-    {
+    private function persist(
+        array $records,
+        array $missingPositions,
+        array $resolutionMap,
+        User $actor,
+        RequestAuditContext $context,
+    ): EmployeeBulkImportResult {
         $credentials = [];
         $errors = [];
         DB::beginTransaction();
 
         try {
+            $createdPositionIds = $this->materialiseMissingPositions(
+                $missingPositions,
+                $resolutionMap,
+                $actor,
+                $context,
+            );
+
             foreach ($records as $record) {
                 try {
+                    $officePositionId = $record['office_position_id']
+                        ?? $createdPositionIds[$record['missing_position_key']];
                     $result = $this->humanResourcesService->registerEmployeeAndContract(
-                        $this->registrationData($record['data'], $record['office_position_id']),
+                        $this->registrationData($record['data'], $officePositionId),
                         [],
                         $actor,
                         $context,
@@ -222,6 +299,15 @@ class EmployeeBulkImportService
             }
 
             DB::commit();
+        } catch (ValidationException $exception) {
+            DB::rollBack();
+            $errors = $exception->errors()['office_position']
+                ?? $exception->errors()['membership_role']
+                ?? $exception->errors()['office_id']
+                ?? ['No fue posible crear los cargos indicados.'];
+            $this->recordRejectedImport($actor, $context, count($records), $errors);
+
+            return new EmployeeBulkImportResult(0, [], $errors);
         } catch (\Throwable $exception) {
             DB::rollBack();
 
@@ -403,33 +489,228 @@ class EmployeeBulkImportService
         ];
     }
 
-    private function positionFor(string $officeCode, string $positionName): OfficePosition|ValidationException
+    /**
+     * @param  EloquentCollection<int, Office>  $officeCatalog
+     * @return array{office: Office, position: OfficePosition|null}|ValidationException
+     */
+    private function positionFor(
+        string $officeCode,
+        string $positionName,
+        EloquentCollection $officeCatalog,
+    ): array|ValidationException {
+        $officeKey = $this->comparisonKey($officeCode);
+        $offices = $officeCatalog
+            ->filter(fn (Office $office): bool => in_array($officeKey, [
+                $this->comparisonKey($office->code),
+                $this->comparisonKey($office->name),
+            ], true))
+            ->values();
+
+        if ($offices->count() !== 1) {
+            return ValidationException::withMessages([
+                'office_code' => "No se encontró una oficina activa y única con código o nombre {$officeCode}.",
+            ]);
+        }
+
+        $office = $offices->first();
+        $positionKey = $this->comparisonKey($positionName);
+        $positions = $office->positions
+            ->filter(fn (OfficePosition $position): bool => $this->comparisonKey($position->name) === $positionKey)
+            ->values();
+
+        if ($positions->count() > 1) {
+            return ValidationException::withMessages([
+                'office_position' => "Existe más de un cargo equivalente a {$positionName} en la oficina {$office->code}. Corrija el catálogo antes de importar.",
+            ]);
+        }
+
+        return [
+            'office' => $office,
+            'position' => $positions->first(),
+        ];
+    }
+
+    private function missingPositionKey(int $officeId, string $positionName): string
     {
-        $office = Office::query()
-            ->where(function ($query) use ($officeCode): void {
-                $query->whereRaw('lower(code) = ?', [mb_strtolower($officeCode)])
-                    ->orWhereRaw('lower(name) = ?', [mb_strtolower($officeCode)]);
-            })
-            ->first();
+        return hash('sha256', $officeId."\0".$this->comparisonKey($positionName));
+    }
 
-        if ($office === null) {
-            return ValidationException::withMessages([
-                'office_code' => "No existe la oficina con código o nombre {$officeCode}.",
-            ]);
+    /**
+     * @return array{key: string, office_id: int, office_code: string, office_name: string, position_name: string, rows: array<int, int>, office_requires_manager: bool, existing_manager_position: array{id: int, name: string, has_contracts: bool}|null}
+     */
+    private function missingPositionDefinition(string $key, Office $office, string $positionName): array
+    {
+        $managerPositions = $office->positions
+            ->filter(fn (OfficePosition $position): bool => $position->membership_role === OfficeMembershipRole::Manager)
+            ->values();
+        $managerPosition = $managerPositions->count() === 1 ? $managerPositions->first() : null;
+
+        return [
+            'key' => $key,
+            'office_id' => $office->id,
+            'office_code' => $office->code,
+            'office_name' => $office->name,
+            'position_name' => trim($positionName),
+            'rows' => [],
+            'office_requires_manager' => $office->requires_manager && $managerPositions->count() <= 1,
+            'existing_manager_position' => $managerPosition === null ? null : [
+                'id' => $managerPosition->id,
+                'name' => $managerPosition->name,
+                'has_contracts' => (bool) $managerPosition->contracts_exists,
+            ],
+        ];
+    }
+
+    /**
+     * @param  array<string, array{key: string, office_id: int, office_code: string, office_name: string, position_name: string, rows: array<int, int>, office_requires_manager: bool, existing_manager_position: array{id: int, name: string, has_contracts: bool}|null}>  $missingPositions
+     * @param  array<int, array{key: string, membership_role: string}>  $positionResolutions
+     * @return array{0: array<string, OfficeMembershipRole>, 1: array<int, string>}
+     */
+    private function validatedPositionResolutions(array $missingPositions, array $positionResolutions): array
+    {
+        $resolutionMap = [];
+
+        foreach ($positionResolutions as $resolution) {
+            $resolutionMap[$resolution['key']] = OfficeMembershipRole::from($resolution['membership_role']);
         }
 
-        $positions = OfficePosition::query()
-            ->where('office_id', $office->id)
-            ->whereRaw('lower(name) = ?', [mb_strtolower($positionName)])
-            ->get();
+        $expectedKeys = array_keys($missingPositions);
+        $receivedKeys = array_keys($resolutionMap);
+        sort($expectedKeys);
+        sort($receivedKeys);
 
-        if ($positions->count() !== 1) {
-            return ValidationException::withMessages([
-                'office_position' => "No se encontró un cargo único llamado {$positionName} en la oficina {$office->code}.",
-            ]);
+        if ($expectedKeys !== $receivedKeys) {
+            return [[], [
+                'La clasificación enviada no corresponde a los cargos que contiene el archivo. Vuelva a validar la planilla antes de confirmar.',
+            ]];
         }
 
-        return $positions->first();
+        $errors = [];
+        $managerKeysByOffice = [];
+
+        foreach ($resolutionMap as $key => $membershipRole) {
+            $definition = $missingPositions[$key];
+
+            if ($membershipRole !== OfficeMembershipRole::Manager) {
+                continue;
+            }
+
+            if (! $definition['office_requires_manager']) {
+                $errors[] = "La oficina {$definition['office_name']} no admite crear otro cargo responsable desde esta importación.";
+
+                continue;
+            }
+
+            if (($definition['existing_manager_position']['has_contracts'] ?? false) === true) {
+                $currentName = $definition['existing_manager_position']['name'];
+                $errors[] = "La oficina {$definition['office_name']} ya tiene el cargo responsable {$currentName} con historial. Actualice primero ese cargo desde Recursos Humanos.";
+
+                continue;
+            }
+
+            $managerKeysByOffice[$definition['office_id']][] = $key;
+        }
+
+        foreach ($managerKeysByOffice as $officeId => $keys) {
+            if (count($keys) <= 1) {
+                continue;
+            }
+
+            $officeName = $missingPositions[$keys[0]]['office_name'];
+            $errors[] = "Solo un cargo nuevo puede clasificarse como responsable de {$officeName}.";
+        }
+
+        return [$resolutionMap, $errors];
+    }
+
+    /**
+     * @param  array<string, array{key: string, office_id: int, office_code: string, office_name: string, position_name: string, rows: array<int, int>, office_requires_manager: bool, existing_manager_position: array{id: int, name: string, has_contracts: bool}|null}>  $missingPositions
+     * @param  array<string, OfficeMembershipRole>  $resolutionMap
+     * @return array<string, int>
+     */
+    private function materialiseMissingPositions(
+        array $missingPositions,
+        array $resolutionMap,
+        User $actor,
+        RequestAuditContext $context,
+    ): array {
+        $positionIds = [];
+
+        foreach ($missingPositions as $key => $definition) {
+            $office = Office::query()->lockForUpdate()->findOrFail($definition['office_id']);
+            $membershipRole = $resolutionMap[$key];
+            $positionKey = $this->comparisonKey($definition['position_name']);
+            $equivalentPositions = OfficePosition::query()
+                ->where('office_id', $office->id)
+                ->lockForUpdate()
+                ->get()
+                ->filter(fn (OfficePosition $position): bool => $this->comparisonKey($position->name) === $positionKey)
+                ->values();
+
+            if ($equivalentPositions->count() > 1) {
+                throw ValidationException::withMessages([
+                    'office_position' => "El catálogo de {$office->name} contiene cargos equivalentes a {$definition['position_name']}. Corríjalo antes de importar.",
+                ]);
+            }
+
+            if ($equivalentPositions->count() === 1) {
+                $position = $equivalentPositions->first();
+
+                if ($position->membership_role !== $membershipRole) {
+                    throw ValidationException::withMessages([
+                        'office_position' => "El cargo {$position->name} fue creado con otra función mientras se validaba el archivo. Vuelva a iniciar la importación.",
+                    ]);
+                }
+
+                $positionIds[$key] = $position->id;
+
+                continue;
+            }
+
+            if ($membershipRole === OfficeMembershipRole::Manager) {
+                $managerPositions = OfficePosition::query()
+                    ->where('office_id', $office->id)
+                    ->where('membership_role', OfficeMembershipRole::Manager->value)
+                    ->with('office')
+                    ->lockForUpdate()
+                    ->get();
+
+                if ($managerPositions->count() > 1) {
+                    throw ValidationException::withMessages([
+                        'office_position' => "La oficina {$office->name} tiene más de un cargo responsable. Corrija el catálogo antes de importar.",
+                    ]);
+                }
+
+                if ($managerPositions->count() === 1) {
+                    $managerPosition = $managerPositions->first();
+
+                    if ($managerPosition->contracts()->exists()) {
+                        throw ValidationException::withMessages([
+                            'office_position' => "El cargo responsable {$managerPosition->name} ya tiene historial. Actualícelo primero desde Recursos Humanos.",
+                        ]);
+                    }
+
+                    $position = $this->humanResourcesService->updateOfficePosition(
+                        $managerPosition,
+                        new UpdateOfficePositionData($definition['position_name'], $membershipRole),
+                        $actor,
+                        $context,
+                    );
+                    $positionIds[$key] = $position->id;
+
+                    continue;
+                }
+            }
+
+            $position = $this->humanResourcesService->createOfficePosition(
+                new CreateOfficePositionData($office->id, $definition['position_name'], $membershipRole),
+                $actor,
+                $context,
+            );
+            $positionIds[$key] = $position->id;
+        }
+
+        return $positionIds;
     }
 
     /** @param array<string, string|null> $data */

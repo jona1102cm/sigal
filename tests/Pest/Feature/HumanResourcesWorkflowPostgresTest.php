@@ -449,6 +449,159 @@ test('a human resources administrator can import employees from the Excel templa
     $this->assertDatabaseMissing('employees', ['identity_card' => '9000003']);
 });
 
+test('an import preflights missing positions and creates each classified position only on confirmation', function () {
+    $administrator = humanResourcesAdministrator();
+    Sanctum::actingAs($administrator);
+    $office = Office::query()->create([
+        'code' => 'IMP-NUEVO',
+        'name' => 'Oficina de Cargos Nuevos',
+        'supports_staffing' => true,
+        'requires_manager' => true,
+    ]);
+    $headers = [
+        'carnet_de_identidad', 'nombres', 'apellidos', 'celular', 'correo_electronico', 'direccion', 'numero_cua',
+        'fecha_nacimiento', 'libreta_servicio_militar', 'grado_academico', 'profesion', 'tipo_sangre',
+        'contacto_emergencia', 'tipo_contrato', 'monto_contrato', 'fecha_inicio_contrato', 'fecha_fin_contrato', 'codigo_oficina',
+        'cargo',
+    ];
+    $rows = [
+        $headers,
+        ['9100001', 'Ana', 'Ríos', '71000001', null, null, null, '1991-06-12', null, 'Licenciatura', 'Abogada', null, null, 'Eventual', null, today()->toDateString(), null, $office->name, 'Técnico Administrativo'],
+        ['9100002', 'Julia', 'López', '71000002', null, null, null, '1992-07-13', null, 'Licenciatura', 'Contadora', null, null, 'TGN', null, today()->toDateString(), null, $office->name, 'TECNICO ADMINISTRATIVO'],
+    ];
+
+    $preflight = $this->post('/api/human-resources/employees/import', [
+        'file' => employeeImportWorkbook($rows),
+    ], ['Accept' => 'application/json']);
+
+    $preflight->assertOk()
+        ->assertJsonPath('data.requires_position_resolution', true)
+        ->assertJsonCount(1, 'data.missing_positions')
+        ->assertJsonPath('data.missing_positions.0.office_id', $office->id)
+        ->assertJsonPath('data.missing_positions.0.position_name', 'Técnico Administrativo')
+        ->assertJsonPath('data.missing_positions.0.rows', [2, 3]);
+    expect(Employee::query()->count())->toBe(0)
+        ->and(OfficePosition::query()->where('office_id', $office->id)->count())->toBe(0);
+
+    $positionKey = $preflight->json('data.missing_positions.0.key');
+    $confirmed = $this->post('/api/human-resources/employees/import', [
+        'file' => employeeImportWorkbook($rows),
+        'position_resolutions' => json_encode([[
+            'key' => $positionKey,
+            'membership_role' => 'official',
+        ]], JSON_THROW_ON_ERROR),
+    ], ['Accept' => 'application/json']);
+
+    $confirmed->assertCreated()
+        ->assertJsonPath('data.requires_position_resolution', false)
+        ->assertJsonPath('data.imported_count', 2);
+    $position = OfficePosition::query()->where('office_id', $office->id)->sole();
+    expect($position->name)->toBe('Técnico Administrativo')
+        ->and($position->membership_role->value)->toBe('official')
+        ->and(Employee::query()->count())->toBe(2);
+    $this->assertDatabaseHas('activity_logs', ['event' => 'human_resources.office_position.created']);
+    $this->assertDatabaseHas('activity_logs', ['event' => 'human_resources.employee_import.completed']);
+});
+
+test('a confirmed import rolls back newly classified positions when any employee row fails', function () {
+    $administrator = humanResourcesAdministrator();
+    Sanctum::actingAs($administrator);
+    User::factory()->create(['email' => 'correo.ocupado@sigal.local']);
+    $office = Office::query()->create([
+        'code' => 'IMP-ROLLBACK',
+        'name' => 'Oficina de Importación Atómica',
+        'supports_staffing' => true,
+        'requires_manager' => false,
+    ]);
+    $rows = [
+        [
+            'carnet_de_identidad', 'nombres', 'apellidos', 'celular', 'correo_electronico', 'direccion', 'numero_cua',
+            'fecha_nacimiento', 'libreta_servicio_militar', 'grado_academico', 'profesion', 'tipo_sangre',
+            'contacto_emergencia', 'tipo_contrato', 'monto_contrato', 'fecha_inicio_contrato', 'fecha_fin_contrato', 'codigo_oficina',
+            'cargo',
+        ],
+        ['9150001', 'Pedro', 'Méndez', '71500001', null, null, null, '1990-01-10', null, 'Técnico Superior', 'Técnico', null, null, 'Eventual', null, today()->toDateString(), null, $office->code, 'Auxiliar Administrativo'],
+        ['9150002', 'Rosa', 'Pérez', '71500002', 'correo.ocupado@sigal.local', null, null, '1991-02-11', null, 'Licenciatura', 'Abogada', null, null, 'Eventual', null, today()->toDateString(), null, $office->code, 'Auxiliar Administrativo'],
+    ];
+    $preflight = $this->post('/api/human-resources/employees/import', [
+        'file' => employeeImportWorkbook($rows),
+    ], ['Accept' => 'application/json']);
+    $preflight->assertOk();
+
+    $this->post('/api/human-resources/employees/import', [
+        'file' => employeeImportWorkbook($rows),
+        'position_resolutions' => [[
+            'key' => $preflight->json('data.missing_positions.0.key'),
+            'membership_role' => 'official',
+        ]],
+    ], ['Accept' => 'application/json'])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('file');
+
+    $this->assertDatabaseMissing('office_positions', [
+        'office_id' => $office->id,
+        'name' => 'Auxiliar Administrativo',
+    ]);
+    $this->assertDatabaseMissing('employees', ['identity_card' => '9150001']);
+    $this->assertDatabaseMissing('employees', ['identity_card' => '9150002']);
+});
+
+test('classifying a new manager renames the unused provisional manager position instead of duplicating it', function () {
+    $administrator = humanResourcesAdministrator();
+    Sanctum::actingAs($administrator);
+    $office = Office::query()->create([
+        'code' => 'IMP-JEF',
+        'name' => 'Oficina con Jefatura de Importación',
+        'supports_staffing' => true,
+        'requires_manager' => true,
+    ]);
+    $provisionalPosition = OfficePosition::query()->create([
+        'office_id' => $office->id,
+        'name' => 'Responsable de Oficina con Jefatura de Importación',
+        'membership_role' => 'manager',
+        'created_by' => null,
+    ]);
+    $rows = [
+        [
+            'carnet_de_identidad', 'nombres', 'apellidos', 'celular', 'correo_electronico', 'direccion', 'numero_cua',
+            'fecha_nacimiento', 'libreta_servicio_militar', 'grado_academico', 'profesion', 'tipo_sangre',
+            'contacto_emergencia', 'tipo_contrato', 'monto_contrato', 'fecha_inicio_contrato', 'fecha_fin_contrato', 'codigo_oficina',
+            'cargo',
+        ],
+        ['9200001', 'Mario', 'Suárez', '72000001', null, null, null, '1987-02-18', null, 'Licenciatura', 'Administrador', null, null, 'Eventual', null, today()->toDateString(), null, $office->code, 'Jefe de Unidad Administrativa'],
+    ];
+
+    $preflight = $this->post('/api/human-resources/employees/import', [
+        'file' => employeeImportWorkbook($rows),
+    ], ['Accept' => 'application/json']);
+    $preflight->assertOk()
+        ->assertJsonPath('data.missing_positions.0.existing_manager_position.id', $provisionalPosition->id)
+        ->assertJsonPath('data.missing_positions.0.existing_manager_position.has_contracts', false);
+
+    $this->post('/api/human-resources/employees/import', [
+        'file' => employeeImportWorkbook($rows),
+        'position_resolutions' => [[
+            'key' => $preflight->json('data.missing_positions.0.key'),
+            'membership_role' => 'manager',
+        ]],
+    ], ['Accept' => 'application/json'])
+        ->assertCreated()
+        ->assertJsonPath('data.imported_count', 1);
+
+    expect(OfficePosition::query()->where('office_id', $office->id)->count())->toBe(1);
+    $this->assertDatabaseHas('office_positions', [
+        'id' => $provisionalPosition->id,
+        'name' => 'Jefe de Unidad Administrativa',
+        'membership_role' => 'manager',
+    ]);
+    $this->assertDatabaseHas('office_memberships', [
+        'office_id' => $office->id,
+        'membership_role' => 'manager',
+        'position_title' => 'Jefe de Unidad Administrativa',
+    ]);
+    $this->assertDatabaseHas('activity_logs', ['event' => 'human_resources.office_position.updated']);
+});
+
 test('an authorized administrator can download the import template and its headers are readable', function () {
     $administrator = humanResourcesAdministrator();
     Sanctum::actingAs($administrator);
