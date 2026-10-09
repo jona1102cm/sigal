@@ -409,7 +409,8 @@ test('the preoperational reset remains unavailable when the deployment flag is d
 
     $this->getJson('/api/auth/me')
         ->assertOk()
-        ->assertJsonPath('data.features.operational_reset', false);
+        ->assertJsonPath('data.features.operational_reset', false)
+        ->assertJsonPath('data.features.uat_mode', true);
     $this->getJson('/api/administration/operational-reset/summary')->assertForbidden();
     $this->postJson('/api/administration/operational-reset', [
         'confirmation' => 'REINICIAR SIGAL',

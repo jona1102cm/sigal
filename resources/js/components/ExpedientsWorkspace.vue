@@ -127,7 +127,7 @@ function setInboxScope(scope) {
                     <thead><tr><th>Ruta</th><th>Asunto</th><th>Responsable</th><th>Recepción</th><th>Prioridad</th><th>Estado</th><th><span class="sr-only">Abrir</span></th></tr></thead>
                     <tbody>
                         <tr v-for="expedient in filteredExpedients" :key="expedient.id" :class="[{ 'is-selected': documents.selected?.id === expedient.id }, `inbox-row--priority-${expedient.priority || 'normal'}`]" @click="openExpedient(expedient)">
-                            <td><strong>{{ expedient.route_code }}</strong><small>{{ expedient.expedient_type?.name }}</small></td>
+                            <td><strong>{{ expedient.route_code }} <span v-if="expedient.is_uat" class="uat-badge">UAT</span></strong><small>{{ expedient.expedient_type?.name }}</small></td>
                             <td><span class="table-subject">{{ expedient.subject }}</span><small>{{ expedient.sender_name }}</small></td>
                             <td>{{ expedient.responsible_office?.code || '—' }}</td>
                             <td>{{ formatDate(expedient.received_on) }}</td>

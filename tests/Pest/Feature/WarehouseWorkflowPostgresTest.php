@@ -89,7 +89,8 @@ function createWarehouseItemAndStock(object $test, string $stock = '100'): int
         ]],
     ])->assertCreated()
         ->assertJsonPath('data.currency', 'BOB')
-        ->assertJsonPath('data.total_amount', '350.00');
+        ->assertJsonPath('data.total_amount', '350.00')
+        ->assertJsonPath('data.is_uat', true);
 
     return $item['id'];
 }
@@ -107,7 +108,8 @@ function createAndRouteWarehouseRequest(object $test, int $warehouseItemId): int
             'requested_quantity' => 20,
         ]],
     ])->assertCreated()
-        ->assertJsonPath('data.status', 'draft');
+        ->assertJsonPath('data.status', 'draft')
+        ->assertJsonPath('data.is_uat', true);
     $requestId = $created->json('data.id');
 
     $test->postJson("/api/warehouse/material-requests/{$requestId}/submit")
@@ -151,6 +153,7 @@ test('a material request follows regular channels and closes after a partial del
         'warehouse_item_id' => $itemId,
         'movement_type' => 'exit',
         'quantity_delta' => '-5.0000',
+        'is_uat' => true,
     ]);
 
     Sanctum::actingAs($this->requester);
@@ -163,7 +166,10 @@ test('a material request follows regular channels and closes after a partial del
 
     expect(DB::table('warehouse_deliveries')->where('material_request_id', $requestId)->value('act_hash'))->toHaveLength(64);
     $actDocumentId = DB::table('warehouse_deliveries')->where('material_request_id', $requestId)->value('act_document_id');
-    expect(Document::query()->findOrFail($actDocumentId)->status->value)->toBe('issued');
+    $actDocument = Document::query()->findOrFail($actDocumentId);
+    expect($actDocument->status->value)->toBe('issued')
+        ->and(str_starts_with($actDocument->title, '[UAT]'))->toBeTrue()
+        ->and($actDocument->content)->toContain('DOCUMENTO DE PRUEBA');
     $this->getJson("/api/warehouse/material-requests/{$requestId}/act")
         ->assertOk()
         ->assertJsonPath('data.delivery.confirmation_observations', 'Material recibido conforme.');

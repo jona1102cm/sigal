@@ -81,7 +81,8 @@ test('a documented entry atomically creates the expedient, its source document, 
         'attachments' => [UploadedFile::fake()->create('solicitud.pdf', 10, 'application/pdf')],
     ], ['Accept' => 'application/json'])
         ->assertCreated()
-        ->assertJsonPath('data.route_code', 'SIGAL-000001/2026-2027');
+        ->assertJsonPath('data.route_code', 'SIGAL-000001/2026-2027')
+        ->assertJsonPath('data.is_uat', true);
 
     $expedientId = $response->json('data.id');
     $document = Document::query()->where('expedient_id', $expedientId)->firstOrFail();
@@ -91,6 +92,10 @@ test('a documented entry atomically creates the expedient, its source document, 
         ->and($document->origin_date?->toDateString())->toBe('2026-08-08')
         ->and($document->issuing_office_id)->toBeNull()
         ->and($document->attachments)->toHaveCount(1);
+    $this->assertDatabaseHas('expedients', ['id' => $expedientId, 'is_uat' => true]);
+    $this->getJson("/api/expedients/{$expedientId}/documents")
+        ->assertOk()
+        ->assertJsonPath('data.0.is_uat', true);
 
     $this->patchJson("/api/expedients/{$expedientId}/documents/{$document->id}", [
         'title' => 'Cambio improcedente',

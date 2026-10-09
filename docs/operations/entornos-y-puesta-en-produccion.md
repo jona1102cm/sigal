@@ -47,6 +47,8 @@ Cada instalación declara un nivel independiente de `APP_ENV`:
 SIGAL_DEPLOYMENT_TIER=beta
 SIGAL_ENVIRONMENT_LABEL="BETA / UAT"
 SIGAL_OPERATIONAL_RESET_ENABLED=false
+SIGAL_UAT_MODE=true
+SIGAL_UAT_LABEL="UAT · DATOS DE PRUEBA"
 ```
 
 En producción es obligatorio:
@@ -55,9 +57,18 @@ En producción es obligatorio:
 SIGAL_DEPLOYMENT_TIER=production
 SIGAL_ENVIRONMENT_LABEL="PRODUCCIÓN"
 SIGAL_OPERATIONAL_RESET_ENABLED=false
+SIGAL_UAT_MODE=false
 ```
 
 El backend solo acepta el reinicio cuando la bandera está activa **y** el nivel es `local`, `testing` o `beta`. Por tanto, colocar accidentalmente la bandera en `true` con nivel `production` no habilita la operación. La interfaz tampoco muestra la opción cuando está bloqueada.
+
+## Identificación automática de pruebas UAT
+
+La beta muestra una franja permanente y marca automáticamente los nuevos expedientes, documentos, solicitudes de materiales, ingresos de almacén y movimientos de kardex. `expedients.is_uat`, `warehouse_receipts.is_uat` y `warehouse_stock_movements.is_uat` persisten la procedencia; documentos y solicitudes la heredan de su expediente para evitar duplicación.
+
+Las actas digitales generadas en beta incluyen aviso dentro del contenido y marca de agua al imprimir. Los archivos externos adjuntados por el usuario conservan sus bytes originales y su hash: SIGAL los identifica como parte de un expediente UAT, pero no modifica el archivo binario porque hacerlo rompería su integridad.
+
+`SIGAL_UAT_MODE=true` queda además neutralizado cuando `SIGAL_DEPLOYMENT_TIER=production`. Los datos maestros de funcionarios, contratos, oficinas, cargos y catálogos no son pruebas y no reciben esta marca.
 
 ## Respaldo coordinado
 

@@ -15,6 +15,7 @@ use App\Models\WarehouseItem;
 use App\Models\WarehouseReceipt;
 use App\Models\WarehouseReceiptAttachment;
 use App\Models\WarehouseStockMovement;
+use App\Services\DeploymentContext;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -27,6 +28,7 @@ class WarehouseInventoryService
     public function __construct(
         private readonly ActivityLogger $activityLogger,
         private readonly WarehouseNumberService $numberService,
+        private readonly DeploymentContext $deploymentContext,
     ) {}
 
     /** @param list<UploadedFile> $attachments */
@@ -52,6 +54,7 @@ class WarehouseInventoryService
                     'registered_by' => $actor->id,
                     'warehouse_responsible_user_id' => $responsible->id,
                     'posted_at' => now(),
+                    'is_uat' => $this->deploymentContext->isUat(),
                 ]);
 
                 foreach ($data->lines as $lineData) {
@@ -82,6 +85,7 @@ class WarehouseInventoryService
                         'warehouse_receipt_line_id' => $line->id,
                         'performed_by' => $actor->id,
                         'occurred_at' => now(),
+                        'is_uat' => $this->deploymentContext->isUat(),
                     ]);
                 }
 
@@ -96,6 +100,7 @@ class WarehouseInventoryService
                     'reference_number' => $receipt->reference_number,
                     'total_amount' => $total,
                     'line_count' => count($data->lines),
+                    'is_uat' => $receipt->is_uat,
                 ]);
 
                 return $receipt->load($this->receiptRelations());
@@ -109,7 +114,7 @@ class WarehouseInventoryService
         }
     }
 
-    public function recordDeliveryExit(WarehouseDeliveryLine $line, WarehouseItem $item, string $quantity, User $actor): WarehouseStockMovement
+    public function recordDeliveryExit(WarehouseDeliveryLine $line, WarehouseItem $item, string $quantity, User $actor, bool $isUat): WarehouseStockMovement
     {
         $lockedItem = WarehouseItem::query()->lockForUpdate()->findOrFail($item->id);
         $newBalance = bcsub((string) $lockedItem->stock_on_hand, $quantity, 4);
@@ -129,6 +134,7 @@ class WarehouseInventoryService
             'warehouse_delivery_line_id' => $line->id,
             'performed_by' => $actor->id,
             'occurred_at' => now(),
+            'is_uat' => $isUat,
         ]);
     }
 
@@ -151,6 +157,7 @@ class WarehouseInventoryService
                 'reason' => $reason,
                 'performed_by' => $actor->id,
                 'occurred_at' => now(),
+                'is_uat' => $this->deploymentContext->isUat(),
             ]);
             $this->activityLogger->record('warehouse.stock.adjusted', $actor, $target, $context, oldValues: ['stock_on_hand' => $oldBalance], newValues: ['stock_on_hand' => $newBalance, 'reason' => $reason]);
 

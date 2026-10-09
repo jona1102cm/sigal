@@ -45,6 +45,7 @@ use Illuminate\Support\Collection;
     'closed_by',
     'voided_at',
     'voided_by',
+    'is_uat',
 ])]
 /** Proceso administrativo central; agrupa documentos y registra su estado agregado. */
 class Expedient extends Model
@@ -61,6 +62,7 @@ class Expedient extends Model
             'archived_at' => 'immutable_datetime',
             'closed_at' => 'immutable_datetime',
             'voided_at' => 'immutable_datetime',
+            'is_uat' => 'boolean',
         ];
     }
 

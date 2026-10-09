@@ -7,7 +7,13 @@
         <title>SIGAL · Asamblea Legislativa Departamental del Beni</title>
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
-    <body>
+    <body @class(['is-uat-environment' => config('sigal.uat.enabled')])>
+        @if (config('sigal.uat.enabled'))
+            <div class="uat-global-banner" role="status">
+                <strong>{{ config('sigal.uat.label') }}</strong>
+                <span>Entorno beta: toda operación generada aquí es exclusivamente de prueba.</span>
+            </div>
+        @endif
         <div id="legislatures-app">
             <div id="sigal-app"></div>
         </div>

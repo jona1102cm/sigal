@@ -24,6 +24,8 @@ class UserResource extends JsonResource
             ],
             'features' => [
                 'operational_reset' => config('sigal.operational_reset.enabled') === true,
+                'uat_mode' => config('sigal.uat.enabled') === true,
+                'uat_label' => config('sigal.uat.label'),
             ],
             'permissions' => $this->permissionCodes(),
             'roles' => $this->whenLoaded('currentRoleAssignments', fn () => $this->currentRoleAssignments

@@ -18,6 +18,20 @@
 
 body { min-width: 320px; margin: 0; background: #f4f7f5; }
 
+/* UAT permanece visible en todas las pantallas y no depende de que el usuario rotule el registro. */
+.uat-global-banner { position: fixed; z-index: 1000; top: 0; right: 0; left: 0; display: flex; min-height: 2.45rem; align-items: center; justify-content: center; gap: .75rem; border-bottom: 1px solid #9a6814; background: repeating-linear-gradient(135deg, #5d3907 0, #5d3907 12px, #70470b 12px, #70470b 24px); padding: .45rem 1rem; color: #fff8df; font-size: .73rem; letter-spacing: .02em; text-align: center; box-shadow: 0 2px 8px rgba(63, 37, 5, .28); }
+.uat-global-banner strong { border-radius: 999px; background: #ffe07a; padding: .2rem .55rem; color: #543103; font-size: .64rem; letter-spacing: .08em; text-transform: uppercase; }
+body.is-uat-environment { padding-top: 2.45rem; }
+body.is-uat-environment .login-layout { min-height: calc(100vh - 2.45rem); }
+body.is-uat-environment .app-sidebar { top: 2.45rem; height: calc(100vh - 2.45rem); }
+body.is-uat-environment .app-shell .detail-pane { top: 2.45rem; height: calc(100dvh - 2.45rem); min-height: calc(100vh - 2.45rem); }
+.uat-badge { display: inline-flex; align-items: center; border: 1px solid #d79622; border-radius: 999px; background: #fff1c8; padding: .12rem .36rem; color: #734808; font-size: .54rem; font-weight: 850; letter-spacing: .08em; line-height: 1.1; vertical-align: middle; }
+.act-sheet.is-uat { position: relative; overflow: hidden; }
+.act-sheet.is-uat > :not(.uat-watermark) { position: relative; z-index: 1; }
+.uat-watermark { position: absolute; z-index: 0; top: 50%; left: 50%; display: grid; place-items: center; color: rgba(162, 97, 11, .13); text-align: center; transform: translate(-50%, -50%) rotate(-24deg); pointer-events: none; user-select: none; }
+.uat-watermark strong { font-family: Georgia, serif; font-size: clamp(6rem, 16vw, 13rem); font-weight: 800; letter-spacing: .08em; line-height: .82; }
+.uat-watermark span { margin-top: .6rem; font-size: clamp(1rem, 2.8vw, 2rem); font-weight: 850; letter-spacing: .16em; white-space: nowrap; }
+
 button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .58; }
@@ -270,8 +284,11 @@ input[type='search']::-webkit-search-cancel-button { display: none; -webkit-appe
 @media (max-width: 760px) { .warehouse-toolbar { align-items: stretch; flex-direction: column; }.warehouse-toolbar .search-field { min-width: 0; }.segmented-control { overflow-x: auto; }.warehouse-request-row { grid-template-columns: 1fr; }.warehouse-request-row__status { grid-row: auto; }.request-line, .receipt-line, .delivery-line, .request-status-hero, .act-sheet dl { grid-template-columns: 1fr; }.not-attended-box { grid-template-columns: 1fr; }.warehouse-form { padding: 1rem; } }
 
 @media print {
+    body.is-uat-environment { padding-top: 0; }
+    .uat-global-banner { display: none !important; }
     body * { visibility: hidden !important; }
     .act-sheet.is-printable, .act-sheet.is-printable * { visibility: visible !important; }
     .act-sheet.is-printable { position: absolute; inset: 0; width: 100%; border: 0; box-shadow: none; background: white; padding: 1.5cm; }
     .act-sheet.is-printable .no-print { display: none !important; }
+    .act-sheet.is-printable .uat-watermark { position: fixed; color: rgba(162, 97, 11, .14); print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 }

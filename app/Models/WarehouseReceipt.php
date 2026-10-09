@@ -7,12 +7,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['receipt_number', 'supplier_name', 'supplier_tax_id', 'reference_type', 'reference_number', 'reference_date', 'received_on', 'currency', 'total_amount', 'observations', 'registered_by', 'warehouse_responsible_user_id', 'posted_at'])]
+#[Fillable(['receipt_number', 'supplier_name', 'supplier_tax_id', 'reference_type', 'reference_number', 'reference_date', 'received_on', 'currency', 'total_amount', 'observations', 'registered_by', 'warehouse_responsible_user_id', 'posted_at', 'is_uat'])]
 class WarehouseReceipt extends Model
 {
     protected function casts(): array
     {
-        return ['reference_date' => 'immutable_date', 'received_on' => 'immutable_date', 'total_amount' => 'decimal:2', 'posted_at' => 'immutable_datetime'];
+        return ['reference_date' => 'immutable_date', 'received_on' => 'immutable_date', 'total_amount' => 'decimal:2', 'posted_at' => 'immutable_datetime', 'is_uat' => 'boolean'];
     }
 
     public function lines(): HasMany

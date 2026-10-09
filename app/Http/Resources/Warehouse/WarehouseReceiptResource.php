@@ -13,6 +13,7 @@ class WarehouseReceiptResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'is_uat' => $this->is_uat,
             'receipt_number' => $this->receipt_number,
             'supplier_name' => $this->supplier_name,
             'supplier_tax_id' => $this->supplier_tax_id,

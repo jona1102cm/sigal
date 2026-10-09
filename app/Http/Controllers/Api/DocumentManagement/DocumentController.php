@@ -37,6 +37,7 @@ class DocumentController extends Controller
         'createdBy',
         'issuedBy',
         'attachments',
+        'expedient:id,is_uat',
         'movements.senderOffice',
         'movements.recipients.recipientOffice',
     ];

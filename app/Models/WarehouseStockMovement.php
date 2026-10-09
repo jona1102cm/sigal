@@ -7,12 +7,12 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['warehouse_item_id', 'movement_type', 'quantity_delta', 'balance_after', 'unit_cost', 'warehouse_receipt_line_id', 'warehouse_delivery_line_id', 'reason', 'performed_by', 'occurred_at'])]
+#[Fillable(['warehouse_item_id', 'movement_type', 'quantity_delta', 'balance_after', 'unit_cost', 'warehouse_receipt_line_id', 'warehouse_delivery_line_id', 'reason', 'performed_by', 'occurred_at', 'is_uat'])]
 class WarehouseStockMovement extends Model
 {
     protected function casts(): array
     {
-        return ['movement_type' => StockMovementType::class, 'quantity_delta' => 'decimal:4', 'balance_after' => 'decimal:4', 'unit_cost' => 'decimal:4', 'occurred_at' => 'immutable_datetime'];
+        return ['movement_type' => StockMovementType::class, 'quantity_delta' => 'decimal:4', 'balance_after' => 'decimal:4', 'unit_cost' => 'decimal:4', 'occurred_at' => 'immutable_datetime', 'is_uat' => 'boolean'];
     }
 
     public function item(): BelongsTo

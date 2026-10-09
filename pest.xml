@@ -17,6 +17,7 @@
         <env name="APP_ENV" value="testing"/>
         <env name="SIGAL_DEPLOYMENT_TIER" value="testing"/>
         <env name="SIGAL_OPERATIONAL_RESET_ENABLED" value="true"/>
+        <env name="SIGAL_UAT_MODE" value="true"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>
         <env name="BROADCAST_CONNECTION" value="null"/>

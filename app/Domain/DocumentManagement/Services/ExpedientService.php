@@ -15,6 +15,7 @@ use App\Models\ExpedientType;
 use App\Models\Legislature;
 use App\Models\Office;
 use App\Models\User;
+use App\Services\DeploymentContext;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -29,6 +30,7 @@ class ExpedientService
     public function __construct(
         private readonly ActivityLogger $activityLogger,
         private readonly NumberSequenceService $numberSequenceService,
+        private readonly DeploymentContext $deploymentContext,
     ) {}
 
     public function create(CreateExpedientData $data, User $actor, RequestAuditContext $context): Expedient
@@ -81,6 +83,7 @@ class ExpedientService
                 'observations' => $data->observations,
                 'status' => ExpedientStatus::Registered,
                 'created_by' => $actor->id,
+                'is_uat' => $this->deploymentContext->isUat(),
             ]);
 
             if ($confidentialityLevel->requires_explicit_access) {
@@ -153,6 +156,7 @@ class ExpedientService
             'origin' => $expedient->origin->value,
             'responsible_office_id' => $expedient->responsible_office_id,
             'status' => $expedient->status->value,
+            'is_uat' => $expedient->is_uat,
         ];
     }
 }

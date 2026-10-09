@@ -14,6 +14,7 @@ class DocumentResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'is_uat' => $this->relationLoaded('expedient') ? $this->expedient->is_uat : null,
             'is_initial' => $this->is_initial,
             'title' => $this->title,
             'content' => app(RichTextSanitizer::class)->sanitize($this->content),

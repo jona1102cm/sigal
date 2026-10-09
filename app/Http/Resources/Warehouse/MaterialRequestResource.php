@@ -18,6 +18,7 @@ class MaterialRequestResource extends JsonResource
 
         return [
             'id' => $this->id,
+            'is_uat' => $this->relationLoaded('expedient') ? $this->expedient->is_uat : null,
             'status' => $this->status->value,
             'status_label' => $this->status->label(),
             'current_stage' => $this->current_stage->value,

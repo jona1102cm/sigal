@@ -22,6 +22,7 @@ class ExpedientResource extends JsonResource
             'id' => $this->id,
             'route_number' => $this->route_number,
             'route_code' => $this->route_code,
+            'is_uat' => $this->is_uat,
             'subject' => $this->subject,
             'summary' => $this->summary,
             'origin' => $this->origin->value,

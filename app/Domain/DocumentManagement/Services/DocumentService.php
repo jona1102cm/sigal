@@ -534,7 +534,7 @@ class DocumentService
     /** @return list<string> */
     private function relations(): array
     {
-        return ['documentType', 'issuingOffice', 'numberSeries', 'createdBy', 'issuedBy', 'attachments'];
+        return ['documentType', 'issuingOffice', 'numberSeries', 'createdBy', 'issuedBy', 'attachments', 'expedient:id,is_uat'];
     }
 
     /** @return array<string, mixed> */

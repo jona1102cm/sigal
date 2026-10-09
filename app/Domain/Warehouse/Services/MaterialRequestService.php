@@ -287,7 +287,13 @@ class MaterialRequestService
                     'delivered_quantity' => $lineData->deliveredQuantity,
                     'over_delivery_reason' => $lineData->overDeliveryReason,
                 ]);
-                $this->inventoryService->recordDeliveryExit($line, $item, $lineData->deliveredQuantity, $actor);
+                $this->inventoryService->recordDeliveryExit(
+                    $line,
+                    $item,
+                    $lineData->deliveredQuantity,
+                    $actor,
+                    (bool) $target->expedient->is_uat,
+                );
                 $deliveredByRequestItem[$requestItem->id] = $lineData->deliveredQuantity;
             }
 
@@ -408,7 +414,10 @@ class MaterialRequestService
             e($line->delivered_quantity),
             e($line->item->measurementUnit->symbol),
         ))->implode('');
-        $content = '<p>En fecha '.e($confirmedAt->format('d/m/Y H:i')).', se confirma la recepción de los materiales correspondientes a '.e($request->expedient->route_code).'.</p>'
+        $uatNotice = $request->expedient->is_uat
+            ? '<p><strong>UAT · DOCUMENTO DE PRUEBA SIN VALIDEZ INSTITUCIONAL.</strong></p>'
+            : '';
+        $content = $uatNotice.'<p>En fecha '.e($confirmedAt->format('d/m/Y H:i')).', se confirma la recepción de los materiales correspondientes a '.e($request->expedient->route_code).'.</p>'
             .'<p><strong>Responsable de Almacenes:</strong> '.e($delivery->warehouseResponsible->name).'<br>'
             .'<strong>Entregado por:</strong> '.e($delivery->deliveredBy->name).'<br>'
             .'<strong>Recibido por:</strong> '.e($actor->name).'</p>'
@@ -418,7 +427,7 @@ class MaterialRequestService
             documentTypeId: $documentType->id,
             issuingOfficeId: $request->requesting_office_id,
             content: new DocumentContentData(
-                title: "ACTA DE RECEPCIÓN DE MATERIALES {$delivery->delivery_number}",
+                title: ($request->expedient->is_uat ? '[UAT] ' : '')."ACTA DE RECEPCIÓN DE MATERIALES {$delivery->delivery_number}",
                 content: $content,
                 officeReference: null,
             ),

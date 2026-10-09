@@ -66,6 +66,7 @@ class WarehouseReceiptController extends Controller
                 'balance_after' => $movement->balance_after,
                 'unit_cost' => $movement->unit_cost,
                 'reason' => $movement->reason,
+                'is_uat' => $movement->is_uat,
                 'occurred_at' => $movement->occurred_at->toIso8601String(),
                 'performed_by' => ['id' => $movement->performedBy->id, 'name' => $movement->performedBy->name],
             ]),

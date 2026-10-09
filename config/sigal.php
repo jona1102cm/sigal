@@ -2,6 +2,7 @@
 
 $deploymentTier = env('SIGAL_DEPLOYMENT_TIER', env('APP_ENV', 'production'));
 $resetRequested = (bool) env('SIGAL_OPERATIONAL_RESET_ENABLED', false);
+$uatRequested = (bool) env('SIGAL_UAT_MODE', $deploymentTier === 'beta');
 
 return [
     /*
@@ -31,5 +32,20 @@ return [
     'operational_reset' => [
         'requested' => $resetRequested,
         'enabled' => $resetRequested && in_array($deploymentTier, ['local', 'testing', 'beta'], true),
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Marcado UAT
+    |--------------------------------------------------------------------------
+    |
+    | Persiste el origen de prueba en las transacciones creadas en beta. La
+    | protección adicional impide activar UAT accidentalmente en producción.
+    |
+    */
+    'uat' => [
+        'requested' => $uatRequested,
+        'enabled' => $uatRequested && $deploymentTier !== 'production',
+        'label' => env('SIGAL_UAT_LABEL', 'UAT · DATOS DE PRUEBA'),
     ],
 ];
