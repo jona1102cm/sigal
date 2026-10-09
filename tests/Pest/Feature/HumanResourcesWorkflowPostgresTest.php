@@ -402,6 +402,20 @@ test('a superadministrator can perform the preoperational reset while preserving
     $this->assertDatabaseHas('activity_logs', ['event' => 'administration.operational_reset.performed']);
 });
 
+test('the preoperational reset remains unavailable when the deployment flag is disabled', function () {
+    $administrator = humanResourcesAdministrator();
+    Sanctum::actingAs($administrator);
+    config()->set('sigal.operational_reset.enabled', false);
+
+    $this->getJson('/api/auth/me')
+        ->assertOk()
+        ->assertJsonPath('data.features.operational_reset', false);
+    $this->getJson('/api/administration/operational-reset/summary')->assertForbidden();
+    $this->postJson('/api/administration/operational-reset', [
+        'confirmation' => 'REINICIAR SIGAL',
+    ])->assertForbidden();
+});
+
 test('a human resources administrator can import employees from the Excel template format atomically', function () {
     $administrator = humanResourcesAdministrator();
     Sanctum::actingAs($administrator);

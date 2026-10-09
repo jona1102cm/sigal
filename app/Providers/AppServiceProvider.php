@@ -49,6 +49,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(WarehouseCategory::class, WarehouseCategoryPolicy::class);
         Gate::policy(WarehouseItem::class, WarehouseItemPolicy::class);
         Gate::policy(WarehouseReceipt::class, WarehouseReceiptPolicy::class);
-        Gate::define('perform-operational-reset', fn (User $user): bool => $user->hasPermission(PermissionCode::OperationalResetManage));
+        Gate::define('perform-operational-reset', fn (User $user): bool => config('sigal.operational_reset.enabled') === true
+            && $user->hasPermission(PermissionCode::OperationalResetManage));
     }
 }

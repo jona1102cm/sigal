@@ -18,6 +18,13 @@ class UserResource extends JsonResource
             'status' => $this->status->value,
             'status_label' => $this->status->label(),
             'must_change_password' => $this->must_change_password,
+            'environment' => [
+                'tier' => config('sigal.deployment.tier'),
+                'label' => config('sigal.deployment.label'),
+            ],
+            'features' => [
+                'operational_reset' => config('sigal.operational_reset.enabled') === true,
+            ],
             'permissions' => $this->permissionCodes(),
             'roles' => $this->whenLoaded('currentRoleAssignments', fn () => $this->currentRoleAssignments
                 ->map(fn ($assignment) => [

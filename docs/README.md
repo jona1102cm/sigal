@@ -11,6 +11,7 @@ Este directorio es la fuente técnica de referencia del sistema. Describe el com
 5. [Base de datos](reference/base-de-datos.md): tablas, relaciones e invariantes.
 6. [Pruebas automatizadas](reference/pruebas.md): suites, base aislada y cobertura funcional.
 7. [Operación y soporte](operations/soporte.md): instalación, despliegue, tareas y diagnóstico.
+8. [Separación de beta y producción](operations/entornos-y-puesta-en-produccion.md): línea base, respaldos y corte oficial.
 
 ## Arquitectura por dominio
 

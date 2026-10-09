@@ -7,6 +7,7 @@ use App\Domain\Audit\DTOs\RequestAuditContext;
 use App\Domain\Audit\Services\ActivityLogger;
 use App\Domain\Authorization\Enums\RoleCode;
 use App\Models\User;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Throwable;
@@ -24,6 +25,8 @@ class OperationalResetService
     /** @return array<string, int> */
     public function summary(): array
     {
+        $this->ensureAvailable();
+
         return [
             'expedients' => DB::table('expedients')->count(),
             'documents' => DB::table('documents')->count(),
@@ -42,6 +45,8 @@ class OperationalResetService
 
     public function perform(User $actor, RequestAuditContext $context): OperationalResetResult
     {
+        $this->ensureAvailable();
+
         $files = $this->filesToDelete();
         $removed = DB::transaction(function () use ($actor, $context): array {
             $summary = $this->summary();
@@ -142,6 +147,14 @@ class OperationalResetService
         }
 
         return new OperationalResetResult($removed, $filesDeleted, count($files) - $filesDeleted);
+    }
+
+    /** Impide invocar el servicio por consola u otra ruta cuando el entorno no lo autoriza. */
+    private function ensureAvailable(): void
+    {
+        if (config('sigal.operational_reset.enabled') !== true) {
+            throw new AuthorizationException('El reinicio preoperativo no está habilitado en este entorno.');
+        }
     }
 
     /** @return list<object{disk: string, path: string}> */

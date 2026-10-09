@@ -1,0 +1,10 @@
+[Unit]
+Description=Respaldo coordinado de SIGAL Beta
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+Environment=SIGAL_PROJECT_DIR=/opt/sigal
+Environment=SIGAL_BACKUP_MAINTENANCE=1
+ExecStart=/opt/sigal/ops/backup.sh

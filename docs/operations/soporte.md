@@ -4,7 +4,10 @@
 
 - `local`: desarrollo, depuración habilitada, Vite y base local.
 - `testing`: base `sigal_test`, nunca la operativa.
-- `production`/beta: Docker Compose, depuración deshabilitada, Nginx/TLS y volúmenes persistentes.
+- `production` con `SIGAL_DEPLOYMENT_TIER=beta`: aceptación de usuarios, depuración deshabilitada, Nginx/TLS y volúmenes beta.
+- `production` con `SIGAL_DEPLOYMENT_TIER=production`: operación oficial, volúmenes y secretos completamente separados.
+
+La estrategia completa de corte, línea base y separación está en [entornos-y-puesta-en-produccion.md](entornos-y-puesta-en-produccion.md).
 
 No copiar `.env` entre entornos sin revisar claves, URL, base, logs, cookies y almacenamiento. `APP_KEY` debe conservarse mientras existan datos cifrados.
 
@@ -144,6 +147,13 @@ Descargar una plantilla nueva de la misma instancia, no renombrar encabezados, u
 
 Respaldar coordinadamente PostgreSQL y `application_storage`. Probar restauraciones periódicamente en un ambiente aislado. Un respaldo no probado es solo una expectativa.
 
+Los procedimientos versionados son:
+
+```bash
+sudo /opt/sigal/ops/backup.sh
+sudo /opt/sigal/ops/verify-restore.sh /opt/sigal/backups/AAAAMMDD-HHMMSS
+```
+
 Antes de restaurar:
 
 1. detener escrituras;
@@ -156,7 +166,9 @@ Antes de restaurar:
 
 ## Reinicio operativo beta
 
-La opción administrativa muestra un resumen antes de ejecutar. Está destinada a limpiar pruebas conservando configuración básica, cargos y oficinas. No usar como mecanismo de retención ni mantenimiento periódico. En un entorno con datos válidos requiere autorización institucional y respaldo previo.
+La opción solo existe cuando `SIGAL_OPERATIONAL_RESET_ENABLED=true` y `SIGAL_DEPLOYMENT_TIER` es `local`, `testing` o `beta`. En producción permanece bloqueada aunque alguien configure accidentalmente la bandera. No usar como mecanismo de retención ni mantenimiento periódico.
+
+Con la línea base institucional y los funcionarios reales ya cargados, beta debe mantener esta bandera en `false`. La separación de una producción limpia sustituye los reinicios parciales por módulo.
 
 ## Checklist de entrega de una versión
 
