@@ -5,6 +5,7 @@ namespace App\Domain\Organization\Services;
 use App\Domain\Audit\DTOs\RequestAuditContext;
 use App\Domain\Audit\Services\ActivityLogger;
 use App\Domain\Authorization\Enums\UserStatus;
+use App\Domain\DocumentManagement\Enums\OfficeCapabilityCode;
 use App\Domain\Organization\DTOs\AssignOfficeMembershipData;
 use App\Domain\Organization\DTOs\CreateOfficeData;
 use App\Domain\Organization\DTOs\UpdateOfficeData;
@@ -29,7 +30,11 @@ class OfficeService
     {
         return DB::transaction(function () use ($data, $actor, $context): Office {
             $this->assertValidParent($data->parentId, null);
-            $this->assertValidStaffingProfile($data->supportsStaffing, $data->requiresManager);
+            $this->assertValidStaffingProfile(
+                $data->supportsStaffing,
+                $data->requiresManager,
+                $data->receivesExternalDocuments,
+            );
 
             $office = Office::query()->create([
                 'parent_id' => $data->parentId,
@@ -39,6 +44,7 @@ class OfficeService
                 'supports_staffing' => $data->supportsStaffing,
                 'requires_manager' => $data->requiresManager,
             ]);
+            $this->syncExternalReceptionCapability($office, $data->receivesExternalDocuments);
 
             $this->activityLogger->record(
                 event: 'organization.office.created',
@@ -57,7 +63,15 @@ class OfficeService
         return DB::transaction(function () use ($office, $data, $actor, $context): Office {
             $target = Office::query()->lockForUpdate()->findOrFail($office->id);
             $this->assertValidParent($data->parentId, $target->id);
-            $this->assertValidStaffingProfile($data->supportsStaffing, $data->requiresManager);
+            $receivesExternalDocuments = $data->receivesExternalDocuments
+                ?? $target->capabilities()
+                    ->where('capability', OfficeCapabilityCode::ReceiveExternalDocuments->value)
+                    ->exists();
+            $this->assertValidStaffingProfile(
+                $data->supportsStaffing,
+                $data->requiresManager,
+                $receivesExternalDocuments,
+            );
 
             if (! $data->supportsStaffing && $target->currentMemberships()->exists()) {
                 throw ValidationException::withMessages([
@@ -73,6 +87,9 @@ class OfficeService
                 'supports_staffing' => $data->supportsStaffing,
                 'requires_manager' => $data->requiresManager,
             ]);
+            if ($data->receivesExternalDocuments !== null) {
+                $this->syncExternalReceptionCapability($target, $data->receivesExternalDocuments);
+            }
 
             $this->activityLogger->record(
                 event: 'organization.office.updated',
@@ -276,13 +293,37 @@ class OfficeService
         }
     }
 
-    private function assertValidStaffingProfile(bool $supportsStaffing, bool $requiresManager): void
-    {
+    private function assertValidStaffingProfile(
+        bool $supportsStaffing,
+        bool $requiresManager,
+        bool $receivesExternalDocuments,
+    ): void {
         if (! $supportsStaffing && $requiresManager) {
             throw ValidationException::withMessages([
                 'requires_manager' => 'Un nodo sin personal no puede requerir responsable de oficina.',
             ]);
         }
+
+        if (! $supportsStaffing && $receivesExternalDocuments) {
+            throw ValidationException::withMessages([
+                'receives_external_documents' => 'Un nodo sin funcionarios no puede registrar documentación externa.',
+            ]);
+        }
+    }
+
+    private function syncExternalReceptionCapability(Office $office, bool $enabled): void
+    {
+        if ($enabled) {
+            $office->capabilities()->firstOrCreate([
+                'capability' => OfficeCapabilityCode::ReceiveExternalDocuments,
+            ]);
+        } else {
+            $office->capabilities()
+                ->where('capability', OfficeCapabilityCode::ReceiveExternalDocuments->value)
+                ->delete();
+        }
+
+        $office->unsetRelation('capabilities');
     }
 
     /** @return array<string, mixed> */
@@ -296,6 +337,9 @@ class OfficeService
             'status' => $office->status->value,
             'supports_staffing' => $office->supports_staffing,
             'requires_manager' => $office->requires_manager,
+            'receives_external_documents' => $office->capabilities()
+                ->where('capability', OfficeCapabilityCode::ReceiveExternalDocuments->value)
+                ->exists(),
         ];
     }
 

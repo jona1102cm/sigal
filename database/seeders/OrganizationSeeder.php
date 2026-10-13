@@ -28,7 +28,7 @@ class OrganizationSeeder extends Seeder
             ['code' => 'RRHH', 'name' => 'Unidad de Recursos Humanos', 'parent_code' => 'OMAF', 'supports_staffing' => true, 'requires_manager' => true],
             ['code' => 'SIS', 'name' => 'Sección de Servicios Informáticos', 'parent_code' => 'OMAF', 'supports_staffing' => true, 'requires_manager' => true],
             ['code' => 'COMUN', 'name' => 'Sección de Comunicación', 'parent_code' => 'OMAF', 'supports_staffing' => true, 'requires_manager' => true],
-            ['code' => 'ARCH', 'name' => 'Sección de Registro y Archivo Institucional', 'parent_code' => 'SGEN', 'supports_staffing' => true, 'requires_manager' => true],
+            ['code' => 'URA', 'name' => 'Unidad de Registros y Archivos', 'parent_code' => 'SGEN', 'supports_staffing' => true, 'requires_manager' => true],
             ['code' => 'CONT', 'name' => 'Sección Contabilidad y Cierre', 'parent_code' => 'UAF', 'supports_staffing' => true, 'requires_manager' => true],
             ['code' => 'PPLAN', 'name' => 'Sección Presupuesto y Planificación', 'parent_code' => 'UAF', 'supports_staffing' => true, 'requires_manager' => true],
             ['code' => 'TES', 'name' => 'Sección Tesorería', 'parent_code' => 'UAF', 'supports_staffing' => true, 'requires_manager' => true],

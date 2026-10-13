@@ -2,6 +2,7 @@
 
 use App\Domain\Authorization\Enums\RoleCode;
 use App\Domain\DocumentManagement\Enums\ExpedientStatus;
+use App\Domain\DocumentManagement\Enums\OfficeCapabilityCode;
 use App\Domain\Organization\Enums\OfficeMembershipRole;
 use App\Models\ConfidentialityLevel;
 use App\Models\Expedient;
@@ -9,6 +10,7 @@ use App\Models\ExpedientType;
 use App\Models\Legislature;
 use App\Models\ObserverOfficeScope;
 use App\Models\Office;
+use App\Models\OfficeCapability;
 use App\Models\OfficeMembership;
 use App\Models\Role;
 use App\Models\User;
@@ -59,6 +61,10 @@ test('a simple user registers routes for their office and confidential expedient
     ]);
 
     $office = Office::query()->where('code', 'RRHH')->firstOrFail();
+    OfficeCapability::query()->firstOrCreate([
+        'office_id' => $office->id,
+        'capability' => OfficeCapabilityCode::ReceiveExternalDocuments,
+    ]);
     ObserverOfficeScope::query()->create([
         'user_role_assignment_id' => $observerAssignment->id,
         'office_id' => $office->id,

@@ -27,6 +27,7 @@ class UpdateOfficeRequest extends FormRequest
             'name' => ['required', 'string', 'max:255'],
             'supports_staffing' => ['required', 'boolean'],
             'requires_manager' => ['required', 'boolean'],
+            'receives_external_documents' => ['sometimes', 'boolean'],
         ];
     }
 }

@@ -25,6 +25,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
     'content',
     'created_by',
     'issued_by',
+    'acting_legislature_member_id',
+    'acting_body_membership_id',
+    'legislative_sender_snapshot',
     'issued_at',
 ])]
 /** Pieza documental perteneciente obligatoriamente a un expediente y una oficina emisora. */
@@ -37,6 +40,7 @@ class Document extends Model
             'is_initial' => 'boolean',
             'origin_date' => 'immutable_date',
             'issued_at' => 'immutable_datetime',
+            'legislative_sender_snapshot' => 'array',
         ];
     }
 
@@ -86,6 +90,16 @@ class Document extends Model
     public function issuedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'issued_by');
+    }
+
+    public function actingLegislatureMember(): BelongsTo
+    {
+        return $this->belongsTo(LegislatureMember::class, 'acting_legislature_member_id');
+    }
+
+    public function actingBodyMembership(): BelongsTo
+    {
+        return $this->belongsTo(LegislativeBodyMembership::class, 'acting_body_membership_id');
     }
 
     /** @return HasMany<DocumentRevision, $this> */

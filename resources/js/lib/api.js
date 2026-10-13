@@ -1,5 +1,6 @@
 const API_PREFIX = '/api';
 const TOKEN_KEY = 'sigal.access-token';
+const ACTING_CONTEXT_KEY = 'sigal.acting-context';
 
 /** Error uniforme que conserva el código HTTP y los errores por campo enviados por Laravel. */
 export class ApiError extends Error {
@@ -20,7 +21,21 @@ export function setToken(token) {
         window.sessionStorage.setItem(TOKEN_KEY, token);
     } else {
         window.sessionStorage.removeItem(TOKEN_KEY);
+        window.sessionStorage.removeItem(ACTING_CONTEXT_KEY);
     }
+}
+
+export function getActingContext() {
+    try {
+        return JSON.parse(window.sessionStorage.getItem(ACTING_CONTEXT_KEY) || 'null');
+    } catch {
+        return null;
+    }
+}
+
+export function setActingContext(context) {
+    if (context) window.sessionStorage.setItem(ACTING_CONTEXT_KEY, JSON.stringify(context));
+    else window.sessionStorage.removeItem(ACTING_CONTEXT_KEY);
 }
 
 /** Construye cabeceras comunes sin fijar Content-Type en FormData: el navegador agrega su boundary. */
@@ -34,6 +49,13 @@ function buildHeaders(headers, body) {
 
     if (token) {
         merged.set('Authorization', `Bearer ${token}`);
+    }
+
+    const actingContext = getActingContext();
+    if (actingContext?.body_membership_id) {
+        merged.set('X-SIGAL-Acting-Body-Membership', String(actingContext.body_membership_id));
+    } else if (actingContext?.legislature_member_id) {
+        merged.set('X-SIGAL-Acting-Legislature-Member', String(actingContext.legislature_member_id));
     }
 
     if (body && !(body instanceof FormData) && !merged.has('Content-Type')) {

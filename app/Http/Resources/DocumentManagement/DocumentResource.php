@@ -38,6 +38,7 @@ class DocumentResource extends JsonResource
             ]),
             'supersedes_document_id' => $this->supersedes_document_id,
             'issued_at' => $this->issued_at?->toIso8601String(),
+            'legislative_sender' => $this->legislative_sender_snapshot,
             'attachments' => DocumentAttachmentResource::collection($this->whenLoaded('attachments')),
             'movement_routes' => $this->whenLoaded('movements', fn () => $this->movements
                 ->sortByDesc('id')

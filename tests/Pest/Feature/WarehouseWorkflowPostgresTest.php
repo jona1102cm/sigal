@@ -3,7 +3,10 @@
 use App\Domain\Authorization\Enums\RoleCode;
 use App\Domain\Organization\Enums\OfficeMembershipRole;
 use App\Models\Document;
+use App\Models\LegislativeBody;
+use App\Models\LegislativeBodyMembership;
 use App\Models\Legislature;
+use App\Models\LegislatureMember;
 use App\Models\Office;
 use App\Models\OfficeMembership;
 use App\Models\Role;
@@ -27,6 +30,9 @@ function warehouseUser(string $officeCode, OfficeMembershipRole $membershipRole 
         'office_id' => Office::query()->where('code', $officeCode)->value('id'),
         'user_id' => $user->id,
         'membership_role' => $membershipRole,
+        'position_title' => $membershipRole === OfficeMembershipRole::Manager
+            ? "Responsable de {$officeCode}"
+            : "Funcionario de {$officeCode}",
         'effective_from' => now(),
         'assigned_by' => $user->id,
     ]);
@@ -132,6 +138,48 @@ function createAndRouteWarehouseRequest(object $test, int $warehouseItemId): int
     return $requestId;
 }
 
+/** @return array{advisor: User, alternate_receiver: User, president: User, office: Office, presidency: LegislativeBodyMembership} */
+function warehouseCommissionTeam(): array
+{
+    $office = Office::query()->where('code', 'COM7')->firstOrFail();
+    $advisor = warehouseUser('COM7', OfficeMembershipRole::Official);
+    $alternateReceiver = warehouseUser('COM7', OfficeMembershipRole::Official);
+    $president = User::factory()->create();
+    $role = Role::query()->where('code', RoleCode::SimpleUser->value)->firstOrFail();
+    UserRoleAssignment::query()->create([
+        'user_id' => $president->id,
+        'role_id' => $role->id,
+        'assigned_by' => $president->id,
+        'effective_from' => now()->subMinute(),
+    ]);
+    $legislature = Legislature::query()->active()->firstOrFail();
+    $member = LegislatureMember::query()->create([
+        'legislature_id' => $legislature->id,
+        'user_id' => $president->id,
+        'effective_from' => now()->subMinute(),
+        'assigned_by' => $president->id,
+    ]);
+    $body = LegislativeBody::query()->create([
+        'legislature_id' => $legislature->id,
+        'office_id' => $office->id,
+        'body_type' => 'permanent_commission',
+        'name' => $office->name,
+        'effective_from' => now()->subMinute(),
+        'created_by' => $president->id,
+    ]);
+    $presidency = LegislativeBodyMembership::query()->create([
+        'legislative_body_id' => $body->id,
+        'legislature_member_id' => $member->id,
+        'role' => 'president',
+        'effective_from' => now()->subMinute(),
+        'assigned_by' => $president->id,
+    ]);
+
+    return compact('advisor', 'president', 'office', 'presidency') + [
+        'alternate_receiver' => $alternateReceiver,
+    ];
+}
+
 test('a material request follows regular channels and closes after a partial delivery is confirmed', function () {
     $itemId = createWarehouseItemAndStock($this);
     $requestId = createAndRouteWarehouseRequest($this, $itemId);
@@ -162,14 +210,22 @@ test('a material request follows regular channels and closes after a partial del
     ])->assertOk()
         ->assertJsonPath('data.status', 'closed')
         ->assertJsonPath('data.fulfillment_outcome', 'partial')
-        ->assertJsonPath('data.delivery.confirmed_by.id', $this->requester->id);
+        ->assertJsonPath('data.delivery.confirmed_by.id', $this->requester->id)
+        ->assertJsonPath('data.delivery.act_parties.receiver.name', $this->requester->name)
+        ->assertJsonPath('data.delivery.act_parties.receiver.position_title', 'Funcionario de SIS')
+        ->assertJsonPath('data.delivery.act_parties.requesting_office.name', 'Sección de Servicios Informáticos')
+        ->assertJsonPath('data.delivery.act_parties.warehouse_responsible.name', $this->warehouseManager->name)
+        ->assertJsonPath('data.delivery.act_parties.warehouse_responsible.position_title', 'Responsable de AFALM');
 
     expect(DB::table('warehouse_deliveries')->where('material_request_id', $requestId)->value('act_hash'))->toHaveLength(64);
     $actDocumentId = DB::table('warehouse_deliveries')->where('material_request_id', $requestId)->value('act_document_id');
     $actDocument = Document::query()->findOrFail($actDocumentId);
     expect($actDocument->status->value)->toBe('issued')
         ->and(str_starts_with($actDocument->title, '[UAT]'))->toBeTrue()
-        ->and($actDocument->content)->toContain('DOCUMENTO DE PRUEBA');
+        ->and($actDocument->content)->toContain('DOCUMENTO DE PRUEBA')
+        ->and($actDocument->content)->toContain('ACTA DE ENTREGA-RECEPCIÓN')
+        ->and($actDocument->content)->toContain('RECIBÍ CONFORME')
+        ->and($actDocument->content)->toContain('ENTREGUÉ CONFORME');
     $this->getJson("/api/warehouse/material-requests/{$requestId}/act")
         ->assertOk()
         ->assertJsonPath('data.delivery.confirmation_observations', 'Material recibido conforme.');
@@ -255,6 +311,129 @@ test('OMAF can observe and the corrected request returns to the observing stage'
         ->assertJsonPath('data.current_revision_number', 2)
         ->assertJsonPath('data.current_stage', 'omaf')
         ->assertJsonPath('data.status', 'pending');
+});
+
+test('commission staff prepares a material request and its president approves the complete auditable workflow', function () {
+    $itemId = createWarehouseItemAndStock($this);
+    $team = warehouseCommissionTeam();
+
+    Sanctum::actingAs($team['advisor']);
+    $requestId = $this->postJson('/api/warehouse/material-requests', [
+        'requesting_office_id' => $team['office']->id,
+        'office_reference' => 'COM7-MAT-001/2026',
+        'justification' => 'Material requerido para el trabajo de la Comisión de Obras Públicas.',
+        'items' => [[
+            'warehouse_item_id' => $itemId,
+            'measurement_unit_id' => $this->unitId,
+            'requested_quantity' => 10,
+        ]],
+    ])->assertCreated()
+        ->assertJsonPath('data.status', 'draft')
+        ->assertJsonPath('data.legislative_approval_required', true)
+        ->assertJsonPath('data.actions.submit', false)
+        ->json('data.id');
+    $this->postJson("/api/warehouse/material-requests/{$requestId}/submit")->assertForbidden();
+
+    Sanctum::actingAs($team['president']);
+    $this->withHeader('X-SIGAL-Acting-Body-Membership', (string) $team['presidency']->id);
+    $this->getJson('/api/warehouse/bootstrap')
+        ->assertOk()
+        ->assertJsonPath('requesting_offices.0.id', $team['office']->id)
+        ->assertJsonPath('requesting_offices.0.can_present', true);
+    $this->getJson('/api/warehouse/material-requests?scope=active')
+        ->assertOk()
+        ->assertJsonPath('data.0.id', $requestId)
+        ->assertJsonPath('data.0.actions.submit', true);
+    $expedientId = DB::table('material_requests')->where('id', $requestId)->value('expedient_id');
+    $this->postJson("/api/expedients/{$expedientId}/movements", [
+        'sender_office_id' => $team['office']->id,
+        'primary_office_ids' => [Office::query()->where('code', 'OMAF')->value('id')],
+        'copy_office_ids' => [],
+        'requires_response' => true,
+    ])->assertForbidden();
+    $this->postJson("/api/warehouse/material-requests/{$requestId}/submit")
+        ->assertOk()
+        ->assertJsonPath('data.current_stage', 'omaf')
+        ->assertJsonPath('data.document.status', 'issued');
+    $requestDocumentId = DB::table('material_requests')->where('id', $requestId)->value('request_document_id');
+    $this->assertDatabaseHas('documents', [
+        'id' => $requestDocumentId,
+        'acting_body_membership_id' => $team['presidency']->id,
+    ]);
+
+    $this->withoutHeader('X-SIGAL-Acting-Body-Membership');
+    Sanctum::actingAs($this->omaf);
+    $this->postJson("/api/warehouse/material-requests/{$requestId}/decisions", [
+        'action' => 'observe',
+        'notes' => 'Precise el destino de los materiales solicitados.',
+    ])->assertOk()->assertJsonPath('data.status', 'observed');
+
+    Sanctum::actingAs($team['advisor']);
+    $this->postJson("/api/warehouse/material-requests/{$requestId}/revisions", [
+        'requesting_office_id' => $team['office']->id,
+        'office_reference' => 'COM7-MAT-001/2026',
+        'justification' => 'Los materiales serán utilizados por la directiva y el asesor de la comisión.',
+        'items' => [[
+            'warehouse_item_id' => $itemId,
+            'measurement_unit_id' => $this->unitId,
+            'requested_quantity' => 10,
+        ]],
+    ])->assertOk()
+        ->assertJsonPath('data.status', 'observed')
+        ->assertJsonPath('data.current_revision_number', 2)
+        ->assertJsonPath('data.document.status', 'draft')
+        ->assertJsonPath('data.actions.submit', false);
+
+    Sanctum::actingAs($team['president']);
+    $this->withHeader('X-SIGAL-Acting-Body-Membership', (string) $team['presidency']->id)
+        ->postJson("/api/warehouse/material-requests/{$requestId}/submit")
+        ->assertOk()
+        ->assertJsonPath('data.status', 'pending')
+        ->assertJsonPath('data.current_stage', 'omaf')
+        ->assertJsonPath('data.document.status', 'issued');
+
+    $this->withoutHeader('X-SIGAL-Acting-Body-Membership');
+    Sanctum::actingAs($this->omaf);
+    $this->postJson("/api/warehouse/material-requests/{$requestId}/decisions", ['action' => 'approve'])
+        ->assertOk()->assertJsonPath('data.current_stage', 'goods_services');
+    Sanctum::actingAs($this->goodsServices);
+    $this->postJson("/api/warehouse/material-requests/{$requestId}/decisions", ['action' => 'approve'])
+        ->assertOk()->assertJsonPath('data.current_stage', 'warehouse');
+
+    $requestItemId = DB::table('material_request_items')
+        ->where('material_request_id', $requestId)
+        ->where('revision_number', 2)
+        ->value('id');
+    Sanctum::actingAs($this->warehouseManager);
+    $this->postJson("/api/warehouse/material-requests/{$requestId}/delivery", [
+        'lines' => [[
+            'material_request_item_id' => $requestItemId,
+            'warehouse_item_id' => $itemId,
+            'delivered_quantity' => 8,
+        ]],
+    ])->assertOk()->assertJsonPath('data.status', 'pending_receipt');
+
+    Sanctum::actingAs($team['president']);
+    $this->withHeader('X-SIGAL-Acting-Body-Membership', (string) $team['presidency']->id)
+        ->postJson("/api/warehouse/material-requests/{$requestId}/receiver-authorization", [
+            'receiver_user_id' => $team['alternate_receiver']->id,
+            'reason' => 'El asesor designado recibirá físicamente la dotación.',
+        ])->assertOk()
+        ->assertJsonPath('data.delivery.authorized_receiver.id', $team['alternate_receiver']->id);
+
+    $this->withoutHeader('X-SIGAL-Acting-Body-Membership');
+    Sanctum::actingAs($team['alternate_receiver']);
+    $this->postJson("/api/warehouse/material-requests/{$requestId}/confirm-receipt", [
+        'observations' => 'Material recibido por la comisión.',
+    ])->assertOk()
+        ->assertJsonPath('data.status', 'closed')
+        ->assertJsonPath('data.delivery.confirmed_by.id', $team['alternate_receiver']->id);
+
+    $actDocumentId = DB::table('warehouse_deliveries')->where('material_request_id', $requestId)->value('act_document_id');
+    $act = Document::query()->with('issuingOffice')->findOrFail($actDocumentId);
+    expect($act->issuingOffice->code)->toBe('AFALM')
+        ->and($act->status->value)->toBe('issued')
+        ->and($act->acting_body_membership_id)->toBeNull();
 });
 
 test('a need outside the catalog is accepted and invalid selections return Spanish messages', function () {

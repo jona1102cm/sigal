@@ -33,6 +33,28 @@ class Legislature extends Model
         return $this->boardAssignments()->whereNull('ended_at');
     }
 
+    public function members(): HasMany
+    {
+        return $this->hasMany(LegislatureMember::class);
+    }
+
+    public function currentMembers(): HasMany
+    {
+        return $this->members()
+            ->where('effective_from', '<=', now())
+            ->where(fn ($query) => $query->whereNull('effective_to')->orWhere('effective_to', '>', now()));
+    }
+
+    public function legislativeBodies(): HasMany
+    {
+        return $this->hasMany(LegislativeBody::class);
+    }
+
+    public function plenaryReferrals(): HasMany
+    {
+        return $this->hasMany(PlenaryReferral::class);
+    }
+
     /** @param Builder<Legislature> $query */
     public function scopeActive(Builder $query): void
     {

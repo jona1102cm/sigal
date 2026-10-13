@@ -23,6 +23,22 @@ class WarehouseDeliveryResource extends JsonResource
             'receiver_authorized_at' => $this->receiver_authorized_at?->toIso8601String(),
             'act_verification_code' => $this->act_verification_code,
             'act_hash' => $this->act_hash,
+            'act_parties' => [
+                'receiver' => [
+                    'name' => $this->receiver_name_snapshot ?? $this->confirmedBy?->name,
+                    'position_title' => $this->receiver_position_snapshot,
+                ],
+                'requesting_office' => [
+                    'name' => $this->requesting_office_name_snapshot,
+                ],
+                'warehouse_responsible' => [
+                    'name' => $this->warehouse_responsible_name_snapshot ?? $this->warehouseResponsible?->name,
+                    'position_title' => $this->warehouse_responsible_position_snapshot,
+                ],
+                'delivered_by' => [
+                    'name' => $this->delivered_by_name_snapshot ?? $this->deliveredBy?->name,
+                ],
+            ],
             'act_document' => $this->whenLoaded('actDocument', fn () => $this->actDocument ? [
                 'id' => $this->actDocument->id,
                 'official_number' => $this->actDocument->numberSeries?->formatted_number,

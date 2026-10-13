@@ -47,7 +47,13 @@ async function performReset() {
         </div>
 
         <div class="operational-reset__summary">
-            <div><span>Expedientes</span><strong>{{ documents.operationalResetSummary?.expedients ?? '—' }}</strong></div><div><span>Documentos</span><strong>{{ documents.operationalResetSummary?.documents ?? '—' }}</strong></div><div><span>Funcionarios</span><strong>{{ documents.operationalResetSummary?.employees ?? '—' }}</strong></div><div><span>Contratos</span><strong>{{ documents.operationalResetSummary?.employment_contracts ?? '—' }}</strong></div>
+            <div><span>Expedientes</span><strong>{{ documents.operationalResetSummary?.expedients ?? '—' }}</strong></div>
+            <div><span>Documentos</span><strong>{{ documents.operationalResetSummary?.documents ?? '—' }}</strong></div>
+            <div><span>Asambleístas</span><strong>{{ documents.operationalResetSummary?.legislature_members ?? '—' }}</strong></div>
+            <div><span>Órganos legislativos</span><strong>{{ documents.operationalResetSummary?.legislative_bodies ?? '—' }}</strong></div>
+            <div><span>En espera del Pleno</span><strong>{{ documents.operationalResetSummary?.plenary_referrals ?? '—' }}</strong></div>
+            <div><span>Funcionarios</span><strong>{{ documents.operationalResetSummary?.employees ?? '—' }}</strong></div>
+            <div><span>Contratos</span><strong>{{ documents.operationalResetSummary?.employment_contracts ?? '—' }}</strong></div>
         </div>
 
         <div class="operational-reset__action">

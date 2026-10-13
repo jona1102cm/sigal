@@ -12,8 +12,9 @@ class OfficeCapabilitySeeder extends Seeder
 {
     public function run(): void
     {
-        $archive = Office::query()->where('code', 'ARCH')->firstOrFail();
+        $archive = Office::query()->where('code', 'URA')->firstOrFail();
         $omaf = Office::query()->where('code', 'OMAF')->firstOrFail();
+        $generalSecretariat = Office::query()->where('code', 'SGEN')->firstOrFail();
 
         foreach ([
             OfficeCapabilityCode::ArchiveExpedients,
@@ -30,5 +31,12 @@ class OfficeCapabilitySeeder extends Seeder
             'office_id' => $omaf->id,
             'capability' => OfficeCapabilityCode::ApproveReopenings->value,
         ]);
+
+        foreach ([$archive, $generalSecretariat] as $externalReceptionOffice) {
+            OfficeCapability::query()->firstOrCreate([
+                'office_id' => $externalReceptionOffice->id,
+                'capability' => OfficeCapabilityCode::ReceiveExternalDocuments->value,
+            ]);
+        }
     }
 }

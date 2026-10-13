@@ -377,10 +377,37 @@ test('a superadministrator can perform the preoperational reset while preserving
     ], ['Accept' => 'application/json'])->assertCreated();
     $employee = Employee::query()->firstOrFail();
     $attachmentPath = $employee->attachments()->firstOrFail()->path;
-    DB::table('legislatures')->insert([
+    $legislatureId = DB::table('legislatures')->insertGetId([
         'start_year' => 2026,
         'end_year' => 2027,
         'status' => 'inactive',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    $memberId = DB::table('legislature_members')->insertGetId([
+        'legislature_id' => $legislatureId,
+        'user_id' => $administrator->id,
+        'effective_from' => now()->subDay(),
+        'assigned_by' => $administrator->id,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    $bodyId = DB::table('legislative_bodies')->insertGetId([
+        'legislature_id' => $legislatureId,
+        'office_id' => $office->id,
+        'body_type' => 'caucus',
+        'name' => 'Bancada de prueba',
+        'effective_from' => now()->subDay(),
+        'created_by' => $administrator->id,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    DB::table('legislative_body_memberships')->insert([
+        'legislative_body_id' => $bodyId,
+        'legislature_member_id' => $memberId,
+        'role' => 'chief',
+        'effective_from' => now()->subDay(),
+        'assigned_by' => $administrator->id,
         'created_at' => now(),
         'updated_at' => now(),
     ]);
@@ -392,10 +419,16 @@ test('a superadministrator can perform the preoperational reset while preserving
     $this->postJson('/api/administration/operational-reset', ['confirmation' => 'REINICIAR SIGAL'])
         ->assertOk()
         ->assertJsonPath('data.employees', 1)
-        ->assertJsonPath('data.legislatures', 1);
+        ->assertJsonPath('data.legislatures', 1)
+        ->assertJsonPath('data.legislature_members', 1)
+        ->assertJsonPath('data.legislative_bodies', 1)
+        ->assertJsonPath('data.legislative_body_memberships', 1);
 
     expect(Employee::query()->count())->toBe(0)
-        ->and(EmploymentContract::query()->count())->toBe(0);
+        ->and(EmploymentContract::query()->count())->toBe(0)
+        ->and(DB::table('legislature_members')->count())->toBe(0)
+        ->and(DB::table('legislative_bodies')->count())->toBe(0)
+        ->and(DB::table('legislative_body_memberships')->count())->toBe(0);
     $this->assertDatabaseHas('offices', ['id' => $office->id]);
     $this->assertDatabaseHas('office_positions', ['id' => $position->id]);
     Storage::disk('local')->assertMissing($attachmentPath);

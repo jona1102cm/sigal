@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\Warehouse;
 
 use App\Domain\Audit\DTOs\RequestAuditContext;
+use App\Domain\Warehouse\Services\MaterialRequestService;
 use App\Domain\Warehouse\Services\WarehouseCatalogService;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Warehouse\StoreWarehouseCategoryRequest;
@@ -21,7 +22,10 @@ use Illuminate\Http\Request;
 
 class WarehouseCatalogController extends Controller
 {
-    public function __construct(private readonly WarehouseCatalogService $catalogService) {}
+    public function __construct(
+        private readonly WarehouseCatalogService $catalogService,
+        private readonly MaterialRequestService $materialRequestService,
+    ) {}
 
     public function bootstrap(Request $request): JsonResponse
     {
@@ -31,6 +35,10 @@ class WarehouseCatalogController extends Controller
             'measurement_units' => MeasurementUnitResource::collection(MeasurementUnit::query()->orderBy('name')->get()),
             'categories' => WarehouseCategoryResource::collection(WarehouseCategory::query()->with('parent')->orderBy('name')->get()),
             'items' => WarehouseItemResource::collection(WarehouseItem::query()->with(['category', 'measurementUnit'])->orderBy('name')->get()),
+            'requesting_offices' => $this->materialRequestService->availableRequestingOffices(
+                $request->user(),
+                RequestAuditContext::fromRequest($request),
+            ),
             'permissions' => [
                 'manage_catalog' => $request->user()->can('create', WarehouseItem::class),
                 'operate' => $request->user()->can('create', WarehouseReceipt::class),

@@ -8,6 +8,7 @@ enum OfficeCapabilityCode: string
     case CloseExpedients = 'close_expedients';
     case VoidExpedients = 'void_expedients';
     case ApproveReopenings = 'approve_reopenings';
+    case ReceiveExternalDocuments = 'receive_external_documents';
 
     public function label(): string
     {
@@ -16,6 +17,7 @@ enum OfficeCapabilityCode: string
             self::CloseExpedients => 'Cerrar expedientes',
             self::VoidExpedients => 'Anular expedientes',
             self::ApproveReopenings => 'Aprobar reaperturas',
+            self::ReceiveExternalDocuments => 'Registrar documentación externa',
         };
     }
 }

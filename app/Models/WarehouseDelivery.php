@@ -7,7 +7,29 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['material_request_id', 'act_document_id', 'delivery_number', 'delivered_by', 'warehouse_responsible_user_id', 'authorized_receiver_user_id', 'receiver_authorized_by', 'receiver_authorization_reason', 'receiver_authorized_at', 'confirmed_by', 'confirmation_observations', 'act_verification_code', 'act_hash', 'delivered_at', 'confirmed_at'])]
+#[Fillable([
+    'material_request_id',
+    'act_document_id',
+    'delivery_number',
+    'delivered_by',
+    'warehouse_responsible_user_id',
+    'authorized_receiver_user_id',
+    'receiver_authorized_by',
+    'receiver_authorization_reason',
+    'receiver_authorized_at',
+    'confirmed_by',
+    'confirmation_observations',
+    'receiver_name_snapshot',
+    'receiver_position_snapshot',
+    'requesting_office_name_snapshot',
+    'warehouse_responsible_name_snapshot',
+    'warehouse_responsible_position_snapshot',
+    'delivered_by_name_snapshot',
+    'act_verification_code',
+    'act_hash',
+    'delivered_at',
+    'confirmed_at',
+])]
 class WarehouseDelivery extends Model
 {
     protected function casts(): array

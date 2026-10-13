@@ -34,7 +34,7 @@ class OfficeController extends Controller
         $this->authorize('viewAny', Office::class);
 
         $offices = Office::query()
-            ->with(['parent', 'currentMemberships.user'])
+            ->with(['parent', 'currentMemberships.user', 'capabilities'])
             ->orderBy('code')
             ->paginate();
 
@@ -53,7 +53,7 @@ class OfficeController extends Controller
         $this->authorize('viewDirectory', Office::class);
 
         return OfficeDirectoryResource::collection(
-            Office::query()->active()->supportingStaffing()->orderBy('code')->paginate(),
+            Office::query()->active()->supportingStaffing()->with('capabilities')->orderBy('code')->paginate(),
         );
     }
 
@@ -65,7 +65,7 @@ class OfficeController extends Controller
             RequestAuditContext::fromRequest($request),
         );
 
-        return (new OfficeResource($office->load(['parent', 'currentMemberships.user'])))
+        return (new OfficeResource($office->load(['parent', 'currentMemberships.user', 'capabilities'])))
             ->response()
             ->setStatusCode(201);
     }
@@ -74,7 +74,7 @@ class OfficeController extends Controller
     {
         $this->authorize('view', $office);
 
-        $office->load(['parent', 'currentMemberships.user']);
+        $office->load(['parent', 'currentMemberships.user', 'capabilities']);
 
         $this->activityLogger->record(
             event: 'organization.office.viewed',
@@ -95,7 +95,7 @@ class OfficeController extends Controller
             RequestAuditContext::fromRequest($request),
         );
 
-        return new OfficeResource($office->load(['parent', 'currentMemberships.user']));
+        return new OfficeResource($office->load(['parent', 'currentMemberships.user', 'capabilities']));
     }
 
     public function activate(Request $request, Office $office): OfficeResource
@@ -108,7 +108,7 @@ class OfficeController extends Controller
             RequestAuditContext::fromRequest($request),
         );
 
-        return new OfficeResource($office->load(['parent', 'currentMemberships.user']));
+        return new OfficeResource($office->load(['parent', 'currentMemberships.user', 'capabilities']));
     }
 
     public function inactivate(Request $request, Office $office): OfficeResource
@@ -121,7 +121,7 @@ class OfficeController extends Controller
             RequestAuditContext::fromRequest($request),
         );
 
-        return new OfficeResource($office->load(['parent', 'currentMemberships.user']));
+        return new OfficeResource($office->load(['parent', 'currentMemberships.user', 'capabilities']));
     }
 
     public function assignMembership(AssignOfficeMembershipRequest $request, Office $office): JsonResponse

@@ -20,6 +20,11 @@ class ExpedientMovementRecipientResource extends JsonResource
             ]),
             'recipient_kind' => $this->recipient_kind->value,
             'recipient_kind_label' => $this->recipient_kind->label(),
+            'attention_legislature_member' => $this->whenLoaded('attentionLegislatureMember', fn () => $this->attentionLegislatureMember === null ? null : [
+                'id' => $this->attentionLegislatureMember->id,
+                'user_id' => $this->attentionLegislatureMember->user_id,
+                'name' => $this->attentionLegislatureMember->user->name,
+            ]),
             'status' => $this->status->value,
             'status_label' => $this->status->label(),
             'action_note' => $this->action_note,

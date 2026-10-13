@@ -16,6 +16,8 @@ use App\Http\Requests\Warehouse\ReviseMaterialRequest;
 use App\Http\Requests\Warehouse\StoreMaterialRequest;
 use App\Http\Requests\Warehouse\UpdateMaterialRequest;
 use App\Http\Resources\Warehouse\MaterialRequestResource;
+use App\Models\LegislativeBody;
+use App\Models\LegislativeBodyMembership;
 use App\Models\MaterialRequest;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
@@ -32,11 +34,32 @@ class MaterialRequestController extends Controller
         $this->authorize('viewAny', MaterialRequest::class);
         $user = $request->user();
         $query = MaterialRequest::query()->with($this->relations());
+        $legislatureMemberIds = $user->currentLegislatureMemberships()->pluck('id');
+        $politicalOfficeIds = LegislativeBodyMembership::query()
+            ->whereIn('legislature_member_id', $legislatureMemberIds)
+            ->where('legislative_body_memberships.effective_from', '<=', now())
+            ->where(fn ($membership) => $membership->whereNull('legislative_body_memberships.effective_to')->orWhere('legislative_body_memberships.effective_to', '>', now()))
+            ->whereHas('body.legislature', fn ($legislature) => $legislature->active())
+            ->join('legislative_bodies', 'legislative_bodies.id', '=', 'legislative_body_memberships.legislative_body_id')
+            ->pluck('legislative_bodies.office_id');
+        $staffOfficeIds = $user->currentOfficeMemberships()->pluck('office_id');
+        $commissionStaffOfficeIds = LegislativeBody::query()
+            ->whereIn('office_id', $staffOfficeIds)
+            ->whereIn('body_type', ['permanent_commission', 'temporary_mixed_commission'])
+            ->where('effective_from', '<=', now())
+            ->where(fn ($body) => $body->whereNull('effective_to')->orWhere('effective_to', '>', now()))
+            ->whereHas('legislature', fn ($legislature) => $legislature->active())
+            ->pluck('office_id');
+        $legislativeRequestOfficeIds = $politicalOfficeIds->merge($commissionStaffOfficeIds)->unique();
 
         if (! $user->isSuperAdministrator()) {
-            $query->where(function (Builder $visible) use ($user): void {
+            $query->where(function (Builder $visible) use ($user, $legislativeRequestOfficeIds): void {
                 $visible->where('requesting_user_id', $user->id)
                     ->orWhereHas('expedient', fn (Builder $expedient) => $expedient->visibleTo($user));
+
+                if ($legislativeRequestOfficeIds->isNotEmpty()) {
+                    $visible->orWhereIn('requesting_office_id', $legislativeRequestOfficeIds);
+                }
             });
         }
 

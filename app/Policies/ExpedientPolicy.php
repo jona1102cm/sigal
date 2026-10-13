@@ -6,8 +6,10 @@ use App\Domain\Authorization\Enums\PermissionCode;
 use App\Domain\DocumentManagement\Enums\ExpedientStatus;
 use App\Domain\DocumentManagement\Enums\OfficeCapabilityCode;
 use App\Domain\DocumentManagement\Services\OfficeDocumentAccessService;
+use App\Domain\Legislatures\Services\LegislativeAuthorizationService;
 use App\Domain\Organization\Enums\OfficeMembershipRole;
 use App\Models\Expedient;
+use App\Models\Office;
 use App\Models\User;
 use Illuminate\Support\Collection;
 
@@ -50,7 +52,7 @@ class ExpedientPolicy
 
     public function manageDocuments(User $user, Expedient $expedient): bool
     {
-        return $this->move($user, $expedient);
+        return $this->detailPermissions($user, $expedient)['manage_documents'];
     }
 
     public function manageInternalAssignments(User $user, Expedient $expedient): bool
@@ -58,6 +60,19 @@ class ExpedientPolicy
         return $this->view($user, $expedient)
             && $user->hasPermission(PermissionCode::OfficeAccessConfigure)
             && app(OfficeDocumentAccessService::class)->canManageInternalAssignments($user, $expedient);
+    }
+
+    public function referToPlenary(User $user, Expedient $expedient): bool
+    {
+        if (! $this->view($user, $expedient) || ! $user->hasPermission(PermissionCode::ExpedientsProcess)) {
+            return false;
+        }
+
+        $secretariat = Office::query()->where('code', 'SGEN')->first();
+
+        return $secretariat !== null
+            && $expedient->isCurrentlyHeldByOffice($secretariat->id)
+            && $user->currentOfficeMemberships()->where('office_id', $secretariat->id)->exists();
     }
 
     public function viewLifecycle(User $user, Expedient $expedient): bool
@@ -128,6 +143,7 @@ class ExpedientPolicy
             'approve_reopening' => false,
             'manage_internal_assignments' => false,
             'internal_assignment_office_ids' => [],
+            'refer_to_plenary' => false,
         ];
 
         if (! $canView) {
@@ -139,7 +155,23 @@ class ExpedientPolicy
         $holderMemberships = $memberships->whereIn('office_id', $holderOfficeIds);
         $canOperate = $user->hasPermission(PermissionCode::ExpedientsProcess)
             && app(OfficeDocumentAccessService::class)->canOperateExpedient($user, $expedient);
-        $canMove = $canOperate
+        $actingLegislatureMemberId = request()->attributes->getInt('acting_legislature_member_id') ?: null;
+        $actingBodyMembershipId = request()->attributes->getInt('acting_body_membership_id') ?: null;
+        $canOperateLegislatively = $user->hasPermission(PermissionCode::ExpedientsProcess)
+            && app(LegislativeAuthorizationService::class)->canActOnExpedient(
+                $user,
+                $expedient,
+                $actingLegislatureMemberId,
+                $actingBodyMembershipId,
+            );
+        $canPrepareAsLegislativeStaff = $user->hasPermission(PermissionCode::ExpedientsProcess)
+            && $holderMemberships->contains(fn ($membership) => app(LegislativeAuthorizationService::class)
+                ->isLegislativeOffice((int) $membership->office_id));
+        $canPrepareDocuments = $canOperate || $canOperateLegislatively || $canPrepareAsLegislativeStaff;
+        $canMoveAdministratively = $canOperate && $holderMemberships->contains(
+            fn ($membership) => ! app(LegislativeAuthorizationService::class)->isLegislativeOffice((int) $membership->office_id),
+        );
+        $canMove = ($canMoveAdministratively || $canOperateLegislatively)
             && ! in_array($expedient->status, [
                 ExpedientStatus::Archived,
                 ExpedientStatus::Closed,
@@ -149,14 +181,23 @@ class ExpedientPolicy
         return [
             ...$permissions,
             'move' => $canMove,
-            'act_on_movement' => $canMove,
-            'manage_documents' => $canMove,
-            // Archivar no elimina la custodia: Archivo Central todavía debe poder
+            'act_on_movement' => $canPrepareDocuments && ! in_array($expedient->status, [
+                ExpedientStatus::Archived,
+                ExpedientStatus::Closed,
+                ExpedientStatus::Voided,
+            ], true),
+            'manage_documents' => $canPrepareDocuments && ! in_array($expedient->status, [
+                ExpedientStatus::Archived,
+                ExpedientStatus::Closed,
+                ExpedientStatus::Voided,
+            ], true),
+            // Archivar no elimina la custodia: URA todavía debe poder
             // cerrar el trámite y consultar el historial de ciclo de vida.
-            'view_lifecycle' => $canOperate,
+            'view_lifecycle' => $canOperate || $canOperateLegislatively,
             'manage_internal_assignments' => $this->manageInternalAssignments($user, $expedient),
             'internal_assignment_office_ids' => app(OfficeDocumentAccessService::class)
                 ->manageableInternalAssignmentOfficeIds($user, $expedient)->all(),
+            'refer_to_plenary' => $this->referToPlenary($user, $expedient),
             'archive' => $canMove && $this->membershipsHaveCapability($holderMemberships, OfficeCapabilityCode::ArchiveExpedients),
             'close' => $canOperate
                 && ! in_array($expedient->status, [ExpedientStatus::Closed, ExpedientStatus::Voided], true)

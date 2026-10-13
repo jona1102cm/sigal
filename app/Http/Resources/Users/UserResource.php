@@ -47,6 +47,45 @@ class UserResource extends JsonResource
                     'position_title' => $membership->position_title,
                 ])
                 ->values()),
+            'legislative_profiles' => $this->whenLoaded('currentLegislatureMemberships', function () {
+                return $this->currentLegislatureMemberships->flatMap(function ($member) {
+                    $base = [[
+                        'kind' => 'legislature_member',
+                        'legislature_member_id' => $member->id,
+                        'body_membership_id' => null,
+                        'label' => "Asambleísta · {$member->legislature->period_label}",
+                        'role' => 'assembly_member',
+                        'role_label' => 'Asambleísta',
+                        'legislature' => [
+                            'id' => $member->legislature->id,
+                            'period_label' => $member->legislature->period_label,
+                        ],
+                        'body' => null,
+                    ]];
+                    $bodyProfiles = $member->currentBodyMemberships->map(fn ($membership) => [
+                        'kind' => 'legislative_body',
+                        'legislature_member_id' => $member->id,
+                        'body_membership_id' => $membership->id,
+                        'label' => "{$membership->body->name} · {$membership->role->label()}",
+                        'role' => $membership->role->value,
+                        'role_label' => $membership->role->label(),
+                        'legislature' => [
+                            'id' => $member->legislature->id,
+                            'period_label' => $member->legislature->period_label,
+                        ],
+                        'body' => [
+                            'id' => $membership->body->id,
+                            'type' => $membership->body->body_type->value,
+                            'type_label' => $membership->body->body_type->label(),
+                            'name' => $membership->body->name,
+                            'office_id' => $membership->body->office_id,
+                            'office_code' => $membership->body->office->code,
+                        ],
+                    ])->all();
+
+                    return [...$base, ...$bodyProfiles];
+                })->values();
+            }),
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];

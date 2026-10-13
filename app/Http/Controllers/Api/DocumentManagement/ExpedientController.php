@@ -18,6 +18,8 @@ use App\Http\Requests\DocumentManagement\StoreExpedientRequest;
 use App\Http\Resources\DocumentManagement\ExpedientResource;
 use App\Models\Expedient;
 use App\Models\ExpedientInternalAssignment;
+use App\Models\LegislativeBody;
+use App\Models\LegislativeBodyMembership;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -95,6 +97,25 @@ class ExpedientController extends Controller
 
         $canReviewEveryOffice = $user->isSuperAdministrator();
         $membershipOfficeIds = $user->currentOfficeMemberships()->pluck('office_id');
+        $legislativeAdministrativeOfficeIds = LegislativeBody::query()
+            ->whereIn('office_id', $membershipOfficeIds)
+            ->where('effective_from', '<=', now())
+            ->where(fn ($body) => $body->whereNull('effective_to')->orWhere('effective_to', '>', now()))
+            ->whereHas('legislature', fn ($legislature) => $legislature->active())
+            ->pluck('office_id');
+        $officeIds = $officeIds->merge($legislativeAdministrativeOfficeIds)->unique()->values();
+        $legislatureMemberIds = $user->currentLegislatureMemberships()->pluck('id');
+        $legislativeBodyOfficeIds = LegislativeBodyMembership::query()
+            ->whereIn('legislature_member_id', $legislatureMemberIds)
+            ->where('legislative_body_memberships.effective_from', '<=', now())
+            ->where(fn ($membership) => $membership
+                ->whereNull('legislative_body_memberships.effective_to')
+                ->orWhere('legislative_body_memberships.effective_to', '>', now()))
+            ->whereHas('body.legislature', fn ($legislature) => $legislature->active())
+            ->join('legislative_bodies', 'legislative_bodies.id', '=', 'legislative_body_memberships.legislative_body_id')
+            ->pluck('legislative_bodies.office_id')
+            ->unique()
+            ->values();
         $hasInternalAssignments = $membershipOfficeIds->isNotEmpty() && ExpedientInternalAssignment::query()
             ->where('user_id', $user->id)
             ->where('effective_from', '<=', now())
@@ -102,20 +123,23 @@ class ExpedientController extends Controller
             ->whereHas('recipient', fn ($recipient) => $recipient->whereIn('recipient_office_id', $membershipOfficeIds))
             ->exists();
 
-        if (! $canReviewEveryOffice && $officeIds->isEmpty() && ! $hasInternalAssignments) {
+        if (! $canReviewEveryOffice
+            && $officeIds->isEmpty()
+            && ! $hasInternalAssignments
+            && $legislatureMemberIds->isEmpty()) {
             $query->whereRaw('1 = 0');
 
             return;
         }
 
         if ($scope === 'finalized') {
-            $query->where(function (Builder $finalized) use ($officeIds, $canReviewEveryOffice, $user): void {
+            $query->where(function (Builder $finalized) use ($officeIds, $canReviewEveryOffice, $user, $legislatureMemberIds, $legislativeBodyOfficeIds): void {
                 $finalized->whereIn('status', [
                     ExpedientStatus::FullyResponded->value,
                     ExpedientStatus::Archived->value,
                     ExpedientStatus::Closed->value,
                     ExpedientStatus::Voided->value,
-                ])->orWhere(function (Builder $participation) use ($officeIds, $canReviewEveryOffice, $user): void {
+                ])->orWhere(function (Builder $participation) use ($officeIds, $canReviewEveryOffice, $user, $legislatureMemberIds, $legislativeBodyOfficeIds): void {
                     $this->whereCurrentRecipientMatches(
                         $participation,
                         [
@@ -128,6 +152,8 @@ class ExpedientController extends Controller
                         $canReviewEveryOffice,
                         false,
                         $user->id,
+                        $legislatureMemberIds,
+                        $legislativeBodyOfficeIds,
                     );
                 });
             });
@@ -135,8 +161,8 @@ class ExpedientController extends Controller
             return;
         }
 
-        $query->where(function (Builder $pending) use ($officeIds, $canReviewEveryOffice, $user): void {
-            $pending->where(function (Builder $participation) use ($officeIds, $canReviewEveryOffice, $user): void {
+        $query->where(function (Builder $pending) use ($officeIds, $canReviewEveryOffice, $user, $legislatureMemberIds, $legislativeBodyOfficeIds): void {
+            $pending->where(function (Builder $participation) use ($officeIds, $canReviewEveryOffice, $user, $legislatureMemberIds, $legislativeBodyOfficeIds): void {
                 $this->whereCurrentRecipientMatches(
                     $participation,
                     [
@@ -148,6 +174,8 @@ class ExpedientController extends Controller
                     $canReviewEveryOffice,
                     true,
                     $user->id,
+                    $legislatureMemberIds,
+                    $legislativeBodyOfficeIds,
                 );
             })->orWhere(function (Builder $unrouted) use ($officeIds, $canReviewEveryOffice): void {
                 $unrouted->doesntHave('movements');
@@ -165,6 +193,8 @@ class ExpedientController extends Controller
      * @param  Builder<Expedient>  $query
      * @param  list<string>  $statuses
      * @param  Collection<int, int>  $officeIds
+     * @param  Collection<int, int>  $legislatureMemberIds
+     * @param  Collection<int, int>  $legislativeBodyOfficeIds
      */
     private function whereCurrentRecipientMatches(
         Builder $query,
@@ -173,8 +203,10 @@ class ExpedientController extends Controller
         bool $canReviewEveryOffice,
         bool $requiresResponse,
         int $userId,
+        Collection $legislatureMemberIds,
+        Collection $legislativeBodyOfficeIds,
     ): void {
-        $query->whereExists(function ($recipient) use ($statuses, $officeIds, $canReviewEveryOffice, $requiresResponse, $userId): void {
+        $query->whereExists(function ($recipient) use ($statuses, $officeIds, $canReviewEveryOffice, $requiresResponse, $userId, $legislatureMemberIds, $legislativeBodyOfficeIds): void {
             $recipient->selectRaw('1')
                 ->from('expedient_movements as current_movement')
                 ->join('expedient_movement_recipients as current_recipient', 'current_recipient.expedient_movement_id', '=', 'current_movement.id')
@@ -188,11 +220,22 @@ class ExpedientController extends Controller
             }
 
             if (! $canReviewEveryOffice) {
-                $recipient->where(function ($access) use ($officeIds, $userId): void {
+                $recipient->where(function ($access) use ($officeIds, $userId, $legislatureMemberIds, $legislativeBodyOfficeIds): void {
                     if ($officeIds->isNotEmpty()) {
                         $access->whereIn('current_recipient.recipient_office_id', $officeIds);
                     } else {
                         $access->whereRaw('1 = 0');
+                    }
+
+                    if ($legislatureMemberIds->isNotEmpty()) {
+                        $access->orWhereIn('current_recipient.attention_legislature_member_id', $legislatureMemberIds);
+                    }
+
+                    if ($legislativeBodyOfficeIds->isNotEmpty()) {
+                        $access->orWhere(function ($bodyAccess) use ($legislativeBodyOfficeIds): void {
+                            $bodyAccess->whereNull('current_recipient.attention_legislature_member_id')
+                                ->whereIn('current_recipient.recipient_office_id', $legislativeBodyOfficeIds);
+                        });
                     }
 
                     $access->orWhereExists(function ($assignment) use ($userId): void {

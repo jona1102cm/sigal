@@ -32,6 +32,7 @@ class ExpedientMovementController extends Controller
                     'senderOffice',
                     'sentBy',
                     'recipients.recipientOffice',
+                    'recipients.attentionLegislatureMember.user',
                     'recipients.receivedBy',
                     'recipients.completedBy',
                     'recipients.internalAssignments.user',

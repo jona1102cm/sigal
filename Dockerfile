@@ -35,6 +35,7 @@ COPY docker/php/uploads.ini /usr/local/etc/php/conf.d/uploads.ini
 COPY docker/php/entrypoint.sh /usr/local/bin/sigal-entrypoint
 
 RUN chmod 755 /usr/local/bin/sigal-entrypoint \
+    && rm -f bootstrap/cache/*.php \
     && mkdir -p bootstrap/cache storage/app/public storage/framework/cache storage/framework/sessions storage/framework/views storage/logs \
     && chown -R www-data:www-data bootstrap/cache storage
 

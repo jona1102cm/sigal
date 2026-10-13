@@ -7,7 +7,9 @@ use App\Domain\Audit\Services\ActivityLogger;
 use App\Domain\DocumentManagement\DTOs\CreateExpedientData;
 use App\Domain\DocumentManagement\Enums\ExpedientOrigin;
 use App\Domain\DocumentManagement\Enums\ExpedientStatus;
+use App\Domain\DocumentManagement\Enums\OfficeCapabilityCode;
 use App\Domain\DocumentManagement\Enums\SenderType;
+use App\Domain\Legislatures\Services\LegislativeAuthorizationService;
 use App\Models\ConfidentialityLevel;
 use App\Models\Expedient;
 use App\Models\ExpedientAccessGrant;
@@ -31,6 +33,7 @@ class ExpedientService
         private readonly ActivityLogger $activityLogger,
         private readonly NumberSequenceService $numberSequenceService,
         private readonly DeploymentContext $deploymentContext,
+        private readonly LegislativeAuthorizationService $legislativeAuthorization,
     ) {}
 
     public function create(CreateExpedientData $data, User $actor, RequestAuditContext $context): Expedient
@@ -48,11 +51,26 @@ class ExpedientService
             $responsibleOffice = Office::query()->active()->supportingStaffing()->lockForUpdate()->findOrFail($data->responsibleOfficeId);
             $confidentialityLevel = $this->resolveConfidentialityLevel($data->confidentialityLevelId);
 
-            if (! $actor->isSuperAdministrator() && ! $actor->currentOfficeMemberships()
+            $belongsToOffice = $actor->currentOfficeMemberships()
                 ->where('office_id', $responsibleOffice->id)
-                ->exists()) {
+                ->exists();
+            $actsAsLegislativeAuthority = $this->legislativeAuthorization->canActForOffice(
+                $actor,
+                $responsibleOffice->id,
+                $context->actingBodyMembershipId,
+            );
+            if (! $actor->isSuperAdministrator() && ! $belongsToOffice && ! $actsAsLegislativeAuthority) {
                 throw ValidationException::withMessages([
-                    'responsible_office_id' => 'El usuario debe pertenecer a la oficina responsable del expediente.',
+                    'responsible_office_id' => 'El usuario debe pertenecer a la oficina responsable o actuar como su autoridad legislativa vigente.',
+                ]);
+            }
+
+            if ($data->origin === ExpedientOrigin::External
+                && ! $responsibleOffice->capabilities()
+                    ->where('capability', OfficeCapabilityCode::ReceiveExternalDocuments->value)
+                    ->exists()) {
+                throw ValidationException::withMessages([
+                    'origin' => 'La oficina seleccionada no está autorizada para registrar documentación externa.',
                 ]);
             }
 

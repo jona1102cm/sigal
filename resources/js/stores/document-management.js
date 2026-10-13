@@ -5,6 +5,19 @@ function list(payload) {
     return payload?.data ?? [];
 }
 
+function appendFormValue(body, key, value) {
+    if (value === null || value === undefined || value === '') return;
+    if (Array.isArray(value)) {
+        value.forEach((item) => appendFormValue(body, `${key}[]`, item));
+        return;
+    }
+    if (typeof value === 'object' && !(value instanceof File)) {
+        Object.entries(value).forEach(([childKey, childValue]) => appendFormValue(body, `${key}[${childKey}]`, childValue));
+        return;
+    }
+    body.append(key, typeof value === 'boolean' ? (value ? '1' : '0') : value);
+}
+
 /**
  * Estado compartido del módulo documental y de sus catálogos administrativos.
  * Las mutaciones recargan la vista afectada para reflejar el estado calculado por el servidor.
@@ -41,6 +54,10 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
         officeMemberships: [],
         administrationExpedientTypes: [],
         legislatures: [],
+        legislativeComposition: { members: [], bodies: [] },
+        legislativeDirectory: { legislature: null, members: [], bodies: [] },
+        plenaryReferrals: [],
+        plenaryPagination: null,
         operationalResetSummary: null,
         loading: false,
         busy: {},
@@ -215,13 +232,7 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
             return this.run('create-entry', async () => {
                 const body = new FormData();
 
-                Object.entries(data).forEach(([key, value]) => {
-                    if (Array.isArray(value)) {
-                        value.forEach((item) => body.append(`${key}[]`, item));
-                    } else if (value !== null && value !== undefined && value !== '') {
-                        body.append(key, key === 'requires_response' ? (value ? '1' : '0') : value);
-                    }
-                });
+                Object.entries(data).forEach(([key, value]) => appendFormValue(body, key, value));
                 Array.from(files).forEach((file) => body.append('attachments[]', file));
 
                 const payload = await request('/expedient-entries', { method: 'POST', body });
@@ -255,13 +266,7 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
 
                 if (uploadList.length) {
                     body = new FormData();
-                    Object.entries(data).forEach(([key, value]) => {
-                        if (Array.isArray(value)) {
-                            value.forEach((item) => body.append(`${key}[]`, item));
-                        } else if (value !== null && value !== undefined && value !== '') {
-                            body.append(key, key === 'requires_response' ? (value ? '1' : '0') : value);
-                        }
-                    });
+                    Object.entries(data).forEach(([key, value]) => appendFormValue(body, key, value));
                     uploadList.forEach((file) => body.append('attachments[]', file));
                 }
 
@@ -282,6 +287,16 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
             return this.run(`issue-${documentId}`, async () => {
                 await request(`/expedients/${this.selected.id}/documents/${documentId}/issue`, { method: 'POST' });
                 await this.refreshSelected();
+            });
+        },
+
+        async issueAndDeriveDocument(documentId, data) {
+            return this.run(`issue-and-derive-${documentId}`, async () => {
+                await request(`/expedients/${this.selected.id}/documents/${documentId}/issue-and-derive`, {
+                    method: 'POST',
+                    body: data,
+                });
+                await this.refreshSelectedAndInbox();
             });
         },
 
@@ -602,6 +617,92 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
             return this.run('board-assignment', async () => {
                 await request(`/legislatures/${legislatureId}/board-assignments`, { method: 'POST', body: data });
                 await this.loadLegislatures();
+            });
+        },
+
+        async loadLegislativeComposition(legislatureId) {
+            return this.run('legislative-composition', async () => {
+                const payload = await request(`/legislatures/${legislatureId}/composition`);
+                this.legislativeComposition = {
+                    members: payload.members?.data ?? payload.members ?? [],
+                    bodies: payload.bodies?.data ?? payload.bodies ?? [],
+                };
+                return this.legislativeComposition;
+            });
+        },
+
+        async assignLegislatureMember(legislatureId, data) {
+            return this.run('legislature-member-save', async () => {
+                await request(`/legislatures/${legislatureId}/members`, { method: 'POST', body: data });
+                return this.loadLegislativeComposition(legislatureId);
+            });
+        },
+
+        async closeLegislatureMember(legislatureId, memberId, effectiveTo) {
+            return this.run(`legislature-member-${memberId}`, async () => {
+                await request(`/legislatures/${legislatureId}/members/${memberId}/close`, {
+                    method: 'POST',
+                    body: { effective_to: effectiveTo },
+                });
+                return this.loadLegislativeComposition(legislatureId);
+            });
+        },
+
+        async createLegislativeBody(legislatureId, data) {
+            return this.run('legislative-body-save', async () => {
+                await request(`/legislatures/${legislatureId}/legislative-bodies`, { method: 'POST', body: data });
+                return this.loadLegislativeComposition(legislatureId);
+            });
+        },
+
+        async assignLegislativeBodyMembership(legislatureId, bodyId, data) {
+            return this.run(`legislative-body-${bodyId}-membership`, async () => {
+                await request(`/legislatures/${legislatureId}/legislative-bodies/${bodyId}/memberships`, { method: 'POST', body: data });
+                return this.loadLegislativeComposition(legislatureId);
+            });
+        },
+
+        async closeLegislativeBodyMembership(legislatureId, bodyId, membershipId, effectiveTo) {
+            return this.run(`legislative-membership-${membershipId}`, async () => {
+                await request(`/legislatures/${legislatureId}/legislative-bodies/${bodyId}/memberships/${membershipId}/close`, {
+                    method: 'POST',
+                    body: { effective_to: effectiveTo },
+                });
+                return this.loadLegislativeComposition(legislatureId);
+            });
+        },
+
+        async createLegislativeDelegation(legislatureId, bodyId, data) {
+            return this.run(`legislative-delegation-${bodyId}`, async () => {
+                await request(`/legislatures/${legislatureId}/legislative-bodies/${bodyId}/delegations`, { method: 'POST', body: data });
+                return this.loadLegislativeComposition(legislatureId);
+            });
+        },
+
+        async loadLegislativeDirectory(force = false) {
+            if (this.legislativeDirectory.legislature && !force) return this.legislativeDirectory;
+            return this.run('legislative-directory', async () => {
+                const payload = await request('/legislative/directory');
+                this.legislativeDirectory = payload.data;
+                return this.legislativeDirectory;
+            });
+        },
+
+        async loadPlenaryReferrals(page = 1) {
+            return this.run('plenary-referrals', async () => {
+                const payload = await request(`/legislative/plenary-referrals?page=${page}`);
+                this.plenaryReferrals = list(payload);
+                this.plenaryPagination = payload.meta ?? null;
+                return this.plenaryReferrals;
+            });
+        },
+
+        async referSelectedToPlenary() {
+            if (!this.selected) return null;
+            return this.run('plenary-referral-save', async () => {
+                const payload = await request(`/expedients/${this.selected.id}/plenary-referrals`, { method: 'POST' });
+                await Promise.all([this.refreshSelected(), this.loadPlenaryReferrals()]);
+                return payload.data;
             });
         },
 

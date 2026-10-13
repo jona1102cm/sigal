@@ -10,12 +10,15 @@ use App\Domain\DocumentManagement\DTOs\CreateExpedientMovementData;
 use App\Domain\DocumentManagement\DTOs\DocumentContentData;
 use App\Domain\DocumentManagement\DTOs\UpdateMovementRecipientStatusData;
 use App\Domain\DocumentManagement\Enums\CatalogStatus;
+use App\Domain\DocumentManagement\Enums\DocumentStatus;
 use App\Domain\DocumentManagement\Enums\ExpedientOrigin;
 use App\Domain\DocumentManagement\Enums\ExpedientPriority;
+use App\Domain\DocumentManagement\Enums\InstitutionalWorkflow;
 use App\Domain\DocumentManagement\Enums\MovementRecipientStatus;
 use App\Domain\DocumentManagement\Services\DocumentService;
 use App\Domain\DocumentManagement\Services\ExpedientMovementService;
 use App\Domain\DocumentManagement\Services\ExpedientService;
+use App\Domain\Legislatures\Services\LegislativeAuthorizationService;
 use App\Domain\Organization\Enums\OfficeMembershipRole;
 use App\Domain\Warehouse\DTOs\DecideWarehouseDeliveryData;
 use App\Domain\Warehouse\DTOs\SaveMaterialRequestData;
@@ -26,6 +29,7 @@ use App\Models\Document;
 use App\Models\DocumentType;
 use App\Models\ExpedientMovementRecipient;
 use App\Models\ExpedientType;
+use App\Models\LegislativeBodyMembership;
 use App\Models\MaterialRequest;
 use App\Models\MeasurementUnit;
 use App\Models\Office;
@@ -47,12 +51,53 @@ class MaterialRequestService
         private readonly WarehouseInventoryService $inventoryService,
         private readonly WarehouseNumberService $numberService,
         private readonly ActivityLogger $activityLogger,
+        private readonly LegislativeAuthorizationService $legislativeAuthorization,
     ) {}
+
+    /** @return list<array{id: int, code: string, name: string, representation: string, requires_legislative_approval: bool, can_present: bool}> */
+    public function availableRequestingOffices(User $actor, RequestAuditContext $context): array
+    {
+        $officeIds = $actor->currentOfficeMemberships()->pluck('office_id');
+        $offices = Office::query()->active()->supportingStaffing()->whereIn('id', $officeIds)->get()->keyBy('id');
+
+        if ($context->actingBodyMembershipId !== null) {
+            $actingMembership = LegislativeBodyMembership::query()
+                ->with('body.office')
+                ->find($context->actingBodyMembershipId);
+            if ($actingMembership !== null
+                && $this->legislativeAuthorization->isCommissionOffice($actingMembership->body->office_id)
+                && $this->legislativeAuthorization->canActForOffice(
+                    $actor,
+                    $actingMembership->body->office_id,
+                    $actingMembership->id,
+                )) {
+                $offices->put($actingMembership->body->office_id, $actingMembership->body->office);
+            }
+        }
+
+        return $offices->map(function (Office $office) use ($actor, $context): array {
+            $isCommission = $this->legislativeAuthorization->isCommissionOffice($office->id);
+            $canPresent = ! $isCommission || $this->legislativeAuthorization->canActForOffice(
+                $actor,
+                $office->id,
+                $context->actingBodyMembershipId,
+            );
+
+            return [
+                'id' => $office->id,
+                'code' => $office->code,
+                'name' => $office->name,
+                'representation' => $canPresent && $isCommission ? 'legislative_authority' : 'administrative_staff',
+                'requires_legislative_approval' => $isCommission,
+                'can_present' => $canPresent,
+            ];
+        })->sortBy('name')->values()->all();
+    }
 
     public function createDraft(SaveMaterialRequestData $data, User $actor, RequestAuditContext $context): MaterialRequest
     {
         return DB::transaction(function () use ($data, $actor, $context): MaterialRequest {
-            $office = $this->assertRequestingOffice($data->requestingOfficeId, $actor);
+            $office = $this->assertRequestingOffice($data->requestingOfficeId, $actor, $context);
             $items = $this->normalizeItems($data);
             $expedientType = ExpedientType::query()->active()->where('code', 'WAREHOUSES_INVENTORY')->firstOrFail();
             $documentType = DocumentType::query()->active()->where('code', 'REQUEST')->firstOrFail();
@@ -129,6 +174,11 @@ class MaterialRequestService
     {
         return DB::transaction(function () use ($request, $actor, $context): MaterialRequest {
             $target = $this->lock($request);
+
+            if ($this->legislativeAuthorization->isCommissionOffice($target->requesting_office_id)) {
+                return $this->submitCommissionRequest($target, $actor, $context);
+            }
+
             $this->assertStatus($target, MaterialRequestStatus::Draft);
             $this->documentService->issue($target->expedient, $target->requestDocument, $actor, $context);
             $office = $target->requestingOffice;
@@ -209,6 +259,13 @@ class MaterialRequestService
             }
 
             $items = $this->normalizeItems($data);
+
+            if ($this->legislativeAuthorization->isCommissionOffice($target->requesting_office_id)) {
+                $this->prepareCommissionRevision($target, $data, $items, $actor, $context);
+
+                return $this->load($target);
+            }
+
             $correction = $this->documentService->createCorrection($target->expedient, $target->requestDocument, new DocumentContentData(
                 $target->requestDocument->title,
                 $this->documentContent($data->justification, $items),
@@ -316,6 +373,21 @@ class MaterialRequestService
         return DB::transaction(function () use ($request, $receiverUserId, $reason, $actor, $context): MaterialRequest {
             $target = $this->lock($request);
             $this->assertStatus($target, MaterialRequestStatus::PendingReceipt);
+            $isCommission = $this->legislativeAuthorization->isCommissionOffice($target->requesting_office_id);
+            $canAuthorize = $isCommission
+                ? $this->legislativeAuthorization->canActForOffice(
+                    $actor,
+                    $target->requesting_office_id,
+                    $context->actingBodyMembershipId,
+                )
+                : $actor->isCurrentManagerOfOffice($target->requesting_office_id);
+            if (! $canAuthorize) {
+                throw ValidationException::withMessages([
+                    'receiver_user_id' => $isCommission
+                        ? 'Solo la autoridad vigente de la comisión puede autorizar un receptor alterno.'
+                        : 'Solo el responsable vigente de la oficina puede autorizar un receptor alterno.',
+                ]);
+            }
             $receiver = User::query()->where('status', 'active')->findOrFail($receiverUserId);
             if (! $receiver->currentOfficeMemberships()->where('office_id', $target->requesting_office_id)->exists()) {
                 throw ValidationException::withMessages(['receiver_user_id' => 'El receptor autorizado debe pertenecer actualmente a la oficina solicitante.']);
@@ -351,6 +423,16 @@ class MaterialRequestService
 
             $confirmedAt = now();
             $verificationCode = mb_strtoupper(Str::random(16));
+            $warehouseOffice = $this->office('AFALM');
+            $delivery->loadMissing(['deliveredBy', 'warehouseResponsible']);
+            $delivery->update([
+                'receiver_name_snapshot' => $actor->name,
+                'receiver_position_snapshot' => $this->currentPositionTitle($actor, $target->requesting_office_id),
+                'requesting_office_name_snapshot' => $target->requestingOffice->name,
+                'warehouse_responsible_name_snapshot' => $delivery->warehouseResponsible->name,
+                'warehouse_responsible_position_snapshot' => $this->currentPositionTitle($delivery->warehouseResponsible, $warehouseOffice->id),
+                'delivered_by_name_snapshot' => $delivery->deliveredBy->name,
+            ]);
             $actDocument = $this->createReceptionAct($target, $delivery, $actor, $context, $verificationCode, $confirmedAt);
             $this->finalizeCurrentRecipient($target, $actor, $context, MovementRecipientStatus::Completed, $observations);
             $hashPayload = [
@@ -360,6 +442,14 @@ class MaterialRequestService
                 'confirmed_by' => $actor->id,
                 'confirmed_at' => $confirmedAt->toIso8601String(),
                 'act_document_id' => $actDocument->id,
+                'act_parties' => [
+                    'receiver_name' => $delivery->receiver_name_snapshot,
+                    'receiver_position' => $delivery->receiver_position_snapshot,
+                    'requesting_office' => $delivery->requesting_office_name_snapshot,
+                    'warehouse_responsible_name' => $delivery->warehouse_responsible_name_snapshot,
+                    'warehouse_responsible_position' => $delivery->warehouse_responsible_position_snapshot,
+                    'delivered_by_name' => $delivery->delivered_by_name_snapshot,
+                ],
                 'lines' => $delivery->lines()->orderBy('id')->get(['warehouse_item_id', 'delivered_quantity'])->toArray(),
             ];
             $delivery->update([
@@ -388,7 +478,7 @@ class MaterialRequestService
             primaryOfficeIds: [$recipient->id],
             copyOfficeIds: [],
             requiresResponse: $requiresResponse,
-        ), $actor, $context);
+        ), $actor, $context, InstitutionalWorkflow::WarehouseMaterialRequest);
         $this->documentService->linkToMovement($request->expedient, $movement, $request->requestDocument, $actor, $context);
 
         if ($priorRecipient !== null) {
@@ -405,35 +495,54 @@ class MaterialRequestService
 
     private function createReceptionAct(MaterialRequest $request, WarehouseDelivery $delivery, User $actor, RequestAuditContext $context, string $verificationCode, CarbonInterface $confirmedAt): Document
     {
+        $request->loadMissing(['expedient', 'requestingOffice']);
         $delivery->loadMissing(['lines.item.measurementUnit', 'deliveredBy', 'warehouseResponsible']);
         $documentType = DocumentType::query()->active()->where('code', 'MINUTES')->firstOrFail();
         $rows = $delivery->lines->map(fn ($line, int $index) => sprintf(
-            '<tr><td>%d</td><td>%s</td><td>%s %s</td></tr>',
+            '<tr><td>%d</td><td>%s</td><td>%s</td><td>%s</td></tr>',
             $index + 1,
             e($line->item->name),
-            e($line->delivered_quantity),
             e($line->item->measurementUnit->symbol),
+            e($line->delivered_quantity),
         ))->implode('');
         $uatNotice = $request->expedient->is_uat
             ? '<p><strong>UAT · DOCUMENTO DE PRUEBA SIN VALIDEZ INSTITUCIONAL.</strong></p>'
             : '';
-        $content = $uatNotice.'<p>En fecha '.e($confirmedAt->format('d/m/Y H:i')).', se confirma la recepción de los materiales correspondientes a '.e($request->expedient->route_code).'.</p>'
-            .'<p><strong>Responsable de Almacenes:</strong> '.e($delivery->warehouseResponsible->name).'<br>'
-            .'<strong>Entregado por:</strong> '.e($delivery->deliveredBy->name).'<br>'
-            .'<strong>Recibido por:</strong> '.e($actor->name).'</p>'
-            .'<table><thead><tr><th>N.º</th><th>Material</th><th>Cantidad entregada</th></tr></thead><tbody>'.$rows.'</tbody></table>'
-            .'<p><strong>Código de verificación:</strong> '.e($verificationCode).'</p>';
+        $content = $uatNotice
+            .'<h2>ACTA DE ENTREGA-RECEPCIÓN</h2>'
+            .'<p><strong>Acta:</strong> '.e($delivery->delivery_number).' · <strong>Expediente:</strong> '.e($request->expedient->route_code).' · <strong>Fecha:</strong> '.e($confirmedAt->format('d/m/Y H:i')).'</p>'
+            .'<table><tbody><tr><th>Solicitante/Receptor</th><td>'.e($delivery->receiver_name_snapshot).'</td><th>Área</th><td>'.e($delivery->requesting_office_name_snapshot).'</td></tr></tbody></table>'
+            .'<table><thead><tr><th>N.º</th><th>Descripción del material entregado</th><th>Unidad</th><th>Cantidad</th></tr></thead><tbody>'.$rows.'</tbody></table>'
+            .'<h3>CONFORMIDAD EN LA RECEPCIÓN POR EL SOLICITANTE</h3>'
+            .'<p>Se deja constancia de la recepción conforme de los materiales detallados, entregados por '.e($this->office('AFALM')->name).'.</p>'
+            .'<table><tbody><tr><td><strong>RECIBÍ CONFORME</strong><br>'.e($delivery->receiver_name_snapshot).'<br>'.e($delivery->receiver_position_snapshot ?: 'Cargo no registrado').'</td>'
+            .'<td><strong>ENTREGUÉ CONFORME</strong><br>'.e($delivery->warehouse_responsible_name_snapshot).'<br>'.e($delivery->warehouse_responsible_position_snapshot ?: 'Cargo no registrado').'</td></tr></tbody></table>'
+            .'<p><small>Entrega material registrada por '.e($delivery->delivered_by_name_snapshot).'. Código de verificación: '.e($verificationCode).'.</small></p>';
         $document = $this->documentService->createDraft($request->expedient, new CreateDocumentData(
             documentTypeId: $documentType->id,
-            issuingOfficeId: $request->requesting_office_id,
+            issuingOfficeId: $this->office('AFALM')->id,
             content: new DocumentContentData(
-                title: ($request->expedient->is_uat ? '[UAT] ' : '')."ACTA DE RECEPCIÓN DE MATERIALES {$delivery->delivery_number}",
+                title: ($request->expedient->is_uat ? '[UAT] ' : '')."ACTA DE ENTREGA-RECEPCIÓN {$delivery->delivery_number}",
                 content: $content,
                 officeReference: null,
             ),
-        ), $actor, $context);
+        ), $actor, $context, InstitutionalWorkflow::WarehouseMaterialRequest);
 
-        return $this->documentService->issue($request->expedient, $document, $actor, $context);
+        return $this->documentService->issue(
+            $request->expedient,
+            $document,
+            $actor,
+            $context,
+            InstitutionalWorkflow::WarehouseMaterialRequest,
+        );
+    }
+
+    private function currentPositionTitle(User $user, int $officeId): ?string
+    {
+        return $user->currentOfficeMemberships()
+            ->where('office_id', $officeId)
+            ->latest('effective_from')
+            ->value('position_title');
     }
 
     private function finalizeCurrentRecipient(MaterialRequest $request, User $actor, RequestAuditContext $context, MovementRecipientStatus $status, ?string $notes): void
@@ -446,7 +555,14 @@ class MaterialRequestService
             throw ValidationException::withMessages(['request' => 'No se encontró la recepción documental vigente de esta etapa.']);
         }
 
-        $this->movementService->updateRecipientStatus($request->expedient, $recipient, new UpdateMovementRecipientStatusData($status, $notes), $actor, $context);
+        $this->movementService->updateRecipientStatus(
+            $request->expedient,
+            $recipient,
+            new UpdateMovementRecipientStatusData($status, $notes),
+            $actor,
+            $context,
+            InstitutionalWorkflow::WarehouseMaterialRequest,
+        );
     }
 
     private function currentRecipientForOffice(MaterialRequest $request, Office $office): ?ExpedientMovementRecipient
@@ -516,14 +632,114 @@ class MaterialRequestService
         return '<p><strong>Justificación:</strong> '.e($justification).'</p><table><thead><tr><th>N.º</th><th>Material</th><th>Cantidad</th><th>Observación</th></tr></thead><tbody>'.$rows.'</tbody></table>';
     }
 
-    private function assertRequestingOffice(int $officeId, User $actor): Office
+    private function assertRequestingOffice(int $officeId, User $actor, RequestAuditContext $context): Office
     {
         $office = Office::query()->active()->supportingStaffing()->findOrFail($officeId);
-        if (! $actor->currentOfficeMemberships()->where('office_id', $office->id)->exists()) {
-            throw ValidationException::withMessages(['requesting_office_id' => 'Solo puede solicitar desde una oficina a la que pertenece actualmente.']);
+        $belongsToOffice = $actor->currentOfficeMemberships()->where('office_id', $office->id)->exists();
+        $actsForCommission = $this->legislativeAuthorization->isCommissionOffice($office->id)
+            && $this->legislativeAuthorization->canActForOffice(
+                $actor,
+                $office->id,
+                $context->actingBodyMembershipId,
+            );
+        if (! $belongsToOffice && ! $actsForCommission) {
+            throw ValidationException::withMessages([
+                'requesting_office_id' => 'Solo puede solicitar desde una oficina a la que pertenece o desde una comisión que representa como autoridad vigente.',
+            ]);
         }
 
         return $office;
+    }
+
+    private function submitCommissionRequest(MaterialRequest $request, User $actor, RequestAuditContext $context): MaterialRequest
+    {
+        if (! $this->legislativeAuthorization->canActForOffice(
+            $actor,
+            $request->requesting_office_id,
+            $context->actingBodyMembershipId,
+        )) {
+            throw ValidationException::withMessages([
+                'request' => 'El personal administrativo puede preparar la solicitud; solo el Presidente o el Vicepresidente delegado puede presentarla.',
+            ]);
+        }
+
+        $isRevision = $request->status === MaterialRequestStatus::Observed;
+        if (! in_array($request->status, [MaterialRequestStatus::Draft, MaterialRequestStatus::Observed], true)
+            || ($isRevision && $request->requestDocument->status !== DocumentStatus::Draft)) {
+            throw ValidationException::withMessages([
+                'request' => 'La solicitud no tiene un borrador pendiente de aprobación legislativa.',
+            ]);
+        }
+
+        $this->documentService->issue($request->expedient, $request->requestDocument, $actor, $context);
+
+        if ($isRevision) {
+            $destination = $this->officeForStage($request->current_stage);
+            $this->derive($request, $request->requestingOffice, $destination, $actor, $context, MovementRecipientStatus::Responded);
+            $status = $request->current_stage === MaterialRequestStage::Warehouse
+                ? MaterialRequestStatus::InAttention
+                : MaterialRequestStatus::Pending;
+            $this->transition($request, $status, $request->current_stage, 'revised', $actor, $request->requestingOffice, null, [
+                'revision_number' => $request->current_revision_number,
+                'approved_by_legislative_authority' => true,
+            ]);
+
+            return $this->load($request);
+        }
+
+        $omaf = $this->office('OMAF');
+        $this->transition($request, MaterialRequestStatus::Pending, MaterialRequestStage::Omaf, 'submitted', $actor, $request->requestingOffice, null, [
+            'document_id' => $request->request_document_id,
+            'approved_by_legislative_authority' => true,
+        ]);
+        $request->update(['submitted_at' => now()]);
+        $this->derive($request, $request->requestingOffice, $omaf, $actor, $context, MovementRecipientStatus::Responded);
+
+        return $this->load($request);
+    }
+
+    /** @param list<array<string, mixed>> $items */
+    private function prepareCommissionRevision(
+        MaterialRequest $request,
+        SaveMaterialRequestData $data,
+        array $items,
+        User $actor,
+        RequestAuditContext $context,
+    ): void {
+        if ($request->requestDocument->status === DocumentStatus::Draft) {
+            $this->documentService->updateDraft($request->expedient, $request->requestDocument, new DocumentContentData(
+                $request->requestDocument->title,
+                $this->documentContent($data->justification, $items),
+                $data->officeReference,
+            ), $actor, $context);
+            $request->update(['justification' => $data->justification]);
+            $this->replaceDraftItems($request, $items);
+
+            return;
+        }
+
+        $correction = $this->documentService->createCorrection($request->expedient, $request->requestDocument, new DocumentContentData(
+            $request->requestDocument->title,
+            $this->documentContent($data->justification, $items),
+            $data->officeReference,
+        ), $actor, $context);
+        $revision = $request->current_revision_number + 1;
+        $request->update([
+            'request_document_id' => $correction->id,
+            'current_revision_number' => $revision,
+            'justification' => $data->justification,
+        ]);
+        $this->insertItems($request, $revision, $items);
+        $this->recordTransition(
+            $request,
+            'revision_prepared',
+            $request->status,
+            $request->current_stage,
+            $actor,
+            $request->requestingOffice,
+            null,
+            ['revision_number' => $revision, 'pending_legislative_approval' => true],
+        );
     }
 
     private function assertStatus(MaterialRequest $request, MaterialRequestStatus $status): void

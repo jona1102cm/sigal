@@ -60,6 +60,8 @@ class StoreExpedientRequest extends FormRequest
             'primary_office_ids.*' => ['required', 'integer', 'distinct', 'exists:offices,id'],
             'copy_office_ids' => ['nullable', 'array'],
             'copy_office_ids.*' => ['required', 'integer', 'distinct', 'exists:offices,id'],
+            'primary_recipient_attention' => ['nullable', 'array'],
+            'primary_recipient_attention.*' => ['nullable', 'integer', 'exists:legislature_members,id'],
             'requires_response' => ['nullable', 'boolean'],
         ];
     }

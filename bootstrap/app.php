@@ -3,6 +3,7 @@
 use App\Http\Middleware\EnsureActiveSystemUser;
 use App\Http\Middleware\EnsurePasswordHasBeenChanged;
 use App\Http\Middleware\PreventApiResponseCaching;
+use App\Http\Middleware\ResolveLegislativeActingContext;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -27,6 +28,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'active.user' => EnsureActiveSystemUser::class,
             'no.store' => PreventApiResponseCaching::class,
             'password.changed' => EnsurePasswordHasBeenChanged::class,
+            'legislative.context' => ResolveLegislativeActingContext::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

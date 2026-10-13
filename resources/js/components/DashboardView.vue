@@ -73,7 +73,7 @@ function formatDate(value) {
                     <li><span>1</span><div><strong>Registre</strong><small>Incorpore el documento de ingreso y defina la oficina responsable.</small></div></li>
                     <li><span>2</span><div><strong>Derive</strong><small>Asigne destinatarios, instrucción y plazo.</small></div></li>
                     <li><span>3</span><div><strong>Documente</strong><small>Elabore, revise y emita documentos trazables.</small></div></li>
-                    <li><span>4</span><div><strong>Resguarde</strong><small>Archivo Central ejecuta el cierre institucional.</small></div></li>
+                    <li><span>4</span><div><strong>Resguarde</strong><small>URA ejecuta el cierre institucional.</small></div></li>
                 </ol>
             </aside>
         </section>

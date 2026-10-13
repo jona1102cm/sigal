@@ -15,7 +15,8 @@ use DOMNode;
 class RichTextSanitizer
 {
     private const ALLOWED_TAGS = [
-        'a', 'b', 'blockquote', 'br', 'div', 'em', 'h2', 'h3', 'i', 'li', 'ol', 'p', 'strong', 'u', 'ul',
+        'a', 'b', 'blockquote', 'br', 'div', 'em', 'h2', 'h3', 'i', 'li', 'ol', 'p', 'small', 'strong',
+        'table', 'tbody', 'td', 'th', 'thead', 'tr', 'u', 'ul',
     ];
 
     private const REMOVED_TAGS = [
@@ -31,7 +32,7 @@ class RichTextSanitizer
         $previous = libxml_use_internal_errors(true);
         $document = new DOMDocument('1.0', 'UTF-8');
         $document->loadHTML(
-            '<!DOCTYPE html><html><body><section id="content">'.$html.'</section></body></html>',
+            '<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body><section id="content">'.$html.'</section></body></html>',
             LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD | LIBXML_NOERROR | LIBXML_NOWARNING,
         );
         libxml_clear_errors();

@@ -32,6 +32,11 @@ class OperationalResetService
             'documents' => DB::table('documents')->count(),
             'document_attachments' => DB::table('document_attachments')->count(),
             'legislatures' => DB::table('legislatures')->count(),
+            'legislature_members' => DB::table('legislature_members')->count(),
+            'legislative_bodies' => DB::table('legislative_bodies')->count(),
+            'legislative_body_memberships' => DB::table('legislative_body_memberships')->count(),
+            'legislative_delegations' => DB::table('legislative_delegations')->count(),
+            'plenary_referrals' => DB::table('plenary_referrals')->count(),
             'employees' => DB::table('employees')->count(),
             'employee_accounts' => DB::table('users')->whereNotNull('employee_id')->count(),
             'employment_contracts' => DB::table('employment_contracts')->count(),
@@ -79,12 +84,17 @@ class OperationalResetService
             DB::table('documents')->delete();
             DB::table('document_number_series')->delete();
             DB::table('expedient_reopening_requests')->delete();
+            DB::table('plenary_referrals')->delete();
             DB::table('expedient_movement_recipients')->delete();
             DB::table('expedient_movements')->delete();
             DB::table('expedient_access_grants')->delete();
             DB::table('expedients')->delete();
             DB::table('office_document_sequences')->delete();
             DB::table('institutional_sequences')->delete();
+            DB::table('legislative_delegations')->delete();
+            DB::table('legislative_body_memberships')->delete();
+            DB::table('legislative_bodies')->delete();
+            DB::table('legislature_members')->delete();
             DB::table('legislature_board_assignments')->delete();
             DB::table('legislatures')->delete();
 

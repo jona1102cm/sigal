@@ -1,6 +1,7 @@
 <?php
 
 use App\Domain\Authorization\Enums\RoleCode;
+use App\Domain\DocumentManagement\Enums\OfficeCapabilityCode;
 use App\Domain\Organization\Enums\OfficeMembershipRole;
 use App\Models\Document;
 use App\Models\DocumentType;
@@ -8,6 +9,7 @@ use App\Models\ExpedientMovement;
 use App\Models\ExpedientType;
 use App\Models\Legislature;
 use App\Models\Office;
+use App\Models\OfficeCapability;
 use App\Models\OfficeMembership;
 use App\Models\Role;
 use App\Models\User;
@@ -58,9 +60,35 @@ beforeEach(function (): void {
     ]);
 
     $this->office = Office::query()->where('code', 'RRHH')->firstOrFail();
+    OfficeCapability::query()->firstOrCreate([
+        'office_id' => $this->office->id,
+        'capability' => OfficeCapabilityCode::ReceiveExternalDocuments,
+    ]);
     $this->user = documentedEntryActor($this->office);
     $this->expedientType = ExpedientType::query()->where('code', 'HUMAN_RESOURCES')->firstOrFail();
     $this->documentType = DocumentType::query()->where('code', 'LETTER')->firstOrFail();
+});
+
+test('an office without explicit capability cannot register external documentation', function () {
+    $office = Office::query()->where('code', 'SIS')->firstOrFail();
+    $user = documentedEntryActor($office);
+    Sanctum::actingAs($user);
+
+    $this->post('/api/expedient-entries', [
+        'expedient_type_id' => $this->expedientType->id,
+        'subject' => 'Documento externo no autorizado',
+        'origin' => 'external',
+        'sender_type' => 'organization',
+        'sender_name' => 'Institución externa',
+        'responsible_office_id' => $office->id,
+        'received_on' => '2026-08-10',
+        'document_type_id' => $this->documentType->id,
+        'origin_document_number' => 'EXT-001/2026',
+        'origin_document_date' => '2026-08-10',
+        'content' => 'Contenido de prueba.',
+    ], ['Accept' => 'application/json'])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('origin');
 });
 
 test('a documented entry atomically creates the expedient, its source document, and attachments', function () {
@@ -158,7 +186,7 @@ test('the detail exposes authoritative permissions and an ordinary office manage
         ->assertJsonPath('data.permissions.void', false);
 
     $this->postJson("/api/expedients/{$created->json('data.id')}/archive", [
-        'reason' => 'Una jefatura común no posee la atribución de Archivo Central.',
+        'reason' => 'Una jefatura común no posee la atribución de URA.',
     ])->assertForbidden();
 });
 

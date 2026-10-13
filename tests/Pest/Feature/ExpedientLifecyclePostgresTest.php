@@ -14,7 +14,7 @@ use App\Models\UserRoleAssignment;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
 
-test('movements calculate the status and Archivo Central with OMAF completes the lifecycle', function () {
+test('movements calculate the status and URA with OMAF completes the lifecycle', function () {
     try {
         DB::connection()->getPdo();
     } catch (Throwable) {
@@ -47,7 +47,7 @@ test('movements calculate the status and Archivo Central with OMAF completes the
 
     $rrhh = Office::query()->where('code', 'RRHH')->firstOrFail();
     $juridical = Office::query()->where('code', 'JUR')->firstOrFail();
-    $archive = Office::query()->where('code', 'ARCH')->firstOrFail();
+    $archive = Office::query()->where('code', 'URA')->firstOrFail();
     $omaf = Office::query()->where('code', 'OMAF')->firstOrFail();
 
     foreach ([
@@ -121,7 +121,7 @@ test('movements calculate the status and Archivo Central with OMAF completes the
     $archiveRecipientId = $archiveMovement->json('data.recipients.0.id');
     $this->postJson("/api/expedients/{$expedient->id}/movement-recipients/{$archiveRecipientId}/status", [
         'status' => 'responded',
-        'action_note' => 'Archivo Central recibió la documentación concluida.',
+        'action_note' => 'URA recibió la documentación concluida.',
     ])->assertOk();
 
     $this->getJson("/api/expedients/{$expedient->id}")
@@ -132,7 +132,7 @@ test('movements calculate the status and Archivo Central with OMAF completes the
         ->assertJsonPath('data.permissions.view_lifecycle', true);
 
     $this->postJson("/api/expedients/{$expedient->id}/archive", [
-        'reason' => 'Trámite concluido y remitido a Archivo Central.',
+        'reason' => 'Trámite concluido y remitido a URA.',
     ])->assertOk()
         ->assertJsonPath('data.status', 'archived');
 

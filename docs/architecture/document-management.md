@@ -9,6 +9,7 @@ Estado: **backend e interfaz web implementados**.
 - El usuario selecciona las oficinas desde un directorio operativo de solo lectura que refleja su jerarquía. Este directorio expone únicamente código, nombre y dependencia de oficinas activas, nunca membresías ni jefaturas.
 - Cuando un catálogo o las oficinas disponibles contienen una única opción, la interfaz la utiliza por defecto y la presenta como dato fijo; evita obligar una selección redundante.
 - La sesión informa al usuario sobre sus propias oficinas vigentes. En un ingreso interno, SIGAL deriva automáticamente la oficina remitente y el usuario registrador; únicamente un usuario con más de una oficina vigente elige cuál quedará responsable. La autorización final siempre se aplica en la API.
+- La procedencia externa solo se habilita para oficinas con la capacidad `receive_external_documents`. Superadministración administra esta capacidad desde el organigrama; inicialmente corresponde a URA y Secretaría General y Protocolo.
 - El historial de solicitudes de reapertura se consulta desde el propio expediente; OMAF conserva la decisión de aprobar o rechazar.
 
 ## Modelo institucional
@@ -23,7 +24,7 @@ Estado: **backend e interfaz web implementados**.
 - El estado global del expediente se calcula a partir de las respuestas de sus destinatarios: derivado, recibido, en proceso, respondido parcialmente, respondido completamente, devuelto o rechazado.
 - Cada destinatario de una derivación puede ser principal o en copia y registra su propio estado. Los usuarios actúan mediante la membresía vigente de su oficina.
 - Un expediente no puede archivarse mientras existan acciones pendientes en las derivaciones vigentes.
-- Archivo Central (`ARCH`) tiene las capacidades institucionales para archivar, cerrar y anular. Los superadministradores también pueden ejecutarlas.
+- La Unidad de Registros y Archivos (`URA`) tiene las capacidades institucionales para archivar, cerrar y anular. Los superadministradores también pueden ejecutarlas.
 - La reapertura se solicita por el jefe vigente de la oficina responsable. La aprueba o rechaza un jefe vigente de OMAF, como máxima autoridad administrativa; no corresponde a Secretaría General.
 
 ## Confidencialidad y acceso
@@ -31,7 +32,7 @@ Estado: **backend e interfaz web implementados**.
 - Los expedientes se crean inicialmente con nivel `interno`. El catálogo distingue Público institucional, Interno, Reservado y Confidencial; los dos últimos requieren concesiones expresas de acceso.
 - Para un expediente confidencial solo acceden los superadministradores y los usuarios u oficinas con una concesión explícita vigente. El rol observador no reemplaza esa concesión.
 - En expedientes no confidenciales, cada observador ve el expediente completo únicamente cuando alguna oficina participante pertenece a las raíces de observación que le asignó superadministración o a sus dependencias. El alcance se registra por intervalos: al retirar una oficina, conserva consulta histórica sobre los expedientes que ya alcanzó, pero no incorpora actuaciones futuras ajenas al nuevo alcance.
-- El usuario simple solo accede a expedientes creados por él o que llegaron a una de sus oficinas, sujeto además a la modalidad interna configurada para esa oficina. Archivo Central y OMAF conservan la visibilidad estrictamente necesaria para sus capacidades institucionales.
+- El usuario simple solo accede a expedientes creados por él o que llegaron a una de sus oficinas, sujeto además a la modalidad interna configurada para esa oficina. URA y OMAF conservan la visibilidad estrictamente necesaria para sus capacidades institucionales.
 - Las concesiones de acceso, su inicio y cierre, quedan conservadas para auditoría.
 
 ## Distribución dentro de una oficina
@@ -42,6 +43,14 @@ Estado: **backend e interfaz web implementados**.
 - En equipo autorizado, la jefatura y los funcionarios seleccionados pueden operar las llegadas de la oficina. La lista queda vigente para los expedientes siguientes hasta que la jefatura la modifique.
 - Las oficinas que admiten funcionarios pero no requieren responsable usan automáticamente **todos los miembros**; actualmente corresponde a Asesores del Pleno y Asesores de Presidencia.
 - Estas reglas controlan lectura y operación, pero nunca amplían un expediente confidencial. El acceso reservado o confidencial continúa requiriendo una concesión expresa de superadministración.
+
+## Flujo legislativo
+
+- Secretaría General (`SGEN`) es el canal obligatorio de ingreso y salida de la correspondencia legislativa. Solo ella deriva hacia bancadas, comisiones o un asambleísta individualizado; las respuestas de esos órganos regresan exclusivamente a Secretaría General.
+- Una llegada general a una bancada es visible para sus miembros y personal administrativo. Una llegada personal queda restringida al asambleísta señalado y al personal administrativo de la bancada.
+- En comisiones y bancadas, el personal administrativo autorizado puede redactar y guardar borradores, pero no emitir ni derivar la respuesta. La autoridad política vigente —o su delegado temporal— ejecuta **Emitir y derivar** como una sola transacción.
+- Al emitir, el documento queda inmutable y conserva tanto el perfil político utilizado como una instantánea de la Directiva que aparecerá como remitente institucional.
+- Secretaría General puede incorporar el expediente a la lista de espera del Pleno sin ceder la tenencia. Mientras esté allí, todos los asambleístas activos consultan el expediente completo; el tratamiento, votación y resolución se implementarán en el módulo separado de CCP y Sesiones.
 
 ## Documentos, versiones y adjuntos
 
@@ -54,7 +63,7 @@ Estado: **backend e interfaz web implementados**.
 ## Registro de ingreso documentado
 
 - El flujo normal inicia con el registro de un documento de origen. En una unica transaccion se crean el expediente, su antecedente inicial y todos los anexos cargados.
-- El ingreso exige fecha de recepción, tipo documental, número y fecha del documento inicial, y contenido redactado o al menos un archivo adjunto. El remitente y su tipo se solicitan únicamente si el documento fue recibido desde una persona o institución externa; en un ingreso interno se derivan de la oficina responsable y de la sesión.
+- El ingreso exige tipo documental, número y contenido redactado o al menos un archivo adjunto. La interfaz asigna automáticamente la fecha institucional actual tanto al registro como al documento inicial. El remitente y su tipo se solicitan únicamente si el documento fue recibido desde una persona o institución externa y la oficina posee autorización; en un ingreso interno se derivan de la oficina responsable y de la sesión.
 - La prioridad se estandariza como Normal, Alta o Urgente; Normal es el valor inicial tanto para el expediente como para sus derivaciones. El campo de clasificación queda fuera del nuevo registro por ser redundante con el tipo de expediente y la confidencialidad, aunque se conserva en históricos.
 - El documento inicial conserva el antecedente recibido: no puede editarse, emitirse, corregirse ni recibir anexos posteriormente. Un documento de origen externo no se atribuye a una oficina emisora interna.
 - La creacion de un expediente sin documento permanece disponible solamente como ruta excepcional. Los documentos posteriores se crean dentro del mismo expediente, nunca abren uno nuevo.
@@ -72,8 +81,9 @@ Todos requieren autenticación Sanctum y un usuario activo. El prefijo real depe
 - `POST /expedients/{expedient}/archive`, `/close`, `/void`
 - `POST /expedients/{expedient}/reopening-requests` y sus acciones `/approve` o `/reject`
 - `GET|POST /expedients/{expedient}/documents`
-- `PATCH /expedients/{expedient}/documents/{document}`, y las acciones `/issue`, `/corrections`, `/attachments`, `/movement-links`
+- `PATCH /expedients/{expedient}/documents/{document}`, y las acciones `/issue`, `/issue-and-derive`, `/corrections`, `/attachments`, `/movement-links`
 - `GET /expedients/{expedient}/documents/{document}/revisions`
 - `GET|POST /expedients/{expedient}/access-grants` y `POST .../access-grants/{grant}/close`
+- `GET /legislative/directory`, `GET /legislative/plenary-referrals` y `POST /expedients/{expedient}/plenary-referrals`
 
 Las reglas de autorización se aplican en el servidor mediante Policies, Form Requests y servicios transaccionales; la interfaz no es una fuente de autorización.

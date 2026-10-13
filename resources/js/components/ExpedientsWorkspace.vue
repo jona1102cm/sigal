@@ -124,7 +124,7 @@ function setInboxScope(scope) {
             <div v-else-if="!filteredExpedients.length" class="empty-state">{{ inboxScope === 'pending' ? 'No tiene respuestas pendientes con estos filtros.' : 'No se encontraron expedientes finalizados o cerrados con estos filtros.' }}</div>
             <div v-else class="table-wrap">
                 <table class="inbox-table">
-                    <thead><tr><th>Ruta</th><th>Asunto</th><th>Responsable</th><th>Recepción</th><th>Prioridad</th><th>Estado</th><th><span class="sr-only">Abrir</span></th></tr></thead>
+                    <thead><tr><th>Ruta</th><th>Referencia</th><th>Responsable</th><th>Registro</th><th>Prioridad</th><th>Estado</th><th><span class="sr-only">Abrir</span></th></tr></thead>
                     <tbody>
                         <tr v-for="expedient in filteredExpedients" :key="expedient.id" :class="[{ 'is-selected': documents.selected?.id === expedient.id }, `inbox-row--priority-${expedient.priority || 'normal'}`]" @click="openExpedient(expedient)">
                             <td><strong>{{ expedient.route_code }} <span v-if="expedient.is_uat" class="uat-badge">UAT</span></strong><small>{{ expedient.expedient_type?.name }}</small></td>

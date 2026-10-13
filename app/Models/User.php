@@ -86,6 +86,19 @@ class User extends Authenticatable
                 ->orWhere('effective_to', '>', $now));
     }
 
+    public function legislatureMemberships(): HasMany
+    {
+        return $this->hasMany(LegislatureMember::class);
+    }
+
+    public function currentLegislatureMemberships(): HasMany
+    {
+        return $this->legislatureMemberships()
+            ->where('effective_from', '<=', now())
+            ->where(fn ($query) => $query->whereNull('effective_to')->orWhere('effective_to', '>', now()))
+            ->whereHas('legislature', fn ($query) => $query->active());
+    }
+
     /** @return HasMany<Expedient, $this> */
     public function createdExpedients(): HasMany
     {

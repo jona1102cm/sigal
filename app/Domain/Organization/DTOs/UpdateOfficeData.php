@@ -10,6 +10,7 @@ readonly class UpdateOfficeData
         public string $name,
         public bool $supportsStaffing,
         public bool $requiresManager,
+        public ?bool $receivesExternalDocuments,
     ) {}
 
     /** @param array<string, mixed> $validated */
@@ -21,6 +22,9 @@ readonly class UpdateOfficeData
             name: $validated['name'],
             supportsStaffing: (bool) $validated['supports_staffing'],
             requiresManager: (bool) $validated['requires_manager'],
+            receivesExternalDocuments: array_key_exists('receives_external_documents', $validated)
+                ? (bool) $validated['receives_external_documents']
+                : null,
         );
     }
 }

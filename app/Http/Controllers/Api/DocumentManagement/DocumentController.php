@@ -11,6 +11,7 @@ use App\Domain\DocumentManagement\Services\DocumentService;
 use App\Domain\DocumentManagement\Services\DocumentWorkflowService;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\DocumentManagement\AttachDocumentFileRequest;
+use App\Http\Requests\DocumentManagement\IssueAndDeriveDocumentRequest;
 use App\Http\Requests\DocumentManagement\LinkDocumentToMovementRequest;
 use App\Http\Requests\DocumentManagement\StoreDocumentRequest;
 use App\Http\Requests\DocumentManagement\UpdateDocumentRequest;
@@ -102,6 +103,24 @@ class DocumentController extends Controller
         return new DocumentResource($this->documentService->issue(
             $expedient,
             $document,
+            $request->user(),
+            RequestAuditContext::fromRequest($request),
+        ));
+    }
+
+    public function issueAndDerive(
+        IssueAndDeriveDocumentRequest $request,
+        Expedient $expedient,
+        Document $document,
+    ): DocumentResource {
+        abort_unless((int) $document->expedient_id === (int) $expedient->id, 404);
+        $validated = $request->validated();
+        $validated['sender_office_id'] = $document->issuing_office_id;
+
+        return new DocumentResource($this->documentWorkflowService->issueAndDerive(
+            $expedient,
+            $document,
+            CreateExpedientMovementData::fromValidated($validated),
             $request->user(),
             RequestAuditContext::fromRequest($request),
         ));

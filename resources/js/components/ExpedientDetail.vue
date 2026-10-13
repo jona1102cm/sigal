@@ -5,6 +5,7 @@
  */
 import { computed, reactive, ref, watch } from 'vue';
 import RichTextEditor from './RichTextEditor.vue';
+import SearchableMultiSelect from './SearchableMultiSelect.vue';
 import SearchableSelect from './SearchableSelect.vue';
 import { flattenOfficeHierarchy } from '../lib/organization';
 import { useDocumentManagementStore } from '../stores/document-management';
@@ -20,8 +21,10 @@ const queuedFiles = ref([]);
 const lifecycleAction = ref(null);
 const editingDocumentId = ref(null);
 const correctionForId = ref(null);
+const issueRouteDocumentId = ref(null);
 const assignmentRecipientId = ref(null);
 const internalAssignmentForm = reactive({ responsible_user_id: '', collaborator_user_ids: [] });
+const issueRouteForm = reactive({ primary_office_ids: [], copy_office_ids: [], requires_response: true });
 
 const documentForm = reactive({
     document_type_id: '',
@@ -30,6 +33,7 @@ const documentForm = reactive({
     title: '',
     content: '',
     primary_office_ids: [],
+    primary_recipient_attention: {},
     copy_office_ids: [],
     requires_response: true,
 });
@@ -51,6 +55,7 @@ const selected = computed(() => documents.selected);
 const isTerminal = computed(() => ['closed', 'voided'].includes(selected.value?.status));
 const isDocumentLocked = computed(() => ['archived', 'closed', 'voided'].includes(selected.value?.status));
 const myOfficeIds = computed(() => (props.session.user?.office_memberships ?? []).map((membership) => Number(membership.office_id)));
+const actingProfile = computed(() => props.session.actingProfile);
 const allOffices = computed(() => flattenOfficeHierarchy(documents.catalogs.offices));
 const latestMovement = computed(() => documents.movements[0] ?? null);
 const currentHolderOfficeIds = computed(() => {
@@ -71,7 +76,16 @@ const currentHolderOfficeIds = computed(() => {
         : [Number(latestMovement.value.sender_office?.id)].filter(Boolean);
 });
 const holderOffices = computed(() => allOffices.value.filter((office) => currentHolderOfficeIds.value.includes(Number(office.id))));
-const myHolderOffices = computed(() => holderOffices.value.filter((office) => myOfficeIds.value.includes(Number(office.id))));
+const legislativeOperatingOfficeIds = computed(() => {
+    if (actingProfile.value?.body?.office_id) return [Number(actingProfile.value.body.office_id)];
+    if (!actingProfile.value?.legislature_member_id) return [];
+
+    return (latestMovement.value?.recipients ?? [])
+        .filter((recipient) => Number(recipient.attention_legislature_member?.id) === Number(actingProfile.value.legislature_member_id))
+        .map((recipient) => Number(recipient.recipient_office?.id));
+});
+const myHolderOffices = computed(() => holderOffices.value.filter((office) => myOfficeIds.value.includes(Number(office.id))
+    || legislativeOperatingOfficeIds.value.includes(Number(office.id))));
 const permissions = computed(() => selected.value?.permissions ?? {});
 const documentOffices = computed(() => permissions.value.manage_documents ? myHolderOffices.value : []);
 const canUseAccess = computed(() => permissions.value.manage_access === true);
@@ -86,6 +100,29 @@ const visibleTabs = computed(() => tabs.filter(([value]) => {
 const hasManyDocumentOffices = computed(() => documentOffices.value.length > 1);
 const hasManyDocumentTypes = computed(() => documents.catalogs.documentTypes.length > 1);
 const canCreateDocuments = computed(() => permissions.value.manage_documents === true && documentOffices.value.length > 0);
+const primaryDocumentRecipientOptions = computed(() => allOffices.value
+    .filter((office) => Number(office.id) !== Number(documentForm.issuing_office_id))
+    .map((office) => ({ value: office.id, label: officeOptionLabel(office) })));
+const copyDocumentRecipientOptions = computed(() => allOffices.value
+    .filter((office) => Number(office.id) !== Number(documentForm.issuing_office_id)
+        && !documentForm.primary_office_ids.map(Number).includes(Number(office.id)))
+    .map((office) => ({ value: office.id, label: officeOptionLabel(office) })));
+const selectedCaucusRecipients = computed(() => {
+    const issuer = allOffices.value.find((office) => Number(office.id) === Number(documentForm.issuing_office_id));
+    if (issuer?.code !== 'SGEN') return [];
+
+    return documentForm.primary_office_ids
+        .map((officeId) => documents.legislativeDirectory.bodies.find((body) => Number(body.office_id) === Number(officeId) && body.type === 'caucus'))
+        .filter(Boolean);
+});
+const selectedIssuingOffice = computed(() => allOffices.value.find((office) => Number(office.id) === Number(documentForm.issuing_office_id)) ?? null);
+const preparingLegislativeDraft = computed(() => selectedIssuingOffice.value
+    && documents.legislativeDirectory.bodies.some((body) => Number(body.office_id) === Number(selectedIssuingOffice.value.id))
+    && myOfficeIds.value.includes(Number(selectedIssuingOffice.value.id))
+    && permissions.value.move !== true);
+const issuingLegislativeDocument = computed(() => selectedIssuingOffice.value
+    && documents.legislativeDirectory.bodies.some((body) => Number(body.office_id) === Number(selectedIssuingOffice.value.id))
+    && permissions.value.move === true);
 const officeToneNames = ['jade', 'ocean', 'indigo', 'violet', 'plum', 'ruby', 'terracotta', 'gold', 'olive', 'teal', 'slate', 'cocoa'];
 
 watch(selected, () => {
@@ -96,6 +133,7 @@ watch(selected, () => {
     lifecycleAction.value = null;
     error.value = null;
     assignmentRecipientId.value = null;
+    issueRouteDocumentId.value = null;
 }, { flush: 'post' });
 
 watch([documentOffices, () => documents.catalogs.documentTypes.length], () => {
@@ -103,6 +141,20 @@ watch([documentOffices, () => documents.catalogs.documentTypes.length], () => {
     if (!documentForm.issuing_office_id && documentOffices.value.length === 1) documentForm.issuing_office_id = documentOffices.value[0].id;
     if (!documentForm.document_type_id && documents.catalogs.documentTypes.length === 1) documentForm.document_type_id = documents.catalogs.documentTypes[0].id;
 }, { immediate: true });
+
+watch(() => documentForm.issuing_office_id, (officeId) => {
+    documentForm.primary_office_ids = documentForm.primary_office_ids.filter((id) => Number(id) !== Number(officeId));
+    documentForm.copy_office_ids = documentForm.copy_office_ids.filter((id) => Number(id) !== Number(officeId));
+});
+
+watch(() => [...documentForm.primary_office_ids], (primaryOfficeIds) => {
+    const primaryIds = new Set(primaryOfficeIds.map(Number));
+    documentForm.copy_office_ids = documentForm.copy_office_ids.filter((id) => !primaryIds.has(Number(id)));
+
+    Object.keys(documentForm.primary_recipient_attention).forEach((officeId) => {
+        if (!primaryIds.has(Number(officeId))) delete documentForm.primary_recipient_attention[officeId];
+    });
+});
 
 function formatDate(value, withTime = false) {
     if (!value) return '—';
@@ -154,7 +206,30 @@ function recipientCanAct(movement, recipient) {
         && movement.id === latestMovement.value?.id
         && recipient.recipient_kind === 'primary'
         && !recipientIsTerminal(recipient)
-        && myOfficeIds.value.includes(Number(recipient.recipient_office?.id));
+        && (myOfficeIds.value.includes(Number(recipient.recipient_office?.id)) || canActLegislativelyOnRecipient(recipient));
+}
+
+function canActLegislativelyOnRecipient(recipient) {
+    if (recipient.attention_legislature_member) {
+        return Number(recipient.attention_legislature_member.id) === Number(actingProfile.value?.legislature_member_id)
+            && !actingProfile.value?.body_membership_id;
+    }
+
+    return Number(recipient.recipient_office?.id) === Number(actingProfile.value?.body?.office_id)
+        && Boolean(actingProfile.value?.body_membership_id);
+}
+
+function recipientStatusOptions(recipient) {
+    const all = [
+        { value: 'received', label: 'Recibido' },
+        { value: 'in_process', label: 'En proceso' },
+        { value: 'responded', label: 'Respondido' },
+        { value: 'completed', label: 'Finalizar mi participación' },
+        { value: 'returned', label: 'Devuelto' },
+        { value: 'rejected', label: 'Rechazado' },
+    ];
+    const legislativeOffice = documents.legislativeDirectory.bodies.some((body) => Number(body.office_id) === Number(recipient.recipient_office?.id));
+    return legislativeOffice && !canActLegislativelyOnRecipient(recipient) ? all.slice(0, 2) : all;
 }
 
 function recipientCanBeAssigned(movement, recipient) {
@@ -209,11 +284,11 @@ function canManageDocument(document) {
         && documentOffices.value.some((office) => Number(office.id) === Number(document.issuing_office?.id));
 }
 
-function toggleRecipient(list, id) {
-    const numericId = Number(id);
-    const index = list.indexOf(numericId);
-    if (index >= 0) list.splice(index, 1);
-    else list.push(numericId);
+function caucusAttentionOptions(body) {
+    return [
+        { value: '', label: 'Bancada en general' },
+        ...(body.members ?? []).map((member) => ({ value: member.legislature_member_id, label: member.name })),
+    ];
 }
 
 async function openTab(tab) {
@@ -248,6 +323,7 @@ async function submitDocument() {
             content: documentForm.content || null,
             office_reference: documentForm.office_reference || null,
             primary_office_ids: documentForm.primary_office_ids,
+            primary_recipient_attention: Object.fromEntries(Object.entries(documentForm.primary_recipient_attention).filter(([, value]) => value)),
             copy_office_ids: documentForm.copy_office_ids,
             requires_response: documentForm.requires_response,
         };
@@ -260,12 +336,39 @@ async function submitDocument() {
             title: '',
             content: '',
             primary_office_ids: [],
+            primary_recipient_attention: {},
             copy_office_ids: [],
             requires_response: true,
         });
         queuedFiles.value = [];
         documentComposerMode.value = 'rich_text';
         showDocumentForm.value = false;
+    } catch (exception) {
+        error.value = exception.message;
+    }
+}
+
+function isLegislativeDocument(document) {
+    return documents.legislativeDirectory.bodies.some((body) => Number(body.office_id) === Number(document.issuing_office?.id));
+}
+
+function beginIssueAndDerive(document) {
+    issueRouteDocumentId.value = issueRouteDocumentId.value === document.id ? null : document.id;
+    Object.assign(issueRouteForm, { primary_office_ids: [], copy_office_ids: [], requires_response: true });
+    if (issueRouteDocumentId.value && isLegislativeDocument(document)) {
+        const secretariat = allOffices.value.find((office) => office.code === 'SGEN');
+        if (secretariat) issueRouteForm.primary_office_ids = [secretariat.id];
+    }
+}
+
+async function submitIssueAndDerive(document) {
+    try {
+        await documents.issueAndDeriveDocument(document.id, {
+            primary_office_ids: issueRouteForm.primary_office_ids,
+            copy_office_ids: issueRouteForm.copy_office_ids,
+            requires_response: issueRouteForm.requires_response,
+        });
+        issueRouteDocumentId.value = null;
     } catch (exception) {
         error.value = exception.message;
     }
@@ -373,6 +476,15 @@ async function grantAccess() {
         error.value = exception.message;
     }
 }
+
+async function referToPlenary() {
+    if (!window.confirm('El expediente quedará en la lista de espera del Pleno y Secretaría General conservará su custodia. ¿Continuar?')) return;
+    try {
+        await documents.referSelectedToPlenary();
+    } catch (exception) {
+        error.value = exception.message;
+    }
+}
 </script>
 
 <template>
@@ -387,7 +499,7 @@ async function grantAccess() {
                 <span class="badge badge--large" :class="`badge--${selected.status}`">{{ selected.status_label }}</span>
             </div>
             <div class="detail-meta">
-                <span>{{ selected.expedient_type?.name }}</span><span>•</span><span>Recepción: {{ formatDate(selected.received_on) }}</span><span>•</span><span>{{ officeLabel(selected.responsible_office) }}</span>
+                <span>{{ selected.expedient_type?.name }}</span><span>•</span><span>Registro: {{ formatDate(selected.received_on) }}</span><span>•</span><span>{{ officeLabel(selected.responsible_office) }}</span>
             </div>
         </header>
 
@@ -408,8 +520,8 @@ async function grantAccess() {
                     <article class="summary-card"><span>Confidencialidad</span><strong>{{ selected.confidentiality_level?.name || 'Interno' }}</strong><small>{{ selected.confidentiality_level?.requires_explicit_access ? 'Acceso restringido' : 'Acceso institucional' }}</small></article>
                     <article class="summary-card"><span>Registrado por</span><strong>{{ selected.created_by?.name || '—' }}</strong><small>{{ formatDate(selected.created_at, true) }}</small></article>
                 </div>
-                <article class="narrative-card"><span>Resumen</span><p>{{ selected.summary }}</p></article>
-                <article v-if="selected.observations" class="narrative-card"><span>Instrucción general</span><p>{{ selected.observations }}</p></article>
+                <article class="narrative-card"><span>Nota</span><p>{{ selected.summary || 'Sin nota registrada.' }}</p></article>
+                <div v-if="permissions.refer_to_plenary" class="entry-mode-notice"><div><strong>Tratamiento por el Pleno</strong><p>Secretaría General conserva la custodia. Los asambleístas vigentes podrán consultar el expediente completo en la lista de espera.</p></div><button class="button button--primary" :disabled="documents.busy['plenary-referral-save']" type="button" @click="referToPlenary">Derivar al Pleno</button></div>
             </section>
 
             <section v-if="activeTab === 'movements'" class="tab-section">
@@ -423,14 +535,13 @@ async function grantAccess() {
                         <div class="timeline__marker"></div>
                         <article class="movement-card">
                             <header><div><span class="office-route-key">{{ officeCode(movement.sender_office) }}</span><strong>Remite: {{ officeLabel(movement.sender_office) }}</strong></div><span>{{ formatDate(movement.sent_at, true) }}</span></header>
-                            <p>{{ movement.instruction || 'Sin instrucción registrada.' }}</p>
                             <small v-if="movement.due_on">Plazo: {{ formatDate(movement.due_on) }} · {{ movement.priority_label || 'Normal' }}</small>
                             <small>{{ movement.requires_response_label }}</small>
                             <small v-if="movement.documents?.length">Documento que acompaña la derivación: {{ movement.documents.map((document) => document.title).join(', ') }}</small>
                             <div class="recipient-list">
                                 <div v-for="recipient in movement.recipients" :key="recipient.id" class="recipient-row">
-                                    <div><span class="recipient-kind">{{ recipient.recipient_kind_label }}</span><strong>{{ officeLabel(recipient.recipient_office) }}</strong><small v-if="recipient.action_note">{{ recipient.action_note }}</small><small v-for="assignment in (recipient.internal_assignments ?? []).filter((item) => item.is_current)" :key="assignment.id" class="internal-assignment-label">{{ assignment.assignment_role_label }}: {{ assignment.name }} · asignado por {{ assignment.assigned_by?.name || 'SIGAL' }}</small><button v-if="recipientCanBeAssigned(movement, recipient)" class="text-button" type="button" @click="openInternalAssignment(recipient)">Distribuir internamente</button></div>
-                                    <div class="recipient-row__status"><span class="badge" :class="`badge--recipient-${recipient.status}`">{{ recipient.status_label }}</span><SearchableSelect v-if="recipientCanAct(movement, recipient) && !recipientIsTerminal(recipient) && !isDocumentLocked" :model-value="recipient.status" :disabled="documents.busy[`recipient-${recipient.id}`]" :options="[{ value: 'received', label: 'Recibido' }, { value: 'in_process', label: 'En proceso' }, { value: 'responded', label: 'Respondido' }, { value: 'completed', label: 'Finalizar mi participación' }, { value: 'returned', label: 'Devuelto' }, { value: 'rejected', label: 'Rechazado' }]" @update:model-value="updateRecipient(recipient, $event)" /><select v-show="false" :value="recipient.status" disabled><option value="received">Recibido</option><option value="in_process">En proceso</option><option value="responded">Respondido</option><option value="completed">Finalizar mi participación</option><option value="returned">Devuelto</option><option value="rejected">Rechazado</option></select></div>
+                                    <div><span class="recipient-kind">{{ recipient.recipient_kind_label }}</span><strong>{{ officeLabel(recipient.recipient_office) }}</strong><small v-if="recipient.attention_legislature_member">Atención personal: {{ recipient.attention_legislature_member.name }}</small><small v-if="recipient.action_note">{{ recipient.action_note }}</small><small v-for="assignment in (recipient.internal_assignments ?? []).filter((item) => item.is_current)" :key="assignment.id" class="internal-assignment-label">{{ assignment.assignment_role_label }}: {{ assignment.name }} · asignado por {{ assignment.assigned_by?.name || 'SIGAL' }}</small><button v-if="recipientCanBeAssigned(movement, recipient)" class="text-button" type="button" @click="openInternalAssignment(recipient)">Distribuir internamente</button></div>
+                                    <div class="recipient-row__status"><span class="badge" :class="`badge--recipient-${recipient.status}`">{{ recipient.status_label }}</span><SearchableSelect v-if="recipientCanAct(movement, recipient) && !recipientIsTerminal(recipient) && !isDocumentLocked" :model-value="recipient.status" :disabled="documents.busy[`recipient-${recipient.id}`]" :options="recipientStatusOptions(recipient)" @update:model-value="updateRecipient(recipient, $event)" /></div>
                                 </div>
                             </div>
                             <form v-if="assignmentRecipientId && movement.recipients.some((recipient) => recipient.id === assignmentRecipientId) && documents.internalAssignment" class="internal-assignment-form" @submit.prevent="saveInternalAssignment">
@@ -460,26 +571,32 @@ async function grantAccess() {
                     <label v-if="documentComposerMode === 'rich_text'" class="field field--full"><span>Contenido del informe <small>Opcional</small></span><RichTextEditor v-model="documentForm.content" placeholder="Redacte el informe, nota o contenido del documento…" /></label>
                     <div class="file-dropzone form-grid__full"><div><strong>Adjuntar documentación</strong><p>Puede seleccionar imágenes, videos, audios, PDFs, hojas de cálculo o cualquier otro archivo permitido por el servidor.</p></div><label class="button button--ghost">Seleccionar archivos<input type="file" multiple @change="queueFiles"></label></div>
                     <div v-if="queuedFiles.length" class="queued-files form-grid__full"><div v-for="(file, index) in queuedFiles" :key="`${file.name}-${file.lastModified}-${index}`"><span>{{ file.name }}</span><small>{{ formatSize(file.size) }}</small><button type="button" aria-label="Quitar archivo" @click="removeQueuedFile(index)">×</button></div></div>
-                    <div class="recipient-picker form-grid__full"><span>Destinatarios principales <small>Obligatorio</small></span><div><label v-for="office in allOffices.filter((item) => Number(item.id) !== Number(documentForm.issuing_office_id))" :key="office.id" class="check-option"><input type="checkbox" :checked="documentForm.primary_office_ids.includes(office.id)" @change="toggleRecipient(documentForm.primary_office_ids, office.id)"><span>{{ officeOptionLabel(office) }}</span></label></div></div>
-                    <div class="recipient-picker form-grid__full"><span>En copia (opcional)</span><div><label v-for="office in allOffices.filter((item) => Number(item.id) !== Number(documentForm.issuing_office_id) && !documentForm.primary_office_ids.includes(item.id))" :key="office.id" class="check-option"><input type="checkbox" :checked="documentForm.copy_office_ids.includes(office.id)" @change="toggleRecipient(documentForm.copy_office_ids, office.id)"><span>{{ officeOptionLabel(office) }}</span></label></div></div>
-                    <div class="entry-mode-notice form-grid__full"><label class="check-option"><input v-model="documentForm.requires_response" type="checkbox"><span><strong>Exige respuesta</strong><small>Está activado por defecto. Si lo desactiva, los destinatarios recibirán el documento solo para conocimiento y su participación quedará finalizada automáticamente.</small></span></label></div>
-                    <p class="form-note form-grid__full">Al guardar, el documento quedará vinculado a la derivación. Se conservarán la prioridad <strong>{{ selected.priority_label || 'Normal' }}</strong>, el plazo <strong>{{ formatDate(selected.due_on) }}</strong> y la instrucción general ya registrada.</p>
+                    <template v-if="!preparingLegislativeDraft">
+                        <label class="field form-grid__full"><span>Destinatarios principales <small>Obligatorio</small></span><SearchableMultiSelect v-model="documentForm.primary_office_ids" :options="primaryDocumentRecipientOptions" placeholder="Buscar y seleccionar oficinas destinatarias" /></label>
+                        <div v-if="selectedCaucusRecipients.length" class="action-form form-grid__full"><div class="form-grid__full"><p class="eyebrow">Distribución legislativa</p><h4>Atención dentro de la bancada</h4><p class="muted">Déjelo en “Bancada en general” para que lo vean todos sus miembros; elija un asambleísta cuando la correspondencia sea personal.</p></div><label v-for="body in selectedCaucusRecipients" :key="body.id" class="field"><span>{{ body.name }}</span><SearchableSelect v-model="documentForm.primary_recipient_attention[body.office_id]" :options="caucusAttentionOptions(body)" /></label></div>
+                        <label class="field form-grid__full"><span>En copia <small>Opcional</small></span><SearchableMultiSelect v-model="documentForm.copy_office_ids" :options="copyDocumentRecipientOptions" placeholder="Buscar y seleccionar oficinas en copia" /></label>
+                        <div class="entry-mode-notice form-grid__full"><label class="check-option"><input v-model="documentForm.requires_response" type="checkbox"><span><strong>Exige respuesta</strong><small>Está activado por defecto. Si lo desactiva, los destinatarios recibirán el documento solo para conocimiento y su participación quedará finalizada automáticamente.</small></span></label></div>
+                        <p class="form-note form-grid__full">Al guardar, el documento quedará vinculado a la derivación. Se conservarán la prioridad <strong>{{ selected.priority_label || 'Normal' }}</strong> y el plazo <strong>{{ formatDate(selected.due_on) }}</strong>.</p>
+                    </template>
+                    <div v-else class="entry-mode-notice form-grid__full"><p><strong>Borrador para revisión:</strong> puede redactar y adjuntar antecedentes. Solo la autoridad vigente podrá emitirlo y remitirlo a Secretaría General.</p></div>
                     <p class="form-note form-grid__full">Los anexos quedan asociados al borrador. Una vez emitido, el documento y sus anexos no pueden modificarse.</p>
-                    <button class="button button--primary" :disabled="documents.busy.document || !documentForm.primary_office_ids.length" type="submit">{{ documents.busy.document ? 'Guardando…' : 'Guardar y derivar' }}</button>
+                    <button class="button button--primary" :disabled="documents.busy.document || (!preparingLegislativeDraft && !documentForm.primary_office_ids.length)" type="submit">{{ documents.busy.document ? 'Guardando…' : preparingLegislativeDraft ? 'Guardar borrador para revisión' : issuingLegislativeDocument ? 'Emitir y derivar' : 'Guardar y derivar' }}</button>
                 </form>
 
                 <div v-if="!documents.documents.length" class="empty-state">No hay documentos asociados a este expediente.</div>
                 <article v-for="document in documents.documents" :key="document.id" class="document-card">
                     <header class="document-card__header"><div><p class="eyebrow">{{ document.is_initial ? 'Documento de ingreso' : `${document.document_type?.name} · v${document.version_number}` }} <span v-if="document.is_uat" class="uat-badge">UAT</span></p><h4>{{ document.office_reference || document.formatted_number || (document.is_initial ? 'Antecedente inicial' : 'Borrador sin numeración') }}</h4><small v-if="document.office_reference && document.formatted_number">Código SIGAL: {{ document.formatted_number }}</small><small v-if="document.is_initial">Origen: {{ document.origin_number }} · {{ formatDate(document.origin_date) }}</small></div><div class="document-card__signals"><div v-if="document.movement_routes?.length" class="document-route-list"><span v-for="route in document.movement_routes" :key="route.id" class="document-route" :class="officeToneClass(route.sender_office)">{{ movementRouteLabel(route) }}</span></div><span v-else class="document-route document-route--unrouted">{{ document.is_initial ? 'Documento de ingreso' : 'Sin derivación vinculada' }}</span><span class="badge" :class="`badge--document-${document.status}`">{{ document.is_initial ? 'Ingreso registrado' : document.status_label }}</span></div></header>
                     <template v-if="editingDocumentId === document.id"><label class="field"><span>Número o CITE de la oficina <small>Opcional</small></span><input v-model.trim="editDocumentForm.office_reference" maxlength="255" class="text-uppercase" placeholder="Ej.: SIS 003/2026"></label><label class="field"><span>Título</span><input v-model="editDocumentForm.title" maxlength="255"></label><label class="field"><span>Contenido del informe</span><RichTextEditor v-model="editDocumentForm.content" /></label><div class="inline-actions"><button class="button button--primary" type="button" @click="saveDocument(document)">Guardar cambios</button><button class="button button--ghost" type="button" @click="editingDocumentId = null">Cancelar</button></div></template>
-                    <template v-else><h4 class="document-card__title">{{ document.title }}</h4><div v-if="document.content" class="document-card__content document-card__content--rich" v-html="document.content"></div></template>
+                    <template v-else><p v-if="document.legislative_sender?.from?.length" class="form-note"><strong>DE:</strong> {{ document.legislative_sender.from.map((sender) => `${sender.name} (${sender.role_label})`).join(', ') }}</p><h4 class="document-card__title">{{ document.title }}</h4><div v-if="document.content" class="document-card__content document-card__content--rich" v-html="document.content"></div></template>
                     <div v-if="document.attachments?.length" class="attachment-list"><span>Adjuntos</span><div v-for="attachment in document.attachments" :key="attachment.id"><small>{{ attachment.original_name }} · {{ formatSize(attachment.size_bytes) }}</small><button class="text-button" type="button" :disabled="documents.busy[`download-${attachment.id}`]" @click="documents.downloadAttachment(document.id, attachment)">{{ documents.busy[`download-${attachment.id}`] ? 'Descargando…' : 'Descargar' }}</button></div></div>
                     <footer v-if="!isDocumentLocked && canManageDocument(document)" class="document-card__actions">
                         <button v-if="document.status === 'draft'" class="text-button" type="button" @click="startEditingDocument(document)">Editar</button>
-                        <button v-if="document.status === 'draft'" class="text-button" type="button" @click="issueDocument(document)">Emitir</button>
+                        <button v-if="document.status === 'draft' && !isLegislativeDocument(document)" class="text-button" type="button" @click="issueDocument(document)">Emitir</button>
+                        <button v-if="document.status === 'draft' && isLegislativeDocument(document) && permissions.move" class="text-button" type="button" @click="beginIssueAndDerive(document)">{{ issueRouteDocumentId === document.id ? 'Cancelar salida' : 'Emitir y derivar' }}</button>
                         <label v-if="document.status === 'draft'" class="file-button">Adjuntar archivos<input type="file" multiple @change="attachFiles(document, $event)"></label>
                         <button v-if="document.status === 'issued'" class="text-button" type="button" @click="correctionForId = correctionForId === document.id ? null : document.id">Crear corrección</button>
                     </footer>
+                    <form v-if="issueRouteDocumentId === document.id" class="action-form" @submit.prevent="submitIssueAndDerive(document)"><div class="form-grid__full"><p class="eyebrow">Salida legislativa</p><h4>Emitir documento y remitir a Secretaría General</h4><p class="muted">La emisión vuelve inmutable el documento y la derivación queda vinculada en la misma transacción.</p></div><div class="field field--static"><span>Destino obligatorio</span><strong>{{ officeLabel(allOffices.find((office) => issueRouteForm.primary_office_ids.includes(office.id))) }}</strong></div><div class="entry-mode-notice"><label class="check-option"><input v-model="issueRouteForm.requires_response" type="checkbox"><span><strong>Exige respuesta</strong><small>Desactive únicamente si la salida es para conocimiento.</small></span></label></div><button class="button button--primary" :disabled="!issueRouteForm.primary_office_ids.length || documents.busy[`issue-and-derive-${document.id}`]" type="submit">Confirmar emisión y salida</button></form>
                     <div v-if="correctionForId === document.id" class="correction-box"><p>Se creará un nuevo borrador que conservará la serie y aumentará la versión.</p><button class="button button--secondary" type="button" @click="createCorrection(document)">Crear borrador de corrección</button></div>
                 </article>
             </section>

@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\Warehouse;
 
+use App\Domain\Legislatures\Services\LegislativeAuthorizationService;
 use App\Models\MaterialRequest;
 use App\Policies\MaterialRequestPolicy;
 use Illuminate\Http\Request;
@@ -46,6 +47,8 @@ class MaterialRequestResource extends JsonResource
             ]),
             'requesting_user' => $this->whenLoaded('requestingUser', fn () => ['id' => $this->requestingUser->id, 'name' => $this->requestingUser->name]),
             'requesting_office' => $this->whenLoaded('requestingOffice', fn () => ['id' => $this->requestingOffice->id, 'code' => $this->requestingOffice->code, 'name' => $this->requestingOffice->name]),
+            'legislative_approval_required' => app(LegislativeAuthorizationService::class)
+                ->isCommissionOffice($this->requesting_office_id),
             'items' => $currentItems->map(fn ($item) => [
                 'id' => $item->id,
                 'warehouse_item_id' => $item->warehouse_item_id,

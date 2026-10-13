@@ -23,6 +23,7 @@ class StoreOfficeRequest extends FormRequest
             'status' => ['required', Rule::enum(OfficeStatus::class)],
             'supports_staffing' => ['required', 'boolean'],
             'requires_manager' => ['required', 'boolean'],
+            'receives_external_documents' => ['sometimes', 'boolean'],
         ];
     }
 }

@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 #[Fillable([
     'actor_id',
+    'acting_legislature_member_id',
+    'acting_body_membership_id',
     'event',
     'subject_type',
     'subject_id',
@@ -37,5 +39,15 @@ class ActivityLog extends Model
     public function actor(): BelongsTo
     {
         return $this->belongsTo(User::class, 'actor_id');
+    }
+
+    public function actingLegislatureMember(): BelongsTo
+    {
+        return $this->belongsTo(LegislatureMember::class, 'acting_legislature_member_id');
+    }
+
+    public function actingBodyMembership(): BelongsTo
+    {
+        return $this->belongsTo(LegislativeBodyMembership::class, 'acting_body_membership_id');
     }
 }

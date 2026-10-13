@@ -3,7 +3,9 @@
 namespace App\Policies;
 
 use App\Domain\Authorization\Enums\PermissionCode;
+use App\Domain\DocumentManagement\Enums\DocumentStatus;
 use App\Domain\DocumentManagement\Services\OfficeDocumentAccessService;
+use App\Domain\Legislatures\Services\LegislativeAuthorizationService;
 use App\Domain\Warehouse\Enums\MaterialRequestStage;
 use App\Domain\Warehouse\Enums\MaterialRequestStatus;
 use App\Models\Expedient;
@@ -12,6 +14,8 @@ use App\Models\User;
 
 class MaterialRequestPolicy
 {
+    public function __construct(private readonly LegislativeAuthorizationService $legislativeAuthorization) {}
+
     public function viewAny(User $user): bool
     {
         return $user->hasPermission(PermissionCode::WarehouseView);
@@ -24,13 +28,25 @@ class MaterialRequestPolicy
         }
 
         return (int) $materialRequest->requesting_user_id === (int) $user->id
+            || $this->canViewCommissionRequest($user, $materialRequest)
             || Expedient::query()->whereKey($materialRequest->expedient_id)->visibleTo($user)->exists();
     }
 
     public function create(User $user): bool
     {
-        return $user->hasPermission(PermissionCode::WarehouseRequest)
-            && $user->currentOfficeMemberships()->exists();
+        if (! $user->hasPermission(PermissionCode::WarehouseRequest)) {
+            return false;
+        }
+
+        $officeId = (int) request()->input('requesting_office_id');
+
+        return $user->currentOfficeMemberships()->exists()
+            || ($officeId > 0 && $this->legislativeAuthorization->isCommissionOffice($officeId)
+                && $this->legislativeAuthorization->canActForOffice(
+                    $user,
+                    $officeId,
+                    $this->actingBodyMembershipId(),
+                ));
     }
 
     public function update(User $user, MaterialRequest $materialRequest): bool
@@ -42,7 +58,24 @@ class MaterialRequestPolicy
 
     public function submit(User $user, MaterialRequest $materialRequest): bool
     {
-        return $this->update($user, $materialRequest);
+        if (! $user->hasPermission(PermissionCode::WarehouseRequest)) {
+            return false;
+        }
+
+        if (! $this->legislativeAuthorization->isCommissionOffice($materialRequest->requesting_office_id)) {
+            return $this->update($user, $materialRequest);
+        }
+
+        $statusAllowsSubmission = $materialRequest->status === MaterialRequestStatus::Draft
+            || ($materialRequest->status === MaterialRequestStatus::Observed
+                && $materialRequest->requestDocument?->status === DocumentStatus::Draft);
+
+        return $statusAllowsSubmission
+            && $this->legislativeAuthorization->canActForOffice(
+                $user,
+                $materialRequest->requesting_office_id,
+                $this->actingBodyMembershipId(),
+            );
     }
 
     public function revise(User $user, MaterialRequest $materialRequest): bool
@@ -84,9 +117,20 @@ class MaterialRequestPolicy
 
     public function authorizeReceiver(User $user, MaterialRequest $materialRequest): bool
     {
-        return $user->hasPermission(PermissionCode::WarehouseApprove)
-            && $materialRequest->status === MaterialRequestStatus::PendingReceipt
-            && $user->isCurrentManagerOfOffice($materialRequest->requesting_office_id);
+        if (! $user->hasPermission(PermissionCode::WarehouseApprove)
+            || $materialRequest->status !== MaterialRequestStatus::PendingReceipt) {
+            return false;
+        }
+
+        if ($this->legislativeAuthorization->isCommissionOffice($materialRequest->requesting_office_id)) {
+            return $this->legislativeAuthorization->canActForOffice(
+                $user,
+                $materialRequest->requesting_office_id,
+                $this->actingBodyMembershipId(),
+            );
+        }
+
+        return $user->isCurrentManagerOfOffice($materialRequest->requesting_office_id);
     }
 
     public function confirmReceipt(User $user, MaterialRequest $materialRequest): bool
@@ -132,5 +176,25 @@ class MaterialRequestPolicy
 
         return $membershipExists
             && app(OfficeDocumentAccessService::class)->canOperateExpedient($user, $materialRequest->expedient);
+    }
+
+    private function canViewCommissionRequest(User $user, MaterialRequest $materialRequest): bool
+    {
+        if (! $this->legislativeAuthorization->isCommissionOffice($materialRequest->requesting_office_id)) {
+            return false;
+        }
+
+        return $user->currentOfficeMemberships()
+            ->where('office_id', $materialRequest->requesting_office_id)
+            ->exists()
+            || $this->legislativeAuthorization->isCurrentBodyMemberForOffice(
+                $user,
+                $materialRequest->requesting_office_id,
+            );
+    }
+
+    private function actingBodyMembershipId(): ?int
+    {
+        return request()->attributes->getInt('acting_body_membership_id') ?: null;
     }
 }

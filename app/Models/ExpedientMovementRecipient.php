@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable([
     'expedient_movement_id',
     'recipient_office_id',
+    'attention_legislature_member_id',
     'recipient_kind',
     'status',
     'action_note',
@@ -43,6 +44,11 @@ class ExpedientMovementRecipient extends Model
     public function recipientOffice(): BelongsTo
     {
         return $this->belongsTo(Office::class, 'recipient_office_id');
+    }
+
+    public function attentionLegislatureMember(): BelongsTo
+    {
+        return $this->belongsTo(LegislatureMember::class, 'attention_legislature_member_id');
     }
 
     /** @return BelongsTo<User, $this> */

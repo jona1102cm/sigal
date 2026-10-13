@@ -33,8 +33,10 @@ test('a superadministrator can manage the office tree and historical memberships
         'status' => 'active',
         'supports_staffing' => true,
         'requires_manager' => true,
+        'receives_external_documents' => true,
     ])->assertCreated()
-        ->assertJsonPath('data.code', 'TESTROOT');
+        ->assertJsonPath('data.code', 'TESTROOT')
+        ->assertJsonPath('data.receives_external_documents', true);
 
     $root = Office::query()->where('code', 'TESTROOT')->firstOrFail();
 

@@ -11,7 +11,9 @@ class ExpedientTypePolicy
 {
     public function viewAny(User $user): bool
     {
-        return $user->hasPermission(PermissionCode::ExpedientsView);
+        return $user->hasPermission(PermissionCode::ExpedientsView)
+            || $user->hasPermission(PermissionCode::ExpedientsCreate)
+            || $user->hasPermission(PermissionCode::ExpedientsProcess);
     }
 
     public function create(User $user): bool

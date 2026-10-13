@@ -9,7 +9,7 @@ const error = ref(null);
 const mode = ref('create');
 const membershipFormOpen = ref(false);
 
-const officeForm = reactive({ parent_id: '', code: '', name: '', status: 'active', supports_staffing: true, requires_manager: true });
+const officeForm = reactive({ parent_id: '', code: '', name: '', status: 'active', supports_staffing: true, requires_manager: true, receives_external_documents: false });
 const membershipForm = reactive({ user_id: '', membership_role: 'official', position_title: '' });
 
 const flattenedOffices = computed(() => {
@@ -66,11 +66,18 @@ function formatDate(value) {
     return value ? new Intl.DateTimeFormat('es-BO', { dateStyle: 'medium' }).format(new Date(value)) : '—';
 }
 
+function normalizeStaffingProfile() {
+    if (officeForm.supports_staffing) return;
+
+    officeForm.requires_manager = false;
+    officeForm.receives_external_documents = false;
+}
+
 function resetForm() {
     mode.value = 'create';
     error.value = null;
     documents.selectedOffice = null;
-    Object.assign(officeForm, { parent_id: '', code: '', name: '', status: 'active', supports_staffing: true, requires_manager: true });
+    Object.assign(officeForm, { parent_id: '', code: '', name: '', status: 'active', supports_staffing: true, requires_manager: true, receives_external_documents: false });
     Object.assign(membershipForm, { user_id: '', membership_role: 'official', position_title: '' });
     membershipFormOpen.value = false;
 }
@@ -85,6 +92,7 @@ async function selectOffice(office) {
         status: office.status,
         supports_staffing: office.supports_staffing,
         requires_manager: office.requires_manager,
+        receives_external_documents: office.receives_external_documents === true,
     });
     try {
         await documents.selectOffice(office);
@@ -102,6 +110,7 @@ async function saveOffice() {
         status: officeForm.status,
         supports_staffing: officeForm.supports_staffing,
         requires_manager: officeForm.requires_manager,
+        receives_external_documents: officeForm.receives_external_documents,
     };
     try {
         if (mode.value === 'edit') {
@@ -190,8 +199,9 @@ onMounted(async () => {
                     <label class="field form-grid__full"><span>Dependencia jerárquica</span><SearchableSelect v-model="officeForm.parent_id" :options="[{ value: '', label: 'Sin dependencia - raiz institucional' }, ...activeParentOptions.map((office) => ({ value: office.id, label: `${'— '.repeat(office.depth)}${officeLabel(office)}` }))]" /><select v-show="false" v-model="officeForm.parent_id" disabled><option value="">Sin dependencia — raíz institucional</option><option v-for="office in activeParentOptions" :key="office.id" :value="office.id">{{ '— '.repeat(office.depth) }}{{ officeLabel(office) }}</option></select><small>La oficina dependerá de la unidad seleccionada en el organigrama.</small></label>
                     <label class="field"><span>Código interno</span><input v-model="officeForm.code" maxlength="30" pattern="[A-Za-z0-9_-]+" placeholder="Ej.: DLEG" required></label>
                     <label class="field"><span>Nombre de la oficina</span><input v-model.trim="officeForm.name" maxlength="255" placeholder="Ej.: Dirección Legislativa" required></label>
-                    <label class="check-option form-grid__full"><input v-model="officeForm.supports_staffing" type="checkbox" @change="!officeForm.supports_staffing && (officeForm.requires_manager = false)"><span><strong>Admite funcionarios</strong><small>Desactive para nodos representativos como Pleno, Directiva, Comisiones o Bancadas.</small></span></label>
+                    <label class="check-option form-grid__full"><input v-model="officeForm.supports_staffing" type="checkbox" @change="normalizeStaffingProfile"><span><strong>Admite funcionarios</strong><small>Desactive para nodos representativos como Pleno, Directiva, Comisiones o Bancadas.</small></span></label>
                     <label v-if="officeForm.supports_staffing" class="check-option form-grid__full"><input v-model="officeForm.requires_manager" type="checkbox"><span><strong>Requiere responsable de oficina</strong><small>Asesores del Pleno y Asesores de Presidencia tienen personal, pero no responsable propio.</small></span></label>
+                    <label v-if="officeForm.supports_staffing" class="check-option form-grid__full"><input v-model="officeForm.receives_external_documents" type="checkbox"><span><strong>Puede registrar documentación externa</strong><small>Habilita la procedencia externa para los funcionarios de esta oficina. El cambio queda auditado y el servidor vuelve a validarlo al guardar.</small></span></label>
                     <label v-if="mode === 'create'" class="field form-grid__full"><span>Estado inicial</span><SearchableSelect v-model="officeForm.status" :options="[{ value: 'active', label: 'Activa' }, { value: 'inactive', label: 'Inactiva' }]" /><select v-show="false" v-model="officeForm.status" disabled><option value="active">Activa</option><option value="inactive">Inactiva</option></select></label>
                     <footer class="form-grid__full inline-actions"><button class="button button--primary" :disabled="documents.busy['office-save']" type="submit">{{ documents.busy['office-save'] ? 'Guardando…' : mode === 'edit' ? 'Guardar cambios' : 'Crear oficina' }}</button><button v-if="mode === 'edit'" class="button button--ghost" type="button" @click="resetForm">Cancelar</button><button v-if="mode === 'edit' && documents.selectedOffice.status === 'active'" class="button button--danger" :disabled="documents.busy[`office-${documents.selectedOffice.id}`]" type="button" @click="changeStatus('inactivate')">Inactivar</button><button v-if="mode === 'edit' && documents.selectedOffice.status === 'inactive'" class="button button--secondary" :disabled="documents.busy[`office-${documents.selectedOffice.id}`]" type="button" @click="changeStatus('activate')">Activar</button></footer>
                 </form>

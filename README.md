@@ -8,7 +8,8 @@ SIGAL es el Sistema Integral de Gestión de la Asamblea Legislativa Departamenta
 - Usuarios, roles históricos y recuperación administrativa de acceso.
 - Organigrama jerárquico, oficinas, cargos, responsables y membresías históricas.
 - Kardex de funcionarios, contratos, respaldos, fotografía e importación masiva desde Excel.
-- Legislaturas con una sola activa y composición histórica de la Directiva.
+- Legislaturas con una sola activa, Directiva institucional, mandatos de asambleístas, bancadas, comisiones, cargos y delegaciones históricas.
+- Perfiles legislativos simultáneos, canal obligatorio por Secretaría General y lista de espera del Pleno con consulta completa para asambleístas vigentes.
 - Expedientes, documentos, adjuntos, derivaciones múltiples, prioridades, bandejas y ciclo de vida.
 - Auditoría de operaciones sensibles con actor, fecha, IP, navegador y cambios realizados.
 - Reinicio operativo controlado para limpiar datos de prueba sin destruir la configuración institucional básica.

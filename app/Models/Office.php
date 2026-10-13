@@ -71,6 +71,11 @@ class Office extends Model
         return $this->hasOne(OfficeDocumentAccessSetting::class);
     }
 
+    public function legislativeBodies(): HasMany
+    {
+        return $this->hasMany(LegislativeBody::class);
+    }
+
     /** @param Builder<Office> $query */
     public function scopeActive(Builder $query): void
     {

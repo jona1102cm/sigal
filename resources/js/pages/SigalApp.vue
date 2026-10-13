@@ -13,6 +13,8 @@ import HumanResourcesWorkspace from '../components/HumanResourcesWorkspace.vue';
 import LoginScreen from '../components/LoginScreen.vue';
 import OfficeDocumentAccessWorkspace from '../components/OfficeDocumentAccessWorkspace.vue';
 import PasswordChangeScreen from '../components/PasswordChangeScreen.vue';
+import PlenaryWaitingWorkspace from '../components/PlenaryWaitingWorkspace.vue';
+import SearchableSelect from '../components/SearchableSelect.vue';
 import WarehouseWorkspace from '../components/WarehouseWorkspace.vue';
 import { useDocumentManagementStore } from '../stores/document-management';
 import { useHumanResourcesStore } from '../stores/human-resources';
@@ -43,7 +45,7 @@ async function loadWorkspace() {
     try {
         // Carga en paralelo solo los módulos permitidos para reducir tiempo de arranque y exposición.
         const loads = [];
-        if (session.canUseDocumentManagement) loads.push(documents.loadCatalogs(), documents.loadExpedients());
+        if (session.canUseDocumentManagement) loads.push(documents.loadCatalogs(), documents.loadExpedients(), documents.loadLegislativeDirectory());
         if (session.canManageHumanResources) loads.push(humanResources.loadBootstrap(), humanResources.loadEmployees());
         if (session.canUseWarehouse) loads.push(warehouse.loadBootstrap(), warehouse.loadRequests());
         await Promise.all(loads);
@@ -94,11 +96,12 @@ function normalizeAuthorizedView() {
     const dashboardWithoutAccess = view.value === 'dashboard' && !session.canViewDashboard;
     const documentViewWithoutAccess = view.value === 'expedients' && !session.canUseDocumentManagement;
     const officeSettingsWithoutAccess = view.value === 'office-access' && !session.canConfigureOfficeAccess;
+    const legislativeViewWithoutAccess = view.value === 'plenary-waiting' && !session.canUseLegislativeWorkspace;
     const humanResourcesViewWithoutAccess = view.value === 'human-resources' && !session.canManageHumanResources;
     const warehouseViewWithoutAccess = view.value === 'warehouse' && !session.canUseWarehouse;
     const administrationViewWithoutAccess = view.value === 'administration' && !session.canUseAdministration;
 
-    if (!dashboardWithoutAccess && !documentViewWithoutAccess && !officeSettingsWithoutAccess && !humanResourcesViewWithoutAccess && !warehouseViewWithoutAccess && !administrationViewWithoutAccess) return;
+    if (!dashboardWithoutAccess && !documentViewWithoutAccess && !officeSettingsWithoutAccess && !legislativeViewWithoutAccess && !humanResourcesViewWithoutAccess && !warehouseViewWithoutAccess && !administrationViewWithoutAccess) return;
 
     if (session.canViewDashboard) view.value = 'dashboard';
     else if (session.canUseDocumentManagement) view.value = 'expedients';
@@ -147,6 +150,24 @@ async function refreshSecurityContext() {
     }
 }
 
+async function changeActingProfile(profileId) {
+    const profile = session.legislativeProfiles.find((item) => String(item.body_membership_id || `member-${item.legislature_member_id}`) === String(profileId));
+    session.selectActingProfile(profile ?? null);
+    try {
+        if (session.canUseDocumentManagement) {
+            await documents.loadExpedients(1, documents.expedientSearch, documents.expedientScope);
+            if (documents.selected) await documents.refreshSelected();
+        }
+        if (view.value === 'plenary-waiting') await documents.loadPlenaryReferrals();
+        if (session.canUseWarehouse) {
+            await Promise.all([warehouse.loadBootstrap(), warehouse.loadRequests()]);
+            if (warehouse.selectedRequest) await warehouse.selectRequest(warehouse.selectedRequest.id);
+        }
+    } catch (error) {
+        bootError.value = error.message;
+    }
+}
+
 function toggleModule(module, targetView) {
     expandedModule.value = expandedModule.value === module ? null : module;
     view.value = targetView;
@@ -157,6 +178,7 @@ const viewContext = computed(() => ({
     dashboard: 'Inicio',
     expedients: 'Gestion documental',
     'office-access': 'Configuración documental',
+    'plenary-waiting': 'Lista de espera del Pleno',
     'human-resources': 'Recursos Humanos',
     warehouse: 'Almacenes',
     administration: 'Administracion',
@@ -190,6 +212,7 @@ onBeforeUnmount(() => {
             <nav class="sidebar__nav" aria-label="Navegacion principal">
                 <button v-if="session.canViewDashboard" type="button" :class="{ 'is-active': view === 'dashboard' }" @click="view = 'dashboard'; mobileMenuOpen = false"><span aria-hidden="true">D</span><span class="sidebar__nav-label">Inicio</span></button>
                 <section v-if="session.canUseDocumentManagement" class="sidebar__module" :class="{ 'is-active': ['expedients', 'office-access'].includes(view) }"><button class="sidebar__module-button" type="button" :aria-expanded="expandedModule === 'document-management'" @click="toggleModule('document-management', 'expedients')"><span aria-hidden="true">GD</span><span class="sidebar__nav-label">Gestion documental</span><em class="sidebar__module-chevron" aria-hidden="true">{{ expandedModule === 'document-management' ? '-' : '+' }}</em></button><template v-if="expandedModule === 'document-management'"><button class="sidebar__subnav" type="button" :class="{ 'is-active': view === 'expedients' }" @click="view = 'expedients'; mobileMenuOpen = false"><span class="sidebar__nav-label">Bandeja de expedientes</span></button><button v-if="session.canConfigureOfficeAccess" class="sidebar__subnav" type="button" :class="{ 'is-active': view === 'office-access' }" @click="view = 'office-access'; mobileMenuOpen = false"><span class="sidebar__nav-label">Acceso de mi oficina</span></button></template></section>
+                <section v-if="session.canUseLegislativeWorkspace" class="sidebar__module" :class="{ 'is-active': view === 'plenary-waiting' }"><button class="sidebar__module-button" type="button" :aria-expanded="expandedModule === 'legislative'" @click="toggleModule('legislative', 'plenary-waiting')"><span aria-hidden="true">GL</span><span class="sidebar__nav-label">Gestión legislativa</span><em class="sidebar__module-chevron" aria-hidden="true">{{ expandedModule === 'legislative' ? '-' : '+' }}</em></button><button v-if="expandedModule === 'legislative'" class="sidebar__subnav" type="button" :class="{ 'is-active': view === 'plenary-waiting' }" @click="view = 'plenary-waiting'; mobileMenuOpen = false"><span class="sidebar__nav-label">Lista de espera del Pleno</span></button></section>
                 <section v-if="session.canManageHumanResources" class="sidebar__module" :class="{ 'is-active': view === 'human-resources' }"><button class="sidebar__module-button" type="button" :aria-expanded="expandedModule === 'human-resources'" @click="toggleModule('human-resources', 'human-resources')"><span aria-hidden="true">RH</span><span class="sidebar__nav-label">Recursos Humanos</span><em class="sidebar__module-chevron" aria-hidden="true">{{ expandedModule === 'human-resources' ? '-' : '+' }}</em></button><button v-if="expandedModule === 'human-resources'" class="sidebar__subnav" type="button" :class="{ 'is-active': view === 'human-resources' }" @click="view = 'human-resources'; mobileMenuOpen = false"><span class="sidebar__nav-label">Funcionarios y contratos</span></button></section>
                 <section v-if="session.canUseWarehouse" class="sidebar__module" :class="{ 'is-active': view === 'warehouse' }"><button class="sidebar__module-button" type="button" :aria-expanded="expandedModule === 'warehouse'" @click="toggleModule('warehouse', 'warehouse')"><span aria-hidden="true">AL</span><span class="sidebar__nav-label">Almacenes</span><em class="sidebar__module-chevron" aria-hidden="true">{{ expandedModule === 'warehouse' ? '-' : '+' }}</em></button><button v-if="expandedModule === 'warehouse'" class="sidebar__subnav" type="button" :class="{ 'is-active': view === 'warehouse' }" @click="view = 'warehouse'; mobileMenuOpen = false"><span class="sidebar__nav-label">Solicitudes y existencias</span></button></section>
                 <section v-if="session.canUseAdministration" class="sidebar__module" :class="{ 'is-active': view === 'administration' }"><button class="sidebar__module-button" type="button" :aria-expanded="expandedModule === 'administration'" @click="toggleModule('administration', 'administration')"><span aria-hidden="true">AD</span><span class="sidebar__nav-label">Administracion</span><em class="sidebar__module-chevron" aria-hidden="true">{{ expandedModule === 'administration' ? '-' : '+' }}</em></button><button v-if="expandedModule === 'administration'" class="sidebar__subnav" type="button" :class="{ 'is-active': view === 'administration' }" @click="view = 'administration'; mobileMenuOpen = false"><span class="sidebar__nav-label">Institucion y catalogos</span></button></section>
@@ -201,7 +224,7 @@ onBeforeUnmount(() => {
             <header class="app-topbar">
                 <button class="mobile-menu-button" type="button" aria-label="Abrir navegacion" @click="mobileMenuOpen = !mobileMenuOpen">=</button>
                 <div class="topbar__context"><span class="topbar__eyebrow">SIGAL</span><span>{{ viewContext }}</span></div>
-                <div class="profile-menu"><div class="profile-menu__initial">{{ session.user.name?.slice(0, 1).toUpperCase() }}</div><div><strong>{{ session.user.name }}</strong><small>{{ session.roleLabel }}</small></div><button class="text-button" type="button" @click="passwordDialogOpen = true">Cambiar contraseña</button><button class="text-button" type="button" @click="logout">Salir</button></div>
+                <div class="profile-menu"><SearchableSelect v-if="session.legislativeProfiles.length" class="acting-profile-select" :model-value="session.actingProfile?.body_membership_id || `member-${session.actingProfile?.legislature_member_id}`" :options="session.legislativeProfiles.map((profile) => ({ value: profile.body_membership_id || `member-${profile.legislature_member_id}`, label: `Actuar como: ${profile.label}` }))" placeholder="Seleccione perfil legislativo" @update:model-value="changeActingProfile" /><div class="profile-menu__initial">{{ session.user.name?.slice(0, 1).toUpperCase() }}</div><div><strong>{{ session.user.name }}</strong><small>{{ session.actingProfile?.label || session.roleLabel }}</small></div><button class="text-button" type="button" @click="passwordDialogOpen = true">Cambiar contraseña</button><button class="text-button" type="button" @click="logout">Salir</button></div>
             </header>
 
             <div v-if="booting" class="workspace-loading"><div class="loading-line"></div><p>Actualizando la informacion institucional...</p></div>
@@ -209,6 +232,7 @@ onBeforeUnmount(() => {
             <DashboardView v-else-if="view === 'dashboard' && session.canViewDashboard" :can-create-expedients="session.canCreateExpedients" :can-create-warehouse-request="session.canCreateWarehouseRequest" @open-expedients="view = 'expedients'" @create-expedient="createDialogOpen = true" @create-warehouse-request="openWarehouseRequest" @select-expedient="openExpedient" />
             <ExpedientsWorkspace v-else-if="view === 'expedients' && session.canUseDocumentManagement" :session="session" @create-expedient="createDialogOpen = true" />
             <OfficeDocumentAccessWorkspace v-else-if="view === 'office-access' && session.canConfigureOfficeAccess" />
+            <PlenaryWaitingWorkspace v-else-if="view === 'plenary-waiting' && session.canUseLegislativeWorkspace" @open-expedient="openExpedient" />
             <HumanResourcesWorkspace v-else-if="view === 'human-resources' && session.canManageHumanResources" />
             <WarehouseWorkspace v-else-if="view === 'warehouse' && session.canUseWarehouse" ref="warehouseWorkspace" :session="session" />
             <AdministrationWorkspace v-else-if="session.canUseAdministration" />

@@ -126,6 +126,11 @@ class Expedient extends Model
         return $this->hasMany(Document::class);
     }
 
+    public function plenaryReferrals(): HasMany
+    {
+        return $this->hasMany(PlenaryReferral::class);
+    }
+
     /** @return Collection<int, int> */
     public function currentHolderOfficeIds(): Collection
     {
@@ -197,8 +202,51 @@ class Expedient extends Model
             requiresManager: true,
         );
 
-        $query->where(function (Builder $visible) use ($user, $membershipOfficeIds, $automaticOfficeIds, $observerVisibilityWindows, $canApproveReopenings, $explicitAccessGrants): void {
+        $legislatureMemberIds = $user->currentLegislatureMemberships()->pluck('id');
+        $legislatureIds = $user->currentLegislatureMemberships()->pluck('legislature_id');
+        $legislativeBodyOfficeIds = LegislativeBodyMembership::query()
+            ->whereIn('legislature_member_id', $legislatureMemberIds)
+            ->where('legislative_body_memberships.effective_from', '<=', $now)
+            ->where(fn ($membership) => $membership
+                ->whereNull('legislative_body_memberships.effective_to')
+                ->orWhere('legislative_body_memberships.effective_to', '>', $now))
+            ->whereHas('body.legislature', fn ($legislature) => $legislature->active())
+            ->join('legislative_bodies', 'legislative_bodies.id', '=', 'legislative_body_memberships.legislative_body_id')
+            ->pluck('legislative_bodies.office_id');
+        $legislativeAdministrativeOfficeIds = LegislativeBody::query()
+            ->whereIn('office_id', $membershipOfficeIds)
+            ->where('effective_from', '<=', $now)
+            ->where(fn ($body) => $body->whereNull('effective_to')->orWhere('effective_to', '>', $now))
+            ->whereHas('legislature', fn ($legislature) => $legislature->active())
+            ->pluck('office_id');
+
+        $query->where(function (Builder $visible) use ($user, $membershipOfficeIds, $automaticOfficeIds, $observerVisibilityWindows, $canApproveReopenings, $explicitAccessGrants, $legislatureMemberIds, $legislatureIds, $legislativeBodyOfficeIds, $legislativeAdministrativeOfficeIds): void {
             $visible->whereIn('id', $explicitAccessGrants);
+
+            if ($legislatureMemberIds->isNotEmpty()) {
+                // La remisión formal al Pleno abre todo el expediente, incluso si
+                // es reservado, exclusivamente a los miembros de esa legislatura.
+                $visible->orWhereHas('plenaryReferrals', fn (Builder $referral) => $referral
+                    ->whereHas('legislature', fn (Builder $legislature) => $legislature->active())
+                    ->whereIn('legislature_id', $legislatureIds));
+
+                // Una atención personal no se expande al resto de la bancada.
+                $visible->orWhereHas('movements.recipients', fn (Builder $recipient) => $recipient
+                    ->whereIn('attention_legislature_member_id', $legislatureMemberIds));
+
+                if ($legislativeBodyOfficeIds->isNotEmpty()) {
+                    $visible->orWhereHas('movements.recipients', fn (Builder $recipient) => $recipient
+                        ->whereNull('attention_legislature_member_id')
+                        ->whereIn('recipient_office_id', $legislativeBodyOfficeIds));
+                }
+            }
+
+            if ($legislativeAdministrativeOfficeIds->isNotEmpty()) {
+                // El personal administrativo de bancada o comisión tramita y prepara
+                // borradores, incluso cuando la atención política es individual.
+                $visible->orWhereHas('movements.recipients', fn (Builder $recipient) => $recipient
+                    ->whereIn('recipient_office_id', $legislativeAdministrativeOfficeIds));
+            }
 
             $visible->orWhere(function (Builder $standard) use ($user, $membershipOfficeIds, $automaticOfficeIds, $observerVisibilityWindows, $canApproveReopenings): void {
                 $standard->whereHas('confidentialityLevel', fn (Builder $level) => $level

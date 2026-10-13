@@ -9,6 +9,9 @@ use App\Domain\DocumentManagement\DTOs\DocumentContentData;
 use App\Domain\DocumentManagement\DTOs\InitialDocumentData;
 use App\Domain\DocumentManagement\Enums\DocumentStatus;
 use App\Domain\DocumentManagement\Enums\ExpedientStatus;
+use App\Domain\DocumentManagement\Enums\InstitutionalWorkflow;
+use App\Domain\Legislatures\Enums\LegislativeBodyRole;
+use App\Domain\Legislatures\Services\LegislativeAuthorizationService;
 use App\Models\Document;
 use App\Models\DocumentAttachment;
 use App\Models\DocumentNumberSeries;
@@ -16,6 +19,8 @@ use App\Models\DocumentRevision;
 use App\Models\DocumentType;
 use App\Models\Expedient;
 use App\Models\ExpedientMovement;
+use App\Models\LegislativeBodyMembership;
+use App\Models\LegislatureMember;
 use App\Models\Office;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
@@ -37,6 +42,7 @@ class DocumentService
         private readonly ActivityLogger $activityLogger,
         private readonly NumberSequenceService $numberSequenceService,
         private readonly RichTextSanitizer $richTextSanitizer,
+        private readonly LegislativeAuthorizationService $legislativeAuthorization,
     ) {}
 
     public function createDraft(
@@ -44,13 +50,18 @@ class DocumentService
         CreateDocumentData $data,
         User $actor,
         RequestAuditContext $context,
+        ?InstitutionalWorkflow $institutionalWorkflow = null,
     ): Document {
-        return DB::transaction(function () use ($expedient, $data, $actor, $context): Document {
+        return DB::transaction(function () use ($expedient, $data, $actor, $context, $institutionalWorkflow): Document {
             $targetExpedient = Expedient::query()->lockForUpdate()->findOrFail($expedient->id);
             $this->assertExpedientAcceptsDocuments($targetExpedient);
             $documentType = DocumentType::query()->active()->findOrFail($data->documentTypeId);
             $office = Office::query()->active()->supportingStaffing()->findOrFail($data->issuingOfficeId);
-            $this->assertCanManageOfficeDocuments($actor, $office, $targetExpedient);
+            if ($institutionalWorkflow === null) {
+                $this->assertCanManageOfficeDocuments($actor, $office, $targetExpedient, $context);
+            } else {
+                $this->assertInstitutionalDocumentWorkflow($targetExpedient, $documentType, $office, $institutionalWorkflow);
+            }
 
             $content = new DocumentContentData(
                 $data->content->title,
@@ -75,7 +86,10 @@ class DocumentService
                 actor: $actor,
                 subject: $document,
                 context: $context,
-                newValues: $this->snapshot($document),
+                newValues: [
+                    ...$this->snapshot($document),
+                    'institutional_workflow' => $institutionalWorkflow?->value,
+                ],
             );
 
             return $document->load($this->relations());
@@ -151,7 +165,7 @@ class DocumentService
             $target = $this->lockDocumentForExpedient($expedient, $document);
             $this->assertDraft($target);
             $this->assertMutableDocument($target);
-            $this->assertCanManageOfficeDocuments($actor, $target->issuingOffice, $target->expedient);
+            $this->assertCanManageOfficeDocuments($actor, $target->issuingOffice, $target->expedient, $context);
             $oldValues = $this->snapshot($target);
 
             $content = new DocumentContentData(
@@ -184,14 +198,28 @@ class DocumentService
         });
     }
 
-    public function issue(Expedient $expedient, Document $document, User $actor, RequestAuditContext $context): Document
-    {
-        return DB::transaction(function () use ($expedient, $document, $actor, $context): Document {
+    public function issue(
+        Expedient $expedient,
+        Document $document,
+        User $actor,
+        RequestAuditContext $context,
+        ?InstitutionalWorkflow $institutionalWorkflow = null,
+    ): Document {
+        return DB::transaction(function () use ($expedient, $document, $actor, $context, $institutionalWorkflow): Document {
             $target = $this->lockDocumentForExpedient($expedient, $document);
             $this->assertDraft($target);
             $this->assertMutableDocument($target);
             $this->assertExpedientAcceptsDocuments($target->expedient);
-            $this->assertCanManageOfficeDocuments($actor, $target->issuingOffice, $target->expedient);
+            if ($institutionalWorkflow === null) {
+                $this->assertCanIssueOfficeDocument($actor, $target->issuingOffice, $target->expedient, $context);
+            } else {
+                $this->assertInstitutionalDocumentWorkflow(
+                    $target->expedient,
+                    $target->documentType,
+                    $target->issuingOffice,
+                    $institutionalWorkflow,
+                );
+            }
             $oldValues = $this->snapshot($target);
 
             if ($target->documentType->is_official) {
@@ -210,6 +238,12 @@ class DocumentService
             $target->update([
                 'status' => DocumentStatus::Issued,
                 'issued_by' => $actor->id,
+                'acting_legislature_member_id' => $this->legislativeAuthorization->isLegislativeOffice($target->issuing_office_id)
+                    ? $context->actingLegislatureMemberId : null,
+                'acting_body_membership_id' => $this->legislativeAuthorization->isLegislativeOffice($target->issuing_office_id)
+                    ? $context->actingBodyMembershipId : null,
+                'legislative_sender_snapshot' => $this->legislativeAuthorization->isLegislativeOffice($target->issuing_office_id)
+                    ? $this->legislativeSenderSnapshot($actor, $context) : null,
                 'issued_at' => now(),
             ]);
 
@@ -219,7 +253,10 @@ class DocumentService
                 subject: $target,
                 context: $context,
                 oldValues: $oldValues,
-                newValues: $this->snapshot($target),
+                newValues: [
+                    ...$this->snapshot($target),
+                    'institutional_workflow' => $institutionalWorkflow?->value,
+                ],
             );
 
             return $target->load($this->relations());
@@ -244,7 +281,7 @@ class DocumentService
                 ]);
             }
 
-            $this->assertCanManageOfficeDocuments($actor, $target->issuingOffice, $target->expedient);
+            $this->assertCanManageOfficeDocuments($actor, $target->issuingOffice, $target->expedient, $context);
             $series = DocumentNumberSeries::query()->lockForUpdate()->findOrFail($target->document_number_series_id);
             $series->increment('last_version_number');
             $series->refresh();
@@ -291,7 +328,7 @@ class DocumentService
                 $target = $this->lockDocumentForExpedient($expedient, $document);
                 $this->assertDraft($target);
                 $this->assertMutableDocument($target);
-                $this->assertCanManageOfficeDocuments($actor, $target->issuingOffice, $target->expedient);
+                $this->assertCanManageOfficeDocuments($actor, $target->issuingOffice, $target->expedient, $context);
 
                 return $this->storeAttachment($target, $file, $actor, $context, $storedFiles);
             });
@@ -458,9 +495,21 @@ class DocumentService
         }
     }
 
-    private function assertCanManageOfficeDocuments(User $actor, Office $office, Expedient $expedient): void
+    private function assertCanManageOfficeDocuments(User $actor, Office $office, Expedient $expedient, RequestAuditContext $context): void
     {
-        $this->assertActorBelongsToOffice($actor, $office);
+        $belongsToOffice = $actor->currentOfficeMemberships()->where('office_id', $office->id)->exists();
+        $actsAsAuthority = $this->legislativeAuthorization->canActForOfficeInExpedient(
+            $actor,
+            $expedient,
+            $office->id,
+            $context->actingLegislatureMemberId,
+            $context->actingBodyMembershipId,
+        );
+        if (! $belongsToOffice && ! $actsAsAuthority) {
+            throw ValidationException::withMessages([
+                'office' => 'El usuario debe pertenecer al equipo administrativo o actuar como autoridad legislativa vigente.',
+            ]);
+        }
 
         if ($expedient->isCurrentlyHeldByOffice($office->id)) {
             return;
@@ -471,15 +520,89 @@ class DocumentService
         ]);
     }
 
-    private function assertActorBelongsToOffice(User $actor, Office $office): void
+    private function assertCanIssueOfficeDocument(User $actor, Office $office, Expedient $expedient, RequestAuditContext $context): void
     {
-        if ($actor->currentOfficeMemberships()->where('office_id', $office->id)->exists()) {
+        if (! $this->legislativeAuthorization->isLegislativeOffice($office->id)) {
+            $this->assertCanManageOfficeDocuments($actor, $office, $expedient, $context);
+
             return;
         }
 
-        throw ValidationException::withMessages([
-            'office' => 'El usuario debe pertenecer a la oficina emisora del documento.',
-        ]);
+        if (! $expedient->isCurrentlyHeldByOffice($office->id)
+            || ! $this->legislativeAuthorization->canActForOfficeInExpedient(
+                $actor,
+                $expedient,
+                $office->id,
+                $context->actingLegislatureMemberId,
+                $context->actingBodyMembershipId,
+            )) {
+            throw ValidationException::withMessages([
+                'document' => 'El asesor puede preparar el borrador; solo la autoridad legislativa vigente puede emitirlo.',
+            ]);
+        }
+    }
+
+    private function assertInstitutionalDocumentWorkflow(
+        Expedient $expedient,
+        DocumentType $documentType,
+        Office $office,
+        InstitutionalWorkflow $institutionalWorkflow,
+    ): void {
+        $isWarehouseReceptionAct = $institutionalWorkflow === InstitutionalWorkflow::WarehouseMaterialRequest
+            && $expedient->expedientType()->where('code', 'WAREHOUSES_INVENTORY')->exists()
+            && $documentType->code === 'MINUTES'
+            && $office->code === 'AFALM';
+
+        if (! $isWarehouseReceptionAct) {
+            throw ValidationException::withMessages([
+                'document' => 'El documento automático no corresponde al flujo institucional autorizado.',
+            ]);
+        }
+    }
+
+    /** @return array<string, mixed>|null */
+    private function legislativeSenderSnapshot(User $actor, RequestAuditContext $context): ?array
+    {
+        if ($context->actingBodyMembershipId !== null) {
+            $membership = LegislativeBodyMembership::query()
+                ->with(['body.currentMemberships.legislatureMember.user', 'legislatureMember.user'])
+                ->findOrFail($context->actingBodyMembershipId);
+            $directive = $membership->body->currentMemberships
+                ->filter(fn (LegislativeBodyMembership $member) => $member->role !== LegislativeBodyRole::Member)
+                ->sortBy(fn (LegislativeBodyMembership $member) => array_search($member->role, [
+                    LegislativeBodyRole::Chief,
+                    LegislativeBodyRole::DeputyChief,
+                    LegislativeBodyRole::President,
+                    LegislativeBodyRole::VicePresident,
+                    LegislativeBodyRole::Secretary,
+                ], true))
+                ->map(fn (LegislativeBodyMembership $member) => [
+                    'name' => $member->legislatureMember->user->name,
+                    'role' => $member->role->value,
+                    'role_label' => $member->role->label(),
+                ])->values()->all();
+
+            return [
+                'type' => 'legislative_body',
+                'name' => $membership->body->name,
+                'body_type' => $membership->body->body_type->value,
+                'from' => $directive,
+                'issued_by' => $actor->name,
+            ];
+        }
+
+        if ($context->actingLegislatureMemberId !== null) {
+            $member = LegislatureMember::query()->with('user')->findOrFail($context->actingLegislatureMemberId);
+
+            return [
+                'type' => 'assembly_member',
+                'name' => $member->user->name,
+                'from' => [['name' => $member->user->name, 'role' => 'assembly_member', 'role_label' => 'Asambleísta']],
+                'issued_by' => $actor->name,
+            ];
+        }
+
+        return null;
     }
 
     private function assertOfficeReferenceIsAvailable(Office $office, ?string $officeReference, ?Document $except = null): void
@@ -554,6 +677,9 @@ class DocumentService
             'status' => $document->status->value,
             'title' => $document->title,
             'issued_at' => $document->issued_at?->toIso8601String(),
+            'acting_legislature_member_id' => $document->acting_legislature_member_id,
+            'acting_body_membership_id' => $document->acting_body_membership_id,
+            'legislative_sender_snapshot' => $document->legislative_sender_snapshot,
         ];
     }
 }

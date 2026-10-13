@@ -17,7 +17,7 @@ Estado: **implementado conforme al organigrama institucional y listo para la car
 - Del Pleno dependen **Asesores del Pleno** —oficina con funcionarios sin responsable propio— y **Directiva**, nodo representativo sin funcionarios.
 - De Directiva dependen Primera Vicepresidencia, Primera Secretaría y Presidencia de Directiva. Presidencia concentra Asesores de Presidencia —oficina con funcionarios sin responsable propio—, Oficialía Mayor Administrativa y Financiera (OMAF), Secretaría General y Protocolo, Comisiones y Bancadas.
 - De OMAF dependen Unidad de Administración Financiera, Unidad Jurídica, Unidad de Recursos Humanos, Sección de Servicios Informáticos y Sección de Comunicación. La Unidad de Administración Financiera concentra Contabilidad y Cierre, Presupuesto y Planificación, Tesorería, Bienes y Servicios, Responsable de Elaboración de Planillas y, bajo Bienes y Servicios, Activos Fijos y Almacenes.
-- De Secretaría General y Protocolo depende Registro y Archivo Institucional.
+- De Secretaría General y Protocolo depende la Unidad de Registros y Archivos (URA).
 - Comisiones y Bancadas son nodos agrupadores sin funcionarios ni responsable de oficina. Cada una de sus siete comisiones y siete bancadas dependientes es una oficina operativa, con funcionarios y responsable propio.
 
 La Primera Vicepresidencia, Primera Secretaría, Presidencia, OMAF, Secretaría General, comisiones, bancadas, unidades y secciones operativas sí requieren responsable de oficina. Las dos asesorías indicadas son las únicas excepciones con funcionarios pero sin responsable propio, conforme al organigrama aprobado.
@@ -28,4 +28,4 @@ La Primera Vicepresidencia, Primera Secretaría, Presidencia, OMAF, Secretaría 
 - Recursos Humanos es la fuente de cargos y contratos. Solo presenta oficinas activas que admiten funcionarios y sus cargos correspondientes.
 - El cargo puede indicar función `manager` o `official`; un usuario puede conservar varias asignaciones históricas o simultáneas cuando su contratación lo requiera.
 - Solo un superadministrador activo administra la estructura y sus membresías en esta primera etapa. Todas las modificaciones y cierres se auditan.
-- Esta información es la fuente para la visibilidad de jefaturas, la recepción de derivaciones y los permisos de Archivo Central y OMAF en el motor de Expedientes.
+- Esta información es la fuente para la visibilidad de jefaturas, la recepción de derivaciones y los permisos de URA y OMAF en el motor de Expedientes.

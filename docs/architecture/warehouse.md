@@ -19,6 +19,16 @@ Toda solicitud formal pertenece a un expediente de tipo `WAREHOUSES_INVENTORY`. 
 
 Una observación devuelve la tenencia a la oficina solicitante. La corrección genera una nueva versión documental y conserva los renglones anteriores por número de revisión. Al reenviarla vuelve a la etapa que formuló la observación.
 
+## Solicitudes de comisiones legislativas
+
+- El personal administrativo o asesor con membresía vigente en una comisión puede preparar la solicitud y sus correcciones, pero no presentarlas formalmente.
+- El Presidente selecciona su perfil **Actuar como** y ejecuta **Aprobar y presentar a OMAF**. Durante una delegación vigente, esta facultad corresponde exclusivamente al Vicepresidente delegado.
+- El Presidente también puede iniciar personalmente la solicitud desde su perfil legislativo, aunque no tenga un contrato o membresía laboral en la oficina de la comisión.
+- Todos los miembros vigentes de la comisión pueden consultar la solicitud; preparar, aprobar, entregar y recibir siguen siendo acciones independientes y auditadas.
+- Este flujo estructurado es una excepción controlada al canal ordinario de Secretaría General: únicamente una solicitud de materiales puede circular directamente entre la comisión, OMAF, Bienes y Servicios y AFALM. Una derivación documental común continúa obligada a pasar por Secretaría General.
+- Si existe una observación, el asesor prepara una corrección en borrador y la autoridad legislativa debe aprobarla antes de reenviarla a la etapa observadora.
+- El solicitante confirma normalmente la recepción. El Presidente, o Vicepresidente delegado, puede autorizar a otro funcionario administrativo vigente de la comisión para recibir esa entrega específica.
+
 ## Estado y ubicación
 
 `material_requests.status` representa el estado de negocio y `current_stage` representa la etapa organizacional. La oficina que posee el expediente se obtiene siempre del último movimiento documental. La interfaz combina ambos datos, por ejemplo `Pendiente — OMAF`, pero no inventa una segunda tenencia.
@@ -51,9 +61,9 @@ Cada renglón entregado referencia el renglón solicitado y el material real del
 
 El jefe vigente de AFALM figura como responsable institucional aunque un funcionario autorizado registre físicamente el ingreso o la entrega. La delegación operativa reutiliza la configuración persistente de acceso documental de AFALM: jefatura o equipo autorizado.
 
-El solicitante confirma por defecto. Ante su ausencia, el responsable de la oficina solicitante puede autorizar para esa entrega a otro funcionario activo de la misma oficina. Almacenes no puede confirmar su propia salida. El acta distingue responsable de Almacenes, funcionario que entregó y persona que recibió realmente.
+El solicitante confirma por defecto. Ante su ausencia, el responsable de la oficina solicitante puede autorizar para esa entrega a otro funcionario activo de la misma oficina. Almacenes no puede confirmar su propia salida. El acta distingue responsable de Almacenes, funcionario que entregó y persona que recibió realmente. Los nombres, cargos y área se copian como instantáneas al confirmar para que el acta histórica no cambie cuando luego se modifique un kardex o una asignación.
 
-La confirmación crea un documento oficial de tipo `MINUTES`, un código aleatorio de verificación y una huella SHA-256 sobre los datos esenciales. La vista de Almacenes permite imprimir el acta; el documento también aparece dentro del expediente.
+La confirmación crea un documento oficial de tipo `MINUTES` emitido por AFALM, un código aleatorio de verificación y una huella SHA-256 sobre los datos esenciales. La vista de Almacenes permite imprimir el acta; el documento también aparece dentro del expediente. La presentación reproduce la plantilla institucional de entrega-recepción: membrete y pie oficial, identificación del receptor y área, detalle de cantidades realmente entregadas y firmas de conformidad. El número institucional, la marca UAT y los datos de integridad complementan la plantilla sin reemplazar sus campos.
 
 ## Concurrencia y auditoría
 

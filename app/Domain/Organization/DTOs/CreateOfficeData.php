@@ -13,6 +13,7 @@ readonly class CreateOfficeData
         public OfficeStatus $status,
         public bool $supportsStaffing,
         public bool $requiresManager,
+        public bool $receivesExternalDocuments,
     ) {}
 
     /** @param array<string, mixed> $validated */
@@ -25,6 +26,7 @@ readonly class CreateOfficeData
             status: OfficeStatus::from($validated['status']),
             supportsStaffing: (bool) $validated['supports_staffing'],
             requiresManager: (bool) $validated['requires_manager'],
+            receivesExternalDocuments: (bool) ($validated['receives_external_documents'] ?? false),
         );
     }
 }

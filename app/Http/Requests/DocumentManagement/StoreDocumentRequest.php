@@ -25,10 +25,12 @@ class StoreDocumentRequest extends FormRequest
             'office_reference' => ['nullable', 'string', 'max:255'],
             'attachments' => ['nullable', 'array'],
             'attachments.*' => ['required', 'file'],
-            'primary_office_ids' => ['required', 'array', 'min:1'],
+            'primary_office_ids' => ['nullable', 'array', 'min:1', 'required_with:copy_office_ids'],
             'primary_office_ids.*' => ['required', 'integer', 'distinct', 'exists:offices,id'],
             'copy_office_ids' => ['nullable', 'array'],
             'copy_office_ids.*' => ['required', 'integer', 'distinct', 'exists:offices,id'],
+            'primary_recipient_attention' => ['nullable', 'array'],
+            'primary_recipient_attention.*' => ['nullable', 'integer', 'exists:legislature_members,id'],
             'requires_response' => ['nullable', 'boolean'],
         ];
     }

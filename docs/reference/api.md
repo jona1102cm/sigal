@@ -110,6 +110,7 @@ Las respuestas de colección usan `data`, `links` y `meta` de paginación. Los e
 | GET/POST | `/expedients/{expedient}/documents` | Lista o crea documento/derivación. |
 | GET/PATCH | `/expedients/{expedient}/documents/{document}` | Consulta o edita borrador. |
 | POST | `/expedients/{expedient}/documents/{document}/issue` | Emite e inmoviliza documento. |
+| POST | `/expedients/{expedient}/documents/{document}/issue-and-derive` | La autoridad legislativa emite un borrador preparado y lo devuelve a SGEN en una sola transacción. |
 | POST | `/expedients/{expedient}/documents/{document}/corrections` | Crea corrección/versionado. |
 | POST | `/expedients/{expedient}/documents/{document}/attachments` | Adjunta binario. |
 | GET | `/expedients/{expedient}/documents/{document}/attachments/{attachment}/download` | Descarga autorizada. |
@@ -126,6 +127,18 @@ Las respuestas de colección usan `data`, `links` y `meta` de paginación. Los e
 | POST | `/legislatures/{legislature}/activate` | Activa e inactiva la anterior. |
 | POST | `/legislatures/{legislature}/inactivate` | Inactiva período. |
 | POST | `/legislatures/{legislature}/board-assignments` | Reemplaza titular con fecha efectiva. |
+| GET | `/legislatures/{legislature}/composition` | Consulta mandatos, órganos, membresías y delegaciones vigentes. |
+| POST | `/legislatures/{legislature}/members` | Registra el mandato de un asambleísta. |
+| POST | `/legislatures/{legislature}/members/{legislatureMember}/close` | Cierra mandato y membresías abiertas. |
+| POST | `/legislatures/{legislature}/legislative-bodies` | Crea bancada, comisión o comisión mixta temporal. |
+| POST | `/legislatures/{legislature}/legislative-bodies/{legislativeBody}/memberships` | Asigna cargo político histórico. |
+| POST | `/legislatures/{legislature}/legislative-bodies/{legislativeBody}/memberships/{membership}/close` | Cierra una membresía política. |
+| POST | `/legislatures/{legislature}/legislative-bodies/{legislativeBody}/delegations` | Registra sustitución temporal de autoridad. |
+| GET | `/legislative/directory` | Directorio mínimo de destinatarios legislativos vigentes. |
+| GET | `/legislative/plenary-referrals` | Lista de espera del Pleno autorizada. |
+| POST | `/expedients/{expedient}/plenary-referrals` | SGEN incorpora un expediente al Pleno sin transferir la tenencia. |
+
+El contexto seleccionado en **Actuar como** se transmite mediante `X-SIGAL-Acting-Body-Membership` o `X-SIGAL-Acting-Legislature-Member`. La API no acepta ambas cabeceras simultáneamente y valida su vigencia en cada petición.
 
 ## Administración extraordinaria
 

@@ -5,12 +5,14 @@ namespace App\Domain\DocumentManagement\Services;
 use App\Domain\Audit\DTOs\RequestAuditContext;
 use App\Domain\DocumentManagement\DTOs\CreateDocumentData;
 use App\Domain\DocumentManagement\DTOs\CreateExpedientMovementData;
+use App\Domain\Legislatures\Services\LegislativeAuthorizationService;
 use App\Models\Document;
 use App\Models\Expedient;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 /**
@@ -24,6 +26,7 @@ class DocumentWorkflowService
     public function __construct(
         private readonly DocumentService $documentService,
         private readonly ExpedientMovementService $expedientMovementService,
+        private readonly LegislativeAuthorizationService $legislativeAuthorization,
     ) {}
 
     /** @param list<UploadedFile> $attachments */
@@ -35,6 +38,23 @@ class DocumentWorkflowService
         User $actor,
         RequestAuditContext $context,
     ): Document {
+        if ($derivationData === null) {
+            $issuingOfficeIsLegislative = $this->legislativeAuthorization->isLegislativeOffice($documentData->issuingOfficeId);
+            $isAdministrativePreparer = $actor->currentOfficeMemberships()
+                ->where('office_id', $documentData->issuingOfficeId)
+                ->exists();
+            $actsAsAuthority = $this->legislativeAuthorization->canActForOffice(
+                $actor,
+                $documentData->issuingOfficeId,
+                $context->actingBodyMembershipId,
+            );
+            if (! $issuingOfficeIsLegislative || ! $isAdministrativePreparer || $actsAsAuthority) {
+                throw ValidationException::withMessages([
+                    'primary_office_ids' => 'Seleccione al menos una oficina destinataria. Solo el personal administrativo de una bancada o comisión puede guardar un borrador sin derivarlo.',
+                ]);
+            }
+        }
+
         // Se conservan los modelos escritos para poder retirar sus binarios si la BD revierte.
         $storedAttachments = [];
 
@@ -47,6 +67,11 @@ class DocumentWorkflowService
                 }
 
                 if ($derivationData !== null) {
+                    // Una salida legislativa debe quedar firmada por la autoridad
+                    // antes de que Secretaría General reciba la documentación.
+                    if ($this->legislativeAuthorization->isLegislativeOffice($documentData->issuingOfficeId)) {
+                        $document = $this->documentService->issue($expedient, $document, $actor, $context);
+                    }
                     $movement = $this->expedientMovementService->create($expedient, $derivationData, $actor, $context);
                     $this->documentService->linkToMovement($expedient, $movement, $document, $actor, $context);
                 }
@@ -61,5 +86,21 @@ class DocumentWorkflowService
 
             throw $exception;
         }
+    }
+
+    public function issueAndDerive(
+        Expedient $expedient,
+        Document $document,
+        CreateExpedientMovementData $derivationData,
+        User $actor,
+        RequestAuditContext $context,
+    ): Document {
+        return DB::transaction(function () use ($expedient, $document, $derivationData, $actor, $context): Document {
+            $issued = $this->documentService->issue($expedient, $document, $actor, $context);
+            $movement = $this->expedientMovementService->create($expedient, $derivationData, $actor, $context);
+            $this->documentService->linkToMovement($expedient, $movement, $issued, $actor, $context);
+
+            return $issued->refresh()->load(['documentType', 'issuingOffice', 'numberSeries', 'createdBy', 'issuedBy', 'attachments']);
+        });
     }
 }

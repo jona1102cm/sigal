@@ -6,6 +6,7 @@
 import { computed, reactive, ref, watch } from 'vue';
 import { flattenOfficeHierarchy } from '../lib/organization';
 import RichTextEditor from './RichTextEditor.vue';
+import SearchableMultiSelect from './SearchableMultiSelect.vue';
 import SearchableSelect from './SearchableSelect.vue';
 import { useDocumentManagementStore } from '../stores/document-management';
 import { useSessionStore } from '../stores/session';
@@ -18,7 +19,16 @@ const error = ref(null);
 const exceptionalEntry = ref(false);
 const queuedFiles = ref([]);
 
-const today = new Date().toISOString().slice(0, 10);
+function currentInstitutionalDate() {
+    return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'America/La_Paz',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+    }).format(new Date());
+}
+
+const today = currentInstitutionalDate();
 const form = reactive({
     expedient_type_id: '',
     confidentiality_level_id: '',
@@ -32,13 +42,14 @@ const form = reactive({
     priority: 'normal',
     due_on: '',
     observations: '',
-    derive_after_registration: false,
+    derive_after_registration: true,
     primary_office_ids: [],
+    primary_recipient_attention: {},
     copy_office_ids: [],
     requires_response: true,
     document_type_id: '',
     origin_document_number: '',
-    origin_document_date: '',
+    origin_document_date: today,
     content: '',
 });
 
@@ -59,12 +70,27 @@ const responsibleOffices = computed(() => {
         })
         .filter((office) => Number.isInteger(Number(office.id)) && Number(office.id) > 0);
 });
-const currentOfficeDisplay = computed(() => responsibleOffices.value[0] ?? myOfficeMemberships.value[0]?.office ?? null);
+const selectedResponsibleOfficeId = computed(() => positiveIntegerId(form.responsible_office_id));
+const selectedResponsibleOffice = computed(() => responsibleOffices.value.find((office) => Number(office.id) === selectedResponsibleOfficeId.value) ?? null);
+const currentOfficeDisplay = computed(() => selectedResponsibleOffice.value ?? responsibleOffices.value[0] ?? myOfficeMemberships.value[0]?.office ?? null);
+const canRegisterExternalDocuments = computed(() => selectedResponsibleOffice.value?.receives_external_documents === true);
 const hasManyConfidentialityLevels = computed(() => documents.catalogs.confidentialityLevels.length > 1);
 const hasManyExpedientTypes = computed(() => documents.catalogs.expedientTypes.length > 1);
 const hasManyDocumentTypes = computed(() => documents.catalogs.documentTypes.length > 1);
 const hasManyResponsibleOffices = computed(() => responsibleOffices.value.length > 1);
-const selectedResponsibleOfficeId = computed(() => positiveIntegerId(form.responsible_office_id));
+const primaryRecipientOptions = computed(() => hierarchicalOffices.value
+    .filter((office) => Number(office.id) !== selectedResponsibleOfficeId.value)
+    .map((office) => ({ value: office.id, label: office.hierarchy_label })));
+const copyRecipientOptions = computed(() => hierarchicalOffices.value
+    .filter((office) => Number(office.id) !== selectedResponsibleOfficeId.value && !form.primary_office_ids.map(Number).includes(Number(office.id)))
+    .map((office) => ({ value: office.id, label: office.hierarchy_label })));
+const selectedCaucusRecipients = computed(() => {
+    const issuer = responsibleOffices.value.find((office) => Number(office.id) === selectedResponsibleOfficeId.value);
+    if (issuer?.code !== 'SGEN') return [];
+    return form.primary_office_ids
+        .map((officeId) => documents.legislativeDirectory.bodies.find((body) => Number(body.office_id) === Number(officeId) && body.type === 'caucus'))
+        .filter(Boolean);
+});
 
 function setSensibleDefaults() {
     // Solo se autoselecciona una opción cuando no existe una decisión real que tomar.
@@ -88,10 +114,30 @@ watch(() => props.open, (open) => {
         error.value = null;
         exceptionalEntry.value = false;
         queuedFiles.value = [];
-        form.derive_after_registration = false;
-        form.primary_office_ids = [];
-        form.copy_office_ids = [];
-        form.requires_response = true;
+        const institutionalDate = currentInstitutionalDate();
+        Object.assign(form, {
+            expedient_type_id: '',
+            confidentiality_level_id: '',
+            subject: '',
+            summary: '',
+            origin: 'internal',
+            sender_type: 'person',
+            sender_name: '',
+            responsible_office_id: '',
+            received_on: institutionalDate,
+            priority: 'normal',
+            due_on: '',
+            observations: '',
+            derive_after_registration: true,
+            primary_office_ids: [],
+            primary_recipient_attention: {},
+            copy_office_ids: [],
+            requires_response: true,
+            document_type_id: '',
+            origin_document_number: '',
+            origin_document_date: institutionalDate,
+            content: '',
+        });
         setSensibleDefaults();
     }
 });
@@ -111,9 +157,22 @@ watch(() => form.origin, (origin) => {
     setSensibleDefaults();
 });
 
+watch(canRegisterExternalDocuments, (allowed) => {
+    if (!allowed && form.origin === 'external') form.origin = 'internal';
+});
+
 watch(selectedResponsibleOfficeId, (officeId) => {
     form.primary_office_ids = form.primary_office_ids.filter((id) => Number(id) !== officeId);
     form.copy_office_ids = form.copy_office_ids.filter((id) => Number(id) !== officeId);
+});
+
+watch(() => [...form.primary_office_ids], (primaryOfficeIds) => {
+    const primaryIds = new Set(primaryOfficeIds.map(Number));
+    form.copy_office_ids = form.copy_office_ids.filter((id) => !primaryIds.has(Number(id)));
+
+    Object.keys(form.primary_recipient_attention).forEach((officeId) => {
+        if (!primaryIds.has(Number(officeId))) delete form.primary_recipient_attention[officeId];
+    });
 });
 
 function formatSize(bytes) {
@@ -137,11 +196,11 @@ function positiveIntegerId(value) {
     return Number.isInteger(id) && id > 0 ? id : null;
 }
 
-function toggleRecipient(list, id) {
-    const numericId = Number(id);
-    const index = list.indexOf(numericId);
-    if (index >= 0) list.splice(index, 1);
-    else list.push(numericId);
+function caucusAttentionOptions(body) {
+    return [
+        { value: '', label: 'Bancada en general' },
+        ...(body.members ?? []).map((member) => ({ value: member.legislature_member_id, label: member.name })),
+    ];
 }
 
 async function submit() {
@@ -167,6 +226,8 @@ async function submit() {
         return;
     }
 
+    if (!exceptionalEntry.value) form.derive_after_registration = true;
+
     if (form.derive_after_registration && !form.primary_office_ids.length) {
         error.value = 'Seleccione al menos una oficina destinataria principal para derivar el expediente.';
         return;
@@ -186,10 +247,12 @@ async function submit() {
         };
         delete data.derive_after_registration;
         delete data.primary_office_ids;
+        delete data.primary_recipient_attention;
         delete data.copy_office_ids;
 
         if (form.derive_after_registration) {
             data.primary_office_ids = form.primary_office_ids;
+            data.primary_recipient_attention = Object.fromEntries(Object.entries(form.primary_recipient_attention).filter(([, value]) => value));
             data.copy_office_ids = form.copy_office_ids;
         }
 
@@ -249,10 +312,11 @@ async function submit() {
                 </label>
                 <div v-else class="field field--static"><span>Confidencialidad</span><strong>{{ documents.catalogs.confidentialityLevels[0]?.name || 'Interno' }}</strong><small>Interno es el nivel normal. Reservado y Confidencial requieren autorización explícita.</small></div>
 
-                <label class="field form-grid__full">
-                    <span>Asunto</span>
-                    <input v-model.trim="form.subject" maxlength="255" placeholder="Describa el asunto principal" required>
+                <label class="field">
+                    <span>Referencia</span>
+                    <textarea v-model.trim="form.subject" rows="3" maxlength="255" placeholder="Indique la referencia principal de la documentación" required></textarea>
                 </label>
+                <label class="field"><span>Prioridad</span><SearchableSelect v-model="form.priority" :options="[{ value: 'normal', label: 'Normal' }, { value: 'high', label: 'Alta' }, { value: 'urgent', label: 'Urgente' }]" /></label>
 
                 <template v-if="!exceptionalEntry">
                     <label v-if="hasManyDocumentTypes" class="field">
@@ -263,15 +327,14 @@ async function submit() {
                     </label>
                     <div v-else class="field field--static"><span>Documento que inicia el trámite</span><strong>{{ documents.catalogs.documentTypes[0]?.name || 'No hay tipos activos' }}</strong></div>
                     <label class="field"><span>Número o CITE del documento</span><input v-model.trim="form.origin_document_number" maxlength="255" placeholder="Ej.: CITE: 024/2026" required></label>
-                    <label class="field"><span>Fecha del documento</span><input v-model="form.origin_document_date" type="date" required></label>
                 </template>
 
                 <label class="field form-grid__full">
-                    <span>Resumen <small>Opcional</small></span>
-                    <textarea v-model.trim="form.summary" rows="3" placeholder="Antecedentes y propósito del trámite"></textarea>
+                    <span>Nota <small>Opcional</small></span>
+                    <textarea v-model.trim="form.summary" rows="3" placeholder="Describa brevemente el motivo de la documentación"></textarea>
                 </label>
 
-                <label class="field form-grid__full">
+                <label v-if="canRegisterExternalDocuments" class="field form-grid__full">
                     <span>Procedencia del documento</span>
                     <SearchableSelect v-model="form.origin" :options="[{ value: 'internal', label: 'Documento interno de mi oficina' }, { value: 'external', label: 'Documento recibido de persona o institución externa' }]" />
                     <select v-show="false" v-model="form.origin" disabled><option value="internal">Documento interno de mi oficina</option><option value="external">Documento recibido de persona o institución externa</option></select>
@@ -291,24 +354,23 @@ async function submit() {
                 <div v-else class="field field--static form-grid__full"><span>Oficina que registra y queda responsable</span><strong>{{ currentOfficeDisplay ? `${currentOfficeDisplay.code} · ${currentOfficeDisplay.name}` : 'No tiene una oficina vigente asignada' }}</strong><small v-if="!currentOfficeDisplay">Recursos Humanos debe registrar o corregir el contrato, cargo y oficina de su kardex.</small></div>
                 <div v-if="form.origin === 'internal' && currentOfficeDisplay" class="entry-mode-notice form-grid__full"><p><strong>Registro interno:</strong> SIGAL dejará constancia de {{ currentOfficeDisplay.name }} como oficina remitente y de {{ session.user?.name }} como usuario que realizó el registro.</p></div>
 
-                <label class="field"><span>Fecha de recepción</span><input v-model="form.received_on" type="date" required></label>
-                <label class="field"><span>Prioridad</span><SearchableSelect v-model="form.priority" :options="[{ value: 'normal', label: 'Normal' }, { value: 'high', label: 'Alta' }, { value: 'urgent', label: 'Urgente' }]" /></label>
                 <label class="field"><span>Fecha límite</span><input v-model="form.due_on" type="date" :min="form.received_on || undefined"></label>
-                <label class="field form-grid__full"><span>Instrucción general <small>Opcional</small></span><textarea v-model.trim="form.observations" rows="2" placeholder="Actuación que se espera completar durante el trámite"></textarea></label>
 
                 <div class="entry-mode-notice form-grid__full">
-                    <label class="check-option"><input v-model="form.derive_after_registration" type="checkbox"><span><strong>Derivar al registrar</strong><small>{{ exceptionalEntry ? 'El expediente se abrirá y enviará directamente a la oficina seleccionada.' : 'El documento inicial se vinculará automáticamente a la derivación.' }}</small></span></label>
+                    <label v-if="exceptionalEntry" class="check-option"><input v-model="form.derive_after_registration" type="checkbox"><span><strong>Derivar al registrar</strong><small>El expediente excepcional se abrirá y enviará directamente a la oficina seleccionada.</small></span></label>
+                    <p v-else><strong>Derivación obligatoria:</strong> el documento inicial quedará vinculado y se enviará a la oficina que seleccione.</p>
                 </div>
                 <template v-if="form.derive_after_registration">
-                    <div class="recipient-picker form-grid__full"><span>Destinatarios principales</span><div><label v-for="office in hierarchicalOffices.filter((item) => Number(item.id) !== selectedResponsibleOfficeId)" :key="office.id" class="check-option"><input type="checkbox" :checked="form.primary_office_ids.includes(office.id)" @change="toggleRecipient(form.primary_office_ids, office.id)"><span>{{ office.hierarchy_label }}</span></label></div></div>
-                    <div class="recipient-picker form-grid__full"><span>En copia (opcional)</span><div><label v-for="office in hierarchicalOffices.filter((item) => Number(item.id) !== selectedResponsibleOfficeId && !form.primary_office_ids.includes(item.id))" :key="office.id" class="check-option"><input type="checkbox" :checked="form.copy_office_ids.includes(office.id)" @change="toggleRecipient(form.copy_office_ids, office.id)"><span>{{ office.hierarchy_label }}</span></label></div></div>
+                    <label class="field form-grid__full"><span>Destinatarios principales <small>Obligatorio</small></span><SearchableMultiSelect v-model="form.primary_office_ids" :options="primaryRecipientOptions" placeholder="Buscar y seleccionar oficinas destinatarias" /></label>
+                    <div v-if="selectedCaucusRecipients.length" class="action-form form-grid__full"><div class="form-grid__full"><p class="eyebrow">Distribución legislativa</p><h4>Atención dentro de la bancada</h4><p class="muted">Puede dirigirla a toda la bancada o exclusivamente a uno de sus asambleístas.</p></div><label v-for="body in selectedCaucusRecipients" :key="body.id" class="field"><span>{{ body.name }}</span><SearchableSelect v-model="form.primary_recipient_attention[body.office_id]" :options="caucusAttentionOptions(body)" /></label></div>
+                    <label class="field form-grid__full"><span>En copia <small>Opcional</small></span><SearchableMultiSelect v-model="form.copy_office_ids" :options="copyRecipientOptions" placeholder="Buscar y seleccionar oficinas en copia" /></label>
                     <div class="entry-mode-notice form-grid__full"><label class="check-option"><input v-model="form.requires_response" type="checkbox"><span><strong>Exige respuesta</strong><small>Está activado por defecto. Si lo desactiva, el documento llegará a los destinatarios solo para conocimiento y no les quedará una respuesta pendiente.</small></span></label></div>
-                    <p class="form-note form-grid__full">La derivación conservará la prioridad, plazo e instrucción general registrados en este expediente.</p>
+                    <p class="form-note form-grid__full">La derivación conservará la prioridad y el plazo registrados en este expediente.</p>
                 </template>
 
                 <template v-if="!exceptionalEntry">
                     <label class="field form-grid__full"><span>Contenido del documento <small>Opcional si adjunta archivos</small></span><RichTextEditor v-model="form.content" placeholder="Transcriba o redacte el contenido del documento de ingreso si corresponde…" /></label>
-                    <div class="file-dropzone form-grid__full"><div><strong>Adjuntar documento de origen</strong><p>Agregue una o varias imágenes, videos, PDFs, audios u otros archivos. Debe redactar contenido o adjuntar al menos un archivo.</p></div><label class="button button--ghost">Seleccionar archivos<input type="file" multiple @change="queueFiles"></label></div>
+                    <div class="file-dropzone form-grid__full"><div><strong>Adjuntar documentación</strong><p>Agregue una o varias imágenes, videos, PDFs, audios u otros archivos. Debe redactar contenido o adjuntar al menos un archivo.</p></div><label class="button button--ghost">Seleccionar archivos<input type="file" multiple @change="queueFiles"></label></div>
                     <div v-if="queuedFiles.length" class="queued-files form-grid__full"><div v-for="(file, index) in queuedFiles" :key="`${file.name}-${file.lastModified}-${index}`"><span>{{ file.name }}</span><small>{{ formatSize(file.size) }}</small><button type="button" aria-label="Quitar archivo" @click="removeQueuedFile(index)">×</button></div></div>
                 </template>
 

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { getToken, request, setToken } from '../lib/api';
+import { getActingContext, getToken, request, setActingContext, setToken } from '../lib/api';
 
 /**
  * Fuente única de la sesión visible en Vue.
@@ -10,6 +10,7 @@ export const useSessionStore = defineStore('session', {
         user: null,
         ready: false,
         loading: false,
+        actingContext: getActingContext(),
     }),
 
     getters: {
@@ -27,6 +28,13 @@ export const useSessionStore = defineStore('session', {
         canUseDocumentManagement() {
             return this.hasPermission('document_management.expedients.view');
         },
+        canUseLegislativeWorkspace() {
+            return this.canUseDocumentManagement && (
+                this.isSuperAdministrator
+                || this.legislativeProfiles.length > 0
+                || (this.user?.office_memberships ?? []).some((membership) => membership.office?.code === 'SGEN')
+            );
+        },
         canCreateExpedients() {
             return this.hasPermission('document_management.expedients.create');
         },
@@ -42,6 +50,15 @@ export const useSessionStore = defineStore('session', {
         },
         canUseAdministration: (state) => state.user?.permissions?.some((permission) => permission.startsWith('administration.')) ?? false,
         roleLabel: (state) => state.user?.roles?.map((role) => role.name).join(' · ') || 'Usuario del sistema',
+        legislativeProfiles: (state) => state.user?.legislative_profiles ?? [],
+        actingProfile(state) {
+            if (!state.actingContext) return null;
+            return (state.user?.legislative_profiles ?? []).find((profile) => (
+                state.actingContext.body_membership_id
+                    ? Number(profile.body_membership_id) === Number(state.actingContext.body_membership_id)
+                    : Number(profile.legislature_member_id) === Number(state.actingContext.legislature_member_id) && !profile.body_membership_id
+            )) ?? null;
+        },
     },
 
     actions: {
@@ -67,6 +84,7 @@ export const useSessionStore = defineStore('session', {
             try {
                 const payload = await request('/auth/me');
                 this.user = payload.data;
+                this.normalizeActingContext();
                 return this.user;
             } catch (error) {
                 if ([401, 403].includes(error.status)) {
@@ -88,6 +106,7 @@ export const useSessionStore = defineStore('session', {
 
                 setToken(payload.token);
                 this.user = payload.user.data ?? payload.user;
+                this.normalizeActingContext();
                 return this.user;
             } finally {
                 this.loading = false;
@@ -103,6 +122,7 @@ export const useSessionStore = defineStore('session', {
             } finally {
                 setToken(null);
                 this.user = null;
+                this.actingContext = null;
             }
         },
 
@@ -117,9 +137,26 @@ export const useSessionStore = defineStore('session', {
 
                 setToken(payload.token);
                 this.user = payload.user.data ?? payload.user;
+                this.normalizeActingContext();
                 return this.user;
             } finally {
                 this.loading = false;
+            }
+        },
+
+        selectActingProfile(profile) {
+            const context = profile ? {
+                legislature_member_id: profile.legislature_member_id,
+                body_membership_id: profile.body_membership_id || null,
+            } : null;
+            this.actingContext = context;
+            setActingContext(context);
+        },
+
+        normalizeActingContext() {
+            if (!this.actingContext || !this.actingProfile) {
+                const first = this.user?.legislative_profiles?.[0] ?? null;
+                this.selectActingProfile(first);
             }
         },
     },

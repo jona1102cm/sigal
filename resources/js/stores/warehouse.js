@@ -7,6 +7,7 @@ export const useWarehouseStore = defineStore('warehouse', {
         measurementUnits: [],
         categories: [],
         items: [],
+        requestingOffices: [],
         materialRequests: [],
         receipts: [],
         selectedRequest: null,
@@ -33,6 +34,7 @@ export const useWarehouseStore = defineStore('warehouse', {
                 this.measurementUnits = payload.measurement_units ?? [];
                 this.categories = payload.categories ?? [];
                 this.items = payload.items ?? [];
+                this.requestingOffices = payload.requesting_offices ?? [];
                 this.permissions = payload.permissions ?? this.permissions;
             });
         },

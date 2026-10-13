@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\Organization;
 
+use App\Domain\DocumentManagement\Enums\OfficeCapabilityCode;
 use App\Models\Office;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -18,6 +19,12 @@ class OfficeDirectoryResource extends JsonResource
             'name' => $this->name,
             'supports_staffing' => $this->supports_staffing,
             'requires_manager' => $this->requires_manager,
+            'receives_external_documents' => $this->whenLoaded(
+                'capabilities',
+                fn () => $this->capabilities->contains(
+                    fn ($capability) => $capability->capability === OfficeCapabilityCode::ReceiveExternalDocuments,
+                ),
+            ),
         ];
     }
 }

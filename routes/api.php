@@ -16,7 +16,10 @@ use App\Http\Controllers\Api\DocumentManagement\ExpedientTypeController;
 use App\Http\Controllers\Api\DocumentManagement\OfficeDocumentAccessController;
 use App\Http\Controllers\Api\DocumentManagement\OfficeDocumentSequenceController;
 use App\Http\Controllers\Api\HumanResources\HumanResourcesController;
+use App\Http\Controllers\Api\Legislatures\LegislativeCompositionController;
+use App\Http\Controllers\Api\Legislatures\LegislativeDirectoryController;
 use App\Http\Controllers\Api\Legislatures\LegislatureController;
+use App\Http\Controllers\Api\Legislatures\PlenaryReferralController;
 use App\Http\Controllers\Api\Organization\OfficeController;
 use App\Http\Controllers\Api\Users\UserController;
 use App\Http\Controllers\Api\Warehouse\MaterialRequestController;
@@ -28,7 +31,7 @@ use Illuminate\Support\Facades\Route;
 Route::post('auth/login', [AuthenticationController::class, 'login'])->middleware(['throttle:6,1', 'no.store']);
 
 // Toda operación posterior exige un token Sanctum perteneciente a una cuenta activa.
-Route::middleware(['auth:sanctum', 'active.user', 'no.store'])->group(function (): void {
+Route::middleware(['auth:sanctum', 'active.user', 'legislative.context', 'no.store'])->group(function (): void {
     // Estas rutas deben seguir disponibles con clave temporal para permitir cambiarla o cerrar sesión.
     Route::get('auth/me', [AuthenticationController::class, 'me']);
     Route::post('auth/logout', [AuthenticationController::class, 'logout']);
@@ -121,6 +124,7 @@ Route::middleware(['auth:sanctum', 'active.user', 'no.store'])->group(function (
         Route::get('expedients/{expedient}/documents/{document}', [DocumentController::class, 'show']);
         Route::patch('expedients/{expedient}/documents/{document}', [DocumentController::class, 'update']);
         Route::post('expedients/{expedient}/documents/{document}/issue', [DocumentController::class, 'issue']);
+        Route::post('expedients/{expedient}/documents/{document}/issue-and-derive', [DocumentController::class, 'issueAndDerive']);
         Route::post('expedients/{expedient}/documents/{document}/corrections', [DocumentController::class, 'createCorrection']);
         Route::post('expedients/{expedient}/documents/{document}/attachments', [DocumentController::class, 'attach']);
         Route::get('expedients/{expedient}/documents/{document}/attachments/{attachment}/download', [DocumentController::class, 'downloadAttachment']);
@@ -137,6 +141,16 @@ Route::middleware(['auth:sanctum', 'active.user', 'no.store'])->group(function (
         Route::post('legislatures/{legislature}/activate', [LegislatureController::class, 'activate']);
         Route::post('legislatures/{legislature}/inactivate', [LegislatureController::class, 'inactivate']);
         Route::post('legislatures/{legislature}/board-assignments', [LegislatureController::class, 'replaceBoardMember']);
+        Route::get('legislatures/{legislature}/composition', [LegislativeCompositionController::class, 'show']);
+        Route::post('legislatures/{legislature}/members', [LegislativeCompositionController::class, 'assignMember']);
+        Route::post('legislatures/{legislature}/members/{legislatureMember}/close', [LegislativeCompositionController::class, 'closeMember']);
+        Route::post('legislatures/{legislature}/legislative-bodies', [LegislativeCompositionController::class, 'createBody']);
+        Route::post('legislatures/{legislature}/legislative-bodies/{legislativeBody}/memberships', [LegislativeCompositionController::class, 'assignBodyMembership']);
+        Route::post('legislatures/{legislature}/legislative-bodies/{legislativeBody}/memberships/{membership}/close', [LegislativeCompositionController::class, 'closeBodyMembership']);
+        Route::post('legislatures/{legislature}/legislative-bodies/{legislativeBody}/delegations', [LegislativeCompositionController::class, 'createDelegation']);
+        Route::get('legislative/directory', LegislativeDirectoryController::class);
+        Route::get('legislative/plenary-referrals', [PlenaryReferralController::class, 'index']);
+        Route::post('expedients/{expedient}/plenary-referrals', [PlenaryReferralController::class, 'store']);
 
         // Almacenes reutiliza el expediente como trazabilidad y conserva separado el kardex físico.
         Route::get('warehouse/bootstrap', [WarehouseCatalogController::class, 'bootstrap']);
