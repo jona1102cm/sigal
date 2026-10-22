@@ -16,6 +16,7 @@ const emit = defineEmits(['close', 'created']);
 const documents = useDocumentManagementStore();
 const session = useSessionStore();
 const error = ref(null);
+const catalogError = ref(null);
 const exceptionalEntry = ref(false);
 const queuedFiles = ref([]);
 
@@ -109,9 +110,21 @@ function setSensibleDefaults() {
     if (!form.responsible_office_id && responsibleOffices.value.length === 1) form.responsible_office_id = responsibleOffices.value[0].id;
 }
 
-watch(() => props.open, (open) => {
+async function loadRequiredCatalogs() {
+    catalogError.value = null;
+
+    try {
+        await documents.loadCatalogs();
+        setSensibleDefaults();
+    } catch (exception) {
+        catalogError.value = exception.message;
+    }
+}
+
+watch(() => props.open, async (open) => {
     if (open) {
         error.value = null;
+        catalogError.value = null;
         exceptionalEntry.value = false;
         queuedFiles.value = [];
         const institutionalDate = currentInstitutionalDate();
@@ -139,6 +152,7 @@ watch(() => props.open, (open) => {
             content: '',
         });
         setSensibleDefaults();
+        if (!documents.catalogsLoaded) await loadRequiredCatalogs();
     }
 });
 
@@ -212,7 +226,7 @@ async function submit() {
     const documentTypeId = positiveIntegerId(form.document_type_id);
 
     if (!expedientTypeId) {
-        error.value = 'Seleccione un tipo de expediente antes de registrar el ingreso.';
+        error.value = 'Seleccione un tipo de expediente antes de registrar el expediente.';
         return;
     }
 
@@ -279,15 +293,17 @@ async function submit() {
         <section class="modal modal--wide" role="dialog" aria-modal="true" aria-labelledby="create-expedient-title">
             <header class="modal__header">
                 <div>
-                    <p class="eyebrow">Nuevo registro</p>
-                    <h2 id="create-expedient-title">{{ exceptionalEntry ? 'Registrar expediente excepcional' : 'Registrar ingreso documentado' }}</h2>
-                    <p class="muted">{{ exceptionalEntry ? 'Use esta opción solo cuando el trámite deba abrirse sin documentación inicial.' : 'El documento de ingreso abre el expediente y se conserva como su antecedente inicial.' }}</p>
+                    <p class="eyebrow">Nuevo expediente</p>
+                    <h2 id="create-expedient-title">{{ exceptionalEntry ? 'Registrar expediente excepcional' : 'Registrar expediente documentado' }}</h2>
+                    <p class="muted">{{ exceptionalEntry ? 'Use esta opción solo cuando el trámite deba abrirse sin documentación inicial.' : 'El documento inicial abre el expediente y se conserva como su primer antecedente.' }}</p>
                 </div>
                 <button class="icon-button" type="button" aria-label="Cerrar" @click="emit('close')">×</button>
             </header>
 
             <form class="form-grid" @submit.prevent="submit">
                 <p v-if="error" class="alert alert--error form-grid__full" role="alert">{{ error }}</p>
+                <div v-if="documents.busy.catalogs" class="entry-mode-notice form-grid__full" role="status"><p><strong>Cargando datos institucionales…</strong> Estamos consultando tipos de expediente, tipos documentales, confidencialidad y oficinas.</p></div>
+                <div v-else-if="catalogError || documents.catalogLoadError" class="alert alert--error form-grid__full" role="alert"><span>{{ catalogError || documents.catalogLoadError }}</span> <button class="text-button" type="button" @click="loadRequiredCatalogs">Reintentar carga</button></div>
 
                 <div class="entry-mode-notice form-grid__full">
                     <p v-if="!exceptionalEntry"><strong>Flujo normal:</strong> registre la nota, circular, informe o requerimiento que inicia el trámite.</p>
@@ -301,7 +317,7 @@ async function submit() {
                     <select v-show="false" v-model="form.expedient_type_id" disabled><option value="" disabled>Seleccione el trámite</option><option v-for="type in documents.catalogs.expedientTypes" :key="type.id" :value="type.id">{{ type.name }} · {{ type.category }}</option></select>
                     <small>Clasifica el trámite completo; no es el tipo de nota, informe o circular que lo inicia.</small>
                 </label>
-                <div v-else class="field field--static"><span>Tipo de expediente</span><strong>{{ documents.catalogs.expedientTypes[0]?.name || 'No hay tipos activos' }}</strong><small v-if="!documents.catalogs.expedientTypes.length">Solicite a un superadministrador que active un tipo de expediente.</small></div>
+                <div v-else class="field field--static"><span>Tipo de expediente</span><strong>{{ documents.catalogs.expedientTypes[0]?.name || (documents.catalogsLoaded ? 'No hay tipos activos' : 'Catálogo pendiente de carga') }}</strong><small v-if="documents.catalogsLoaded && !documents.catalogs.expedientTypes.length">Solicite a un superadministrador que active un tipo de expediente.</small></div>
 
                 <label v-if="hasManyConfidentialityLevels" class="field">
                     <span>Confidencialidad</span>
@@ -310,7 +326,7 @@ async function submit() {
                     <small v-if="selectedConfidentiality?.requires_explicit_access">El acceso deberá concederse expresamente después del registro.</small>
                     <small v-else>{{ selectedConfidentiality?.code === 'PUBLIC_INSTITUTIONAL' ? 'Para información institucional de consulta amplia.' : 'Interno es el nivel normal para el flujo institucional.' }}</small>
                 </label>
-                <div v-else class="field field--static"><span>Confidencialidad</span><strong>{{ documents.catalogs.confidentialityLevels[0]?.name || 'Interno' }}</strong><small>Interno es el nivel normal. Reservado y Confidencial requieren autorización explícita.</small></div>
+                <div v-else class="field field--static"><span>Confidencialidad</span><strong>{{ documents.catalogs.confidentialityLevels[0]?.name || (documents.catalogsLoaded ? 'Sin niveles activos' : 'Catálogo pendiente de carga') }}</strong><small v-if="documents.catalogs.confidentialityLevels.length">Interno es el nivel normal. Reservado y Confidencial requieren autorización explícita.</small></div>
 
                 <label class="field">
                     <span>Referencia</span>
@@ -325,7 +341,7 @@ async function submit() {
                         <select v-show="false" v-model="form.document_type_id" disabled><option value="" disabled>Seleccione el tipo documental</option><option v-for="type in documents.catalogs.documentTypes" :key="type.id" :value="type.id">{{ type.name }}</option></select>
                         <small>Identifica la nota, informe, circular, solicitud u otro documento que abre este expediente.</small>
                     </label>
-                    <div v-else class="field field--static"><span>Documento que inicia el trámite</span><strong>{{ documents.catalogs.documentTypes[0]?.name || 'No hay tipos activos' }}</strong></div>
+                    <div v-else class="field field--static"><span>Documento que inicia el trámite</span><strong>{{ documents.catalogs.documentTypes[0]?.name || (documents.catalogsLoaded ? 'No hay tipos activos' : 'Catálogo pendiente de carga') }}</strong></div>
                     <label class="field"><span>Número o CITE del documento</span><input v-model.trim="form.origin_document_number" maxlength="255" placeholder="Ej.: CITE: 024/2026" required></label>
                 </template>
 
@@ -376,7 +392,7 @@ async function submit() {
 
                 <footer class="modal__actions form-grid__full">
                     <button class="button button--secondary" type="button" @click="emit('close')">Cancelar</button>
-                    <button class="button button--primary" :disabled="documents.busy[exceptionalEntry ? 'create-expedient' : 'create-entry'] || (form.derive_after_registration && !form.primary_office_ids.length)" type="submit">{{ exceptionalEntry ? (documents.busy['create-expedient'] ? 'Registrando…' : form.derive_after_registration ? 'Registrar y derivar expediente' : 'Registrar expediente excepcional') : (documents.busy['create-entry'] ? 'Registrando…' : form.derive_after_registration ? 'Registrar, abrir y derivar' : 'Registrar ingreso y abrir expediente') }}</button>
+                    <button class="button button--primary" :disabled="!documents.catalogsLoaded || documents.busy.catalogs || documents.busy[exceptionalEntry ? 'create-expedient' : 'create-entry'] || (form.derive_after_registration && !form.primary_office_ids.length)" type="submit">{{ exceptionalEntry ? (documents.busy['create-expedient'] ? 'Registrando…' : form.derive_after_registration ? 'Registrar y derivar expediente' : 'Registrar expediente excepcional') : (documents.busy['create-entry'] ? 'Registrando…' : 'Registrar y derivar expediente') }}</button>
                 </footer>
             </form>
         </section>

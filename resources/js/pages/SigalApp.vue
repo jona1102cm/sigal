@@ -45,7 +45,9 @@ async function loadWorkspace() {
     try {
         // Carga en paralelo solo los módulos permitidos para reducir tiempo de arranque y exposición.
         const loads = [];
-        if (session.canUseDocumentManagement) loads.push(documents.loadCatalogs(), documents.loadExpedients(), documents.loadLegislativeDirectory());
+        // Registrar un expediente requiere catálogos aunque el rol no pueda consultar la bandeja.
+        if (session.canUseDocumentManagement || session.canCreateExpedients) loads.push(documents.loadCatalogs());
+        if (session.canUseDocumentManagement) loads.push(documents.loadExpedients(), documents.loadLegislativeDirectory());
         if (session.canManageHumanResources) loads.push(humanResources.loadBootstrap(), humanResources.loadEmployees());
         if (session.canUseWarehouse) loads.push(warehouse.loadBootstrap(), warehouse.loadRequests());
         await Promise.all(loads);
@@ -75,6 +77,11 @@ async function openExpedient(expedient) {
     } catch {
         // The workspace displays the actionable server message when access changes concurrently.
     }
+}
+
+function createdExpedient() {
+    createDialogOpen.value = false;
+    view.value = session.canUseDocumentManagement ? 'expedients' : 'dashboard';
 }
 
 async function openWarehouseRequest() {
@@ -115,14 +122,20 @@ async function refreshSecurityContext() {
 
     refreshingSecurityContext = true;
     const hadDocumentAccess = session.canUseDocumentManagement;
+    const hadDocumentCatalogAccess = session.canUseDocumentManagement || session.canCreateExpedients;
     const hadHumanResourcesAccess = session.canManageHumanResources;
     const hadWarehouseAccess = session.canUseWarehouse;
     try {
         await session.refresh();
 
-        if (hadDocumentAccess && !session.canUseDocumentManagement) documents.$reset();
+        const hasDocumentCatalogAccess = session.canUseDocumentManagement || session.canCreateExpedients;
+
+        if (hadDocumentCatalogAccess && !hasDocumentCatalogAccess) documents.$reset();
         if (!hadDocumentAccess && session.canUseDocumentManagement) {
-            await Promise.all([documents.loadCatalogs(), documents.loadExpedients()]);
+            await documents.loadExpedients();
+        }
+        if (hasDocumentCatalogAccess && (!hadDocumentCatalogAccess || !documents.catalogsLoaded)) {
+            await documents.loadCatalogs();
         }
         if (hadHumanResourcesAccess && !session.canManageHumanResources) humanResources.$reset();
         if (!hadHumanResourcesAccess && session.canManageHumanResources) {
@@ -239,7 +252,7 @@ onBeforeUnmount(() => {
             <section v-else class="boot-error"><p class="alert alert--error">Su cuenta está activa, pero no tiene un módulo asignado. Solicite al administrador revisar sus roles vigentes.</p></section>
         </main>
 
-        <ExpedientCreateDialog v-if="session.canCreateExpedients" :open="createDialogOpen" @close="createDialogOpen = false" @created="createDialogOpen = false; view = 'expedients'" />
+        <ExpedientCreateDialog v-if="session.canCreateExpedients" :open="createDialogOpen" @close="createDialogOpen = false" @created="createdExpedient" />
         <AccountPasswordDialog v-if="passwordDialogOpen" @close="passwordDialogOpen = false" @changed="loadWorkspace" />
     </div>
 </template>

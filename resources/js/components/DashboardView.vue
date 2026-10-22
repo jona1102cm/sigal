@@ -33,7 +33,7 @@ function formatDate(value) {
                 <h1>Buenos días</h1>
                 <p class="muted">Controle el avance de los expedientes bajo su alcance.</p>
             </div>
-            <div class="inline-actions"><button v-if="canCreateWarehouseRequest" class="button button--ghost" type="button" @click="emit('create-warehouse-request')">Solicitar material</button><button v-if="canCreateExpedients" class="button button--primary" type="button" @click="emit('create-expedient')">+ Registrar ingreso</button></div>
+            <div class="inline-actions"><button v-if="canCreateWarehouseRequest" class="button button--ghost" type="button" @click="emit('create-warehouse-request')">Solicitar material</button><button v-if="canCreateExpedients" class="button button--primary" type="button" @click="emit('create-expedient')">+ Registrar expediente</button></div>
         </header>
 
         <section class="metric-grid" aria-label="Resumen de expedientes">

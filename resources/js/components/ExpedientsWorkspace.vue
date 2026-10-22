@@ -102,7 +102,7 @@ function setInboxScope(scope) {
                 <h1>Bandeja de expedientes</h1>
                 <p class="muted">{{ inboxScope === 'pending' ? 'Atienda primero las respuestas pendientes de su oficina.' : 'Consulte los expedientes ya finalizados o cerrados.' }}</p>
             </div>
-            <button v-if="session.canCreateExpedients" class="button button--primary" type="button" @click="emit('create-expedient')">+ Registrar ingreso</button>
+            <button v-if="session.canCreateExpedients" class="button button--primary" type="button" @click="emit('create-expedient')">+ Registrar expediente</button>
         </header>
 
         <p v-if="documents.error" class="alert alert--error" role="alert">{{ documents.error }}</p>

@@ -30,6 +30,9 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
             confidentialityLevels: [],
             offices: [],
         },
+        catalogsLoaded: false,
+        catalogsLoadedAt: null,
+        catalogLoadError: null,
         expedients: [],
         pagination: null,
         expedientSearch: '',
@@ -82,6 +85,7 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
 
         async loadCatalogs() {
             return this.run('catalogs', async () => {
+                this.catalogLoadError = null;
                 const results = await Promise.allSettled([
                     getAll('/expedient-types'),
                     getAll('/document-types'),
@@ -99,7 +103,14 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
                     }
                 });
 
-                if (failures.length) throw failures[0];
+                if (failures.length) {
+                    this.catalogsLoaded = false;
+                    this.catalogLoadError = failures[0]?.message || 'No fue posible cargar los catálogos de gestión documental.';
+                    throw failures[0];
+                }
+
+                this.catalogsLoaded = true;
+                this.catalogsLoadedAt = new Date().toISOString();
             });
         },
 
