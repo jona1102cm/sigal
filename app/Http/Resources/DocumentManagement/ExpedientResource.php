@@ -48,12 +48,6 @@ class ExpedientResource extends JsonResource
                 'id' => $this->legislature->id,
                 'period_label' => $this->legislature->period_label,
             ]),
-            'expedient_type' => $this->whenLoaded('expedientType', fn () => [
-                'id' => $this->expedientType->id,
-                'code' => $this->expedientType->code,
-                'name' => $this->expedientType->name,
-                'category' => $this->expedientType->category,
-            ]),
             'confidentiality_level' => $this->whenLoaded('confidentialityLevel', fn () => [
                 'id' => $this->confidentialityLevel->id,
                 'code' => $this->confidentialityLevel->code,

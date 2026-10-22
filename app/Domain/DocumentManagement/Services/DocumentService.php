@@ -549,7 +549,7 @@ class DocumentService
         InstitutionalWorkflow $institutionalWorkflow,
     ): void {
         $isWarehouseReceptionAct = $institutionalWorkflow === InstitutionalWorkflow::WarehouseMaterialRequest
-            && $expedient->expedientType()->where('code', 'WAREHOUSES_INVENTORY')->exists()
+            && $expedient->materialRequest()->exists()
             && $documentType->code === 'MINUTES'
             && $office->code === 'AFALM';
 

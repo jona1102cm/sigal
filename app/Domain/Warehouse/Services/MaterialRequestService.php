@@ -28,7 +28,6 @@ use App\Domain\Warehouse\Enums\MaterialRequestStatus;
 use App\Models\Document;
 use App\Models\DocumentType;
 use App\Models\ExpedientMovementRecipient;
-use App\Models\ExpedientType;
 use App\Models\LegislativeBodyMembership;
 use App\Models\MaterialRequest;
 use App\Models\MeasurementUnit;
@@ -99,10 +98,8 @@ class MaterialRequestService
         return DB::transaction(function () use ($data, $actor, $context): MaterialRequest {
             $office = $this->assertRequestingOffice($data->requestingOfficeId, $actor, $context);
             $items = $this->normalizeItems($data);
-            $expedientType = ExpedientType::query()->active()->where('code', 'WAREHOUSES_INVENTORY')->firstOrFail();
             $documentType = DocumentType::query()->active()->where('code', 'REQUEST')->firstOrFail();
             $expedient = $this->expedientService->create(new CreateExpedientData(
-                expedientTypeId: $expedientType->id,
                 confidentialityLevelId: null,
                 subject: "SOLICITUD DE MATERIALES - {$office->name}",
                 summary: $data->justification,

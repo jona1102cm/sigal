@@ -6,7 +6,6 @@ use App\Domain\DocumentManagement\Enums\OfficeCapabilityCode;
 use App\Domain\Organization\Enums\OfficeMembershipRole;
 use App\Models\ConfidentialityLevel;
 use App\Models\Expedient;
-use App\Models\ExpedientType;
 use App\Models\Legislature;
 use App\Models\ObserverOfficeScope;
 use App\Models\Office;
@@ -79,13 +78,11 @@ test('a simple user registers routes for their office and confidential expedient
         'assigned_by' => $simpleUser->id,
     ]);
 
-    $expedientType = ExpedientType::query()->where('code', 'HUMAN_RESOURCES')->firstOrFail();
     $confidential = ConfidentialityLevel::query()->where('code', 'CONFIDENTIAL')->firstOrFail();
 
     Sanctum::actingAs($simpleUser);
 
     $this->postJson('/api/expedients', [
-        'expedient_type_id' => $expedientType->id,
         'subject' => 'Solicitud de contratación',
         'summary' => 'Registro de trámite administrativo de prueba.',
         'origin' => 'external',
@@ -99,7 +96,6 @@ test('a simple user registers routes for their office and confidential expedient
         ->assertJsonPath('data.confidentiality_level.code', 'INTERNAL');
 
     $this->postJson('/api/expedients', [
-        'expedient_type_id' => $expedientType->id,
         'confidentiality_level_id' => $confidential->id,
         'subject' => 'Antecedente reservado',
         'summary' => 'Trámite confidencial de prueba.',
@@ -118,7 +114,6 @@ test('a simple user registers routes for their office and confidential expedient
     Sanctum::actingAs($observer);
 
     $this->postJson('/api/expedients', [
-        'expedient_type_id' => $expedientType->id,
         'subject' => 'Intento de alta por un observador',
         'origin' => 'internal',
         'responsible_office_id' => $office->id,

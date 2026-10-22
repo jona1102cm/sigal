@@ -4,7 +4,6 @@ use App\Domain\Authorization\Enums\RoleCode;
 use App\Domain\DocumentManagement\Enums\OfficeCapabilityCode;
 use App\Domain\Organization\Enums\OfficeMembershipRole;
 use App\Models\Expedient;
-use App\Models\ExpedientType;
 use App\Models\Legislature;
 use App\Models\Office;
 use App\Models\OfficeMembership;
@@ -65,11 +64,9 @@ test('movements calculate the status and URA with OMAF completes the lifecycle',
         ]);
     }
 
-    $expedientType = ExpedientType::query()->where('code', 'HUMAN_RESOURCES')->firstOrFail();
     Sanctum::actingAs($sender);
 
     $createResponse = $this->postJson('/api/expedients', [
-        'expedient_type_id' => $expedientType->id,
         'subject' => 'Trámite con informe jurídico',
         'summary' => 'Se requiere respuesta de Dirección Jurídica.',
         'origin' => 'internal',

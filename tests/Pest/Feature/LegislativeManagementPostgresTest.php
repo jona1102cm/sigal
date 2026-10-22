@@ -10,7 +10,6 @@ use App\Models\ConfidentialityLevel;
 use App\Models\Document;
 use App\Models\DocumentType;
 use App\Models\Expedient;
-use App\Models\ExpedientType;
 use App\Models\LegislativeBody;
 use App\Models\LegislativeBodyMembership;
 use App\Models\Legislature;
@@ -167,7 +166,6 @@ test('general and personal caucus correspondence enforce the approved readership
 
     Sanctum::actingAs($secretariatUser);
     $generalId = $this->postJson('/api/expedients', [
-        'expedient_type_id' => 1,
         'subject' => 'Correspondencia general de bancada',
         'origin' => 'internal',
         'responsible_office_id' => $this->secretariat->id,
@@ -175,7 +173,6 @@ test('general and personal caucus correspondence enforce the approved readership
         'primary_office_ids' => [$this->caucusOffice->id],
     ])->assertCreated()->json('data.id');
     $personalId = $this->postJson('/api/expedients', [
-        'expedient_type_id' => 1,
         'subject' => 'Correspondencia personal',
         'origin' => 'internal',
         'responsible_office_id' => $this->secretariat->id,
@@ -227,7 +224,6 @@ test('an active plenary referral exposes the complete confidential expedient wit
 
     Sanctum::actingAs($secretariatUser);
     $expedientId = $this->postJson('/api/expedients', [
-        'expedient_type_id' => 1,
         'confidentiality_level_id' => $restricted->id,
         'subject' => 'Asunto reservado para conocimiento del Pleno',
         'origin' => 'internal',
@@ -265,12 +261,10 @@ test('commission staff prepares a draft while the delegated authority alone emit
     $body = legislativeBody($this->legislature, $this->commissionOffice, 'permanent_commission', $this->administrator);
     $presidentPosition = legislativeBodyMember($body, $president, 'president', $this->administrator);
     $vicePresidentPosition = legislativeBodyMember($body, $vicePresident, 'vice_president', $this->administrator);
-    $expedientType = ExpedientType::query()->firstOrFail();
     $documentType = DocumentType::query()->where('code', 'LETTER')->firstOrFail();
 
     Sanctum::actingAs($secretariatUser);
     $expedientId = $this->postJson('/api/expedients', [
-        'expedient_type_id' => $expedientType->id,
         'subject' => 'Consulta para respuesta de comisión',
         'origin' => 'internal',
         'responsible_office_id' => $this->secretariat->id,

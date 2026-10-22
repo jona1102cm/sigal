@@ -347,7 +347,7 @@ class ExpedientMovementService
         }
 
         if ($institutionalWorkflow === InstitutionalWorkflow::WarehouseMaterialRequest
-            && ! $expedient->expedientType()->where('code', 'WAREHOUSES_INVENTORY')->exists()) {
+            && ! $expedient->materialRequest()->exists()) {
             throw ValidationException::withMessages([
                 'workflow' => 'La excepción de enrutamiento de Almacenes solo puede aplicarse a una solicitud formal de materiales.',
             ]);

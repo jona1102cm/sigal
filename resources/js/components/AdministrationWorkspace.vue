@@ -1,7 +1,6 @@
 <script setup>
 /** Contenedor de las herramientas institucionales exclusivas de superadministración. */
 import { computed, ref } from 'vue';
-import ExpedientTypeAdministration from './ExpedientTypeAdministration.vue';
 import LegislatureAdministration from './LegislatureAdministration.vue';
 import OrganizationAdministration from './OrganizationAdministration.vue';
 import OperationalResetAdministration from './OperationalResetAdministration.vue';
@@ -28,7 +27,6 @@ const showOperationalReset = computed(() => session.hasPermission('administratio
         <nav class="administration-tabs" aria-label="Secciones de administración">
             <button type="button" :class="{ 'is-active': activeSection === 'legislatures' }" @click="activeSection = 'legislatures'">Legislaturas y Directiva</button>
             <button type="button" :class="{ 'is-active': activeSection === 'organization' }" @click="activeSection = 'organization'">Organigrama y oficinas</button>
-            <button type="button" :class="{ 'is-active': activeSection === 'expedient-types' }" @click="activeSection = 'expedient-types'">Tipos de expediente</button>
             <button type="button" :class="{ 'is-active': activeSection === 'users' }" @click="activeSection = 'users'">Accesos y contraseñas</button>
             <button type="button" :class="{ 'is-active': activeSection === 'roles' }" @click="activeSection = 'roles'">Roles y permisos</button>
             <button v-if="showOperationalReset" type="button" :class="{ 'is-active': activeSection === 'operational-reset' }" @click="activeSection = 'operational-reset'">Reinicio preoperativo</button>
@@ -36,7 +34,6 @@ const showOperationalReset = computed(() => session.hasPermission('administratio
 
         <LegislatureAdministration v-if="activeSection === 'legislatures'" />
         <OrganizationAdministration v-else-if="activeSection === 'organization'" />
-        <ExpedientTypeAdministration v-else-if="activeSection === 'expedient-types'" />
         <UserAccessAdministration v-else-if="activeSection === 'users'" />
         <RolePermissionAdministration v-else-if="activeSection === 'roles'" />
         <OperationalResetAdministration v-else-if="showOperationalReset && activeSection === 'operational-reset'" />

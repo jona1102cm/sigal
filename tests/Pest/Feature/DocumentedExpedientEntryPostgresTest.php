@@ -6,7 +6,6 @@ use App\Domain\Organization\Enums\OfficeMembershipRole;
 use App\Models\Document;
 use App\Models\DocumentType;
 use App\Models\ExpedientMovement;
-use App\Models\ExpedientType;
 use App\Models\Legislature;
 use App\Models\Office;
 use App\Models\OfficeCapability;
@@ -65,7 +64,6 @@ beforeEach(function (): void {
         'capability' => OfficeCapabilityCode::ReceiveExternalDocuments,
     ]);
     $this->user = documentedEntryActor($this->office);
-    $this->expedientType = ExpedientType::query()->where('code', 'HUMAN_RESOURCES')->firstOrFail();
     $this->documentType = DocumentType::query()->where('code', 'LETTER')->firstOrFail();
 });
 
@@ -75,7 +73,6 @@ test('an office without explicit capability cannot register external documentati
     Sanctum::actingAs($user);
 
     $this->post('/api/expedient-entries', [
-        'expedient_type_id' => $this->expedientType->id,
         'subject' => 'Documento externo no autorizado',
         'origin' => 'external',
         'sender_type' => 'organization',
@@ -95,7 +92,6 @@ test('a documented entry atomically creates the expedient, its source document, 
     Sanctum::actingAs($this->user);
 
     $response = $this->post('/api/expedient-entries', [
-        'expedient_type_id' => $this->expedientType->id,
         'subject' => 'Solicitud de contratación temporal',
         'summary' => 'Se solicita la apertura del trámite administrativo.',
         'origin' => 'external',
@@ -110,7 +106,8 @@ test('a documented entry atomically creates the expedient, its source document, 
     ], ['Accept' => 'application/json'])
         ->assertCreated()
         ->assertJsonPath('data.route_code', 'SIGAL-000001/2026-2027')
-        ->assertJsonPath('data.is_uat', true);
+        ->assertJsonPath('data.is_uat', true)
+        ->assertJsonMissingPath('data.expedient_type');
 
     $expedientId = $response->json('data.id');
     $document = Document::query()->where('expedient_id', $expedientId)->firstOrFail();
@@ -120,7 +117,11 @@ test('a documented entry atomically creates the expedient, its source document, 
         ->and($document->origin_date?->toDateString())->toBe('2026-08-08')
         ->and($document->issuing_office_id)->toBeNull()
         ->and($document->attachments)->toHaveCount(1);
-    $this->assertDatabaseHas('expedients', ['id' => $expedientId, 'is_uat' => true]);
+    $this->assertDatabaseHas('expedients', [
+        'id' => $expedientId,
+        'expedient_type_id' => null,
+        'is_uat' => true,
+    ]);
     $this->getJson("/api/expedients/{$expedientId}/documents")
         ->assertOk()
         ->assertJsonPath('data.0.is_uat', true);
@@ -138,7 +139,6 @@ test('an internal entry derives the sender and origin office from the responsibl
     Sanctum::actingAs($this->user);
 
     $response = $this->postJson('/api/expedients', [
-        'expedient_type_id' => $this->expedientType->id,
         'subject' => 'Nota interna de sistemas',
         'summary' => 'Registro interno sin solicitar nuevamente la identidad del funcionario.',
         'origin' => 'internal',
@@ -166,7 +166,6 @@ test('the detail exposes authoritative permissions and an ordinary office manage
     Sanctum::actingAs($this->user);
 
     $created = $this->postJson('/api/expedients', [
-        'expedient_type_id' => $this->expedientType->id,
         'subject' => 'Trámite bajo custodia de una jefatura ordinaria',
         'origin' => 'internal',
         'responsible_office_id' => $this->office->id,
@@ -194,7 +193,6 @@ test('a documented internal entry permits an empty summary and derives the sole 
     Sanctum::actingAs($this->user);
 
     $response = $this->post('/api/expedient-entries', [
-        'expedient_type_id' => $this->expedientType->id,
         'subject' => 'Nota interna sin resumen',
         'origin' => 'internal',
         'received_on' => '2026-08-10',
@@ -217,14 +215,12 @@ test('a documented internal entry permits an empty summary and derives the sole 
 test('documentation can only be created by an office after it receives the derived expedient', function () {
     $originOffice = $this->office;
     $originUser = $this->user;
-    $expedientType = $this->expedientType;
     $documentType = $this->documentType;
     $recipientOffice = Office::query()->where('code', 'JUR')->firstOrFail();
     $recipientUser = documentedEntryActor($recipientOffice);
 
     Sanctum::actingAs($originUser);
     $entry = $this->postJson('/api/expedients', [
-        'expedient_type_id' => $expedientType->id,
         'subject' => 'Trámite a derivar',
         'summary' => 'Expediente excepcional de prueba.',
         'origin' => 'internal',
@@ -277,7 +273,6 @@ test('a document can be created and derived as one operation, keeping custody wi
 
     Sanctum::actingAs($originUser);
     $entry = $this->postJson('/api/expedients', [
-        'expedient_type_id' => $this->expedientType->id,
         'subject' => 'Trámite con derivación integrada',
         'origin' => 'internal',
         'responsible_office_id' => $originOffice->id,
@@ -353,7 +348,6 @@ test('returning the current derivation gives custody back to the sending office'
 
     Sanctum::actingAs($originUser);
     $entry = $this->postJson('/api/expedients', [
-        'expedient_type_id' => $this->expedientType->id,
         'subject' => 'Trámite devuelto a la oficina remitente',
         'origin' => 'internal',
         'responsible_office_id' => $originOffice->id,
@@ -394,7 +388,6 @@ test('an informational derivation is delivered without creating a pending respon
 
     Sanctum::actingAs($originUser);
     $entry = $this->postJson('/api/expedients', [
-        'expedient_type_id' => $this->expedientType->id,
         'subject' => 'Comunicación solo informativa',
         'origin' => 'internal',
         'responsible_office_id' => $originOffice->id,
@@ -443,7 +436,6 @@ test('each primary recipient can finalize only its own pending participation', f
 
     Sanctum::actingAs($originUser);
     $entry = $this->postJson('/api/expedients', [
-        'expedient_type_id' => $this->expedientType->id,
         'subject' => 'Atenciones paralelas por oficina',
         'origin' => 'internal',
         'responsible_office_id' => $originOffice->id,

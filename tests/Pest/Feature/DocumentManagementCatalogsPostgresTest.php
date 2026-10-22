@@ -3,7 +3,6 @@
 use App\Domain\Authorization\Enums\PermissionCode;
 use App\Domain\Authorization\Enums\RoleCode;
 use App\Domain\DocumentManagement\Services\NumberSequenceService;
-use App\Models\ExpedientType;
 use App\Models\Legislature;
 use App\Models\Office;
 use App\Models\Permission;
@@ -34,13 +33,12 @@ test('a user allowed to create expedients can load the operational catalogs with
     ]);
     Sanctum::actingAs($user);
 
-    $this->getJson('/api/expedient-types')->assertOk()->assertJsonFragment(['code' => 'INTERNAL_CORRESPONDENCE']);
     $this->getJson('/api/document-types')->assertOk()->assertJsonFragment(['code' => 'INTERNAL_NOTE']);
     $this->getJson('/api/confidentiality-levels')->assertOk()->assertJsonFragment(['code' => 'INTERNAL']);
     $this->getJson('/api/offices/directory')->assertOk()->assertJsonStructure(['data' => [['code', 'name']]]);
 });
 
-test('catalogs and institutional sequences are configurable and issue consecutive numbers', function () {
+test('document catalogs and institutional sequences issue consecutive numbers', function () {
     try {
         DB::connection()->getPdo();
     } catch (Throwable) {
@@ -59,10 +57,6 @@ test('catalogs and institutional sequences are configurable and issue consecutiv
     ]);
     Sanctum::actingAs($administrator);
 
-    $this->getJson('/api/expedient-types')
-        ->assertOk()
-        ->assertJsonFragment(['code' => 'HUMAN_RESOURCES']);
-
     $this->getJson('/api/document-types')
         ->assertOk()
         ->assertJsonFragment(['code' => 'LEGAL_REPORT']);
@@ -71,22 +65,7 @@ test('catalogs and institutional sequences are configurable and issue consecutiv
         ->assertOk()
         ->assertJsonFragment(['code' => 'CONFIDENTIAL', 'requires_explicit_access' => true]);
 
-    $this->postJson('/api/expedient-types', [
-        'code' => 'TEST_TYPE',
-        'name' => 'Tipo de prueba',
-        'category' => 'Administrativo',
-    ])->assertCreated()
-        ->assertJsonPath('data.status', 'active');
-
-    $expedientType = ExpedientType::query()->where('code', 'TEST_TYPE')->firstOrFail();
-
-    $this->postJson("/api/expedient-types/{$expedientType->id}/inactivate")
-        ->assertOk()
-        ->assertJsonPath('data.status', 'inactive');
-
-    $this->getJson('/api/expedient-types?include_inactive=1')
-        ->assertOk()
-        ->assertJsonFragment(['code' => 'TEST_TYPE', 'status' => 'inactive']);
+    $this->getJson('/api/expedient-types')->assertNotFound();
 
     $this->postJson('/api/legislatures', [
         'start_year' => 2026,

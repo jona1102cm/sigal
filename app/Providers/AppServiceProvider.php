@@ -4,7 +4,6 @@ namespace App\Providers;
 
 use App\Domain\Authorization\Enums\PermissionCode;
 use App\Models\Expedient;
-use App\Models\ExpedientType;
 use App\Models\Legislature;
 use App\Models\MaterialRequest;
 use App\Models\Office;
@@ -13,7 +12,6 @@ use App\Models\WarehouseCategory;
 use App\Models\WarehouseItem;
 use App\Models\WarehouseReceipt;
 use App\Policies\ExpedientPolicy;
-use App\Policies\ExpedientTypePolicy;
 use App\Policies\LegislaturePolicy;
 use App\Policies\MaterialRequestPolicy;
 use App\Policies\OfficePolicy;
@@ -41,7 +39,6 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Gate::policy(Legislature::class, LegislaturePolicy::class);
-        Gate::policy(ExpedientType::class, ExpedientTypePolicy::class);
         Gate::policy(Expedient::class, ExpedientPolicy::class);
         Gate::policy(Office::class, OfficePolicy::class);
         Gate::policy(User::class, UserPolicy::class);

@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\Administration\OperationalResetController;
 use App\Http\Controllers\Api\Authentication\AuthenticationController;
 use App\Http\Controllers\Api\Authorization\ObserverOfficeScopeController;
 use App\Http\Controllers\Api\Authorization\RolePermissionController;
+use App\Http\Controllers\Api\DocumentManagement\DocumentCatalogController;
 use App\Http\Controllers\Api\DocumentManagement\DocumentController;
 use App\Http\Controllers\Api\DocumentManagement\DocumentedExpedientEntryController;
 use App\Http\Controllers\Api\DocumentManagement\ExpedientAccessController;
@@ -12,7 +13,6 @@ use App\Http\Controllers\Api\DocumentManagement\ExpedientController;
 use App\Http\Controllers\Api\DocumentManagement\ExpedientInternalAssignmentController;
 use App\Http\Controllers\Api\DocumentManagement\ExpedientLifecycleController;
 use App\Http\Controllers\Api\DocumentManagement\ExpedientMovementController;
-use App\Http\Controllers\Api\DocumentManagement\ExpedientTypeController;
 use App\Http\Controllers\Api\DocumentManagement\OfficeDocumentAccessController;
 use App\Http\Controllers\Api\DocumentManagement\OfficeDocumentSequenceController;
 use App\Http\Controllers\Api\HumanResources\HumanResourcesController;
@@ -90,14 +90,9 @@ Route::middleware(['auth:sanctum', 'active.user', 'legislative.context', 'no.sto
         Route::get('document-management/offices/{office}/access-setting', [OfficeDocumentAccessController::class, 'show']);
         Route::put('document-management/offices/{office}/access-setting', [OfficeDocumentAccessController::class, 'update']);
 
-        // Catálogos que normalizan la clasificación de expedientes y documentos.
-        Route::get('expedient-types', [ExpedientTypeController::class, 'index']);
-        Route::post('expedient-types', [ExpedientTypeController::class, 'store']);
-        Route::patch('expedient-types/{expedientType}', [ExpedientTypeController::class, 'update']);
-        Route::post('expedient-types/{expedientType}/activate', [ExpedientTypeController::class, 'activate']);
-        Route::post('expedient-types/{expedientType}/inactivate', [ExpedientTypeController::class, 'inactivate']);
-        Route::get('document-types', [ExpedientTypeController::class, 'documentTypes']);
-        Route::get('confidentiality-levels', [ExpedientTypeController::class, 'confidentialityLevels']);
+        // Catálogos que normalizan los documentos y su nivel de acceso.
+        Route::get('document-types', [DocumentCatalogController::class, 'documentTypes']);
+        Route::get('confidentiality-levels', [DocumentCatalogController::class, 'confidentialityLevels']);
         // Núcleo documental: bandejas, altas, tenencia, ciclo de vida y acceso extraordinario.
         Route::get('expedients', [ExpedientController::class, 'index']);
         Route::post('expedient-entries', [DocumentedExpedientEntryController::class, 'store']);

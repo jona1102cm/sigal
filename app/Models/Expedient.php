@@ -17,11 +17,11 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Collection;
 
 #[Fillable([
     'legislature_id',
-    'expedient_type_id',
     'confidentiality_level_id',
     'route_number',
     'route_code',
@@ -72,7 +72,12 @@ class Expedient extends Model
         return $this->belongsTo(Legislature::class);
     }
 
-    /** @return BelongsTo<ExpedientType, $this> */
+    /**
+     * Clasificación heredada, disponible únicamente para consultar registros
+     * creados antes de retirar el tipo fijo de expediente.
+     *
+     * @return BelongsTo<ExpedientType, $this>
+     */
     public function expedientType(): BelongsTo
     {
         return $this->belongsTo(ExpedientType::class);
@@ -124,6 +129,12 @@ class Expedient extends Model
     public function documents(): HasMany
     {
         return $this->hasMany(Document::class);
+    }
+
+    /** La relación de dominio identifica el flujo de Almacenes sin etiquetas genéricas. */
+    public function materialRequest(): HasOne
+    {
+        return $this->hasOne(MaterialRequest::class);
     }
 
     public function plenaryReferrals(): HasMany

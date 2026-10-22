@@ -5,7 +5,6 @@ use App\Domain\Authorization\Enums\RoleCode;
 use App\Domain\Organization\Enums\OfficeMembershipRole;
 use App\Models\ConfidentialityLevel;
 use App\Models\Expedient;
-use App\Models\ExpedientType;
 use App\Models\Legislature;
 use App\Models\Office;
 use App\Models\OfficeMembership;
@@ -61,7 +60,6 @@ function scopedMembership(User $user, Office $office, OfficeMembershipRole $role
 function scopedExpedientPayload(Office $office, string $subject, array $overrides = []): array
 {
     return [
-        'expedient_type_id' => ExpedientType::query()->where('code', 'HUMAN_RESOURCES')->value('id'),
         'subject' => $subject,
         'origin' => 'internal',
         'sender_type' => 'organization',

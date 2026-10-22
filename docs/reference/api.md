@@ -76,10 +76,6 @@ Las respuestas de colección usan `data`, `links` y `meta` de paginación. Los e
 
 | Método | Ruta | Uso |
 |---|---|---|
-| GET/POST | `/expedient-types` | Lista o crea tipo de expediente. |
-| PATCH | `/expedient-types/{expedientType}` | Corrige catálogo. |
-| POST | `/expedient-types/{expedientType}/activate` | Activa opción. |
-| POST | `/expedient-types/{expedientType}/inactivate` | Inactiva opción. |
 | GET | `/document-types` | Tipos de documento. |
 | GET | `/confidentiality-levels` | Niveles de acceso. |
 

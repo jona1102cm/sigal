@@ -38,7 +38,6 @@ class PlenaryReferralController extends Controller
                 'legislature',
                 'referredBy',
                 'expedient.legislature',
-                'expedient.expedientType',
                 'expedient.confidentialityLevel',
                 'expedient.originOffice',
                 'expedient.responsibleOffice',

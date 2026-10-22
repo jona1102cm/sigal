@@ -65,7 +65,6 @@ No consumir `fetch` directamente desde un componente salvo una razón documentad
 | `OfficeDocumentAccessWorkspace` | Modalidad persistente y equipo autorizado de las oficinas dirigidas por el usuario. |
 | `OrganizationAdministration` | Oficinas y organigrama. |
 | `LegislatureAdministration` | Legislaturas y Directiva. |
-| `ExpedientTypeAdministration` | Catálogo de tipos de expediente. |
 | `OperationalResetAdministration` | Limpieza controlada de datos beta. |
 
 ## Formularios y errores

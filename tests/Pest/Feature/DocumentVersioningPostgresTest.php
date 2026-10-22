@@ -4,7 +4,6 @@ use App\Domain\Authorization\Enums\RoleCode;
 use App\Domain\Organization\Enums\OfficeMembershipRole;
 use App\Models\Document;
 use App\Models\DocumentType;
-use App\Models\ExpedientType;
 use App\Models\Legislature;
 use App\Models\Office;
 use App\Models\OfficeMembership;
@@ -51,12 +50,10 @@ test('documents preserve draft revisions and issue immutable corrected versions 
         'assigned_by' => $author->id,
     ]);
 
-    $expedientType = ExpedientType::query()->where('code', 'HUMAN_RESOURCES')->firstOrFail();
     $documentType = DocumentType::query()->where('code', 'LEGAL_REPORT')->firstOrFail();
     Sanctum::actingAs($author);
 
     $expedientResponse = $this->postJson('/api/expedients', [
-        'expedient_type_id' => $expedientType->id,
         'subject' => 'Documento con correccion',
         'summary' => 'Prueba de versionado documental.',
         'origin' => 'internal',

@@ -49,7 +49,7 @@ Contrato, membresía y rol permanecen separados. El contrato puede referenciar l
 
 | Tabla | Propósito |
 |---|---|
-| `expedient_types` | Clasificación del proceso administrativo. |
+| `expedient_types` | Catálogo heredado, conservado solamente para no destruir la clasificación de expedientes históricos. Los registros nuevos dejan `expedient_type_id` en `NULL`. |
 | `document_types` | Circular, nota, informe y otros tipos. |
 | `confidentiality_levels` | Nivel de visibilidad. |
 | `office_capabilities` | Facultades especiales como archivo/reapertura. |
@@ -70,7 +70,7 @@ Los contadores se actualizan con bloqueo pesimista. No calcular el siguiente nú
 | `expedient_internal_assignments` | Responsable operativo único y colaboradores de lectura para una llegada, con historial. |
 | `expedient_reopening_requests` | Solicitud y decisión de reapertura. |
 
-La tenencia vigente se obtiene del último movimiento y sus destinatarios; no debe inferirse solo desde `responsible_office_id`, que conserva contexto del alta. La asignación interna no cambia esa tenencia ni genera una nueva derivación: restringe qué miembro de la oficina puede operar la llegada.
+La tenencia vigente se obtiene del último movimiento y sus destinatarios; no debe inferirse solo desde `responsible_office_id`, que conserva contexto del alta. La asignación interna no cambia esa tenencia ni genera una nueva derivación: restringe qué miembro de la oficina puede operar la llegada. Tampoco debe inferirse el módulo o resultado del trámite desde un tipo fijo: las tablas especializadas, por ejemplo `material_requests`, se relacionan directamente con `expedients`.
 
 ## Documentos y archivos
 

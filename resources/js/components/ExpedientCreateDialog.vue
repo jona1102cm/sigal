@@ -31,7 +31,6 @@ function currentInstitutionalDate() {
 
 const today = currentInstitutionalDate();
 const form = reactive({
-    expedient_type_id: '',
     confidentiality_level_id: '',
     subject: '',
     summary: '',
@@ -76,7 +75,6 @@ const selectedResponsibleOffice = computed(() => responsibleOffices.value.find((
 const currentOfficeDisplay = computed(() => selectedResponsibleOffice.value ?? responsibleOffices.value[0] ?? myOfficeMemberships.value[0]?.office ?? null);
 const canRegisterExternalDocuments = computed(() => selectedResponsibleOffice.value?.receives_external_documents === true);
 const hasManyConfidentialityLevels = computed(() => documents.catalogs.confidentialityLevels.length > 1);
-const hasManyExpedientTypes = computed(() => documents.catalogs.expedientTypes.length > 1);
 const hasManyDocumentTypes = computed(() => documents.catalogs.documentTypes.length > 1);
 const hasManyResponsibleOffices = computed(() => responsibleOffices.value.length > 1);
 const primaryRecipientOptions = computed(() => hierarchicalOffices.value
@@ -97,15 +95,11 @@ function setSensibleDefaults() {
     // Solo se autoselecciona una opción cuando no existe una decisión real que tomar.
     const internal = documents.catalogs.confidentialityLevels.find((level) => level.code === 'INTERNAL');
     const defaultLevel = internal ?? documents.catalogs.confidentialityLevels[0];
-    const defaultExpedientCode = form.origin === 'internal' ? 'INTERNAL_CORRESPONDENCE' : 'EXTERNAL_CORRESPONDENCE';
     const defaultDocumentCode = form.origin === 'internal' ? 'INTERNAL_NOTE' : 'OFFICIAL_LETTER';
-    const defaultExpedient = documents.catalogs.expedientTypes.find((type) => type.code === defaultExpedientCode)
-        ?? documents.catalogs.expedientTypes[0];
     const defaultDocument = documents.catalogs.documentTypes.find((type) => type.code === defaultDocumentCode)
         ?? documents.catalogs.documentTypes[0];
 
     if (!form.confidentiality_level_id && defaultLevel) form.confidentiality_level_id = defaultLevel.id;
-    if (!form.expedient_type_id && defaultExpedient) form.expedient_type_id = defaultExpedient.id;
     if (!form.document_type_id && defaultDocument) form.document_type_id = defaultDocument.id;
     if (!form.responsible_office_id && responsibleOffices.value.length === 1) form.responsible_office_id = responsibleOffices.value[0].id;
 }
@@ -129,7 +123,6 @@ watch(() => props.open, async (open) => {
         queuedFiles.value = [];
         const institutionalDate = currentInstitutionalDate();
         Object.assign(form, {
-            expedient_type_id: '',
             confidentiality_level_id: '',
             subject: '',
             summary: '',
@@ -159,7 +152,6 @@ watch(() => props.open, async (open) => {
 watch([
     responsibleOffices,
     () => documents.catalogs.confidentialityLevels.length,
-    () => documents.catalogs.expedientTypes.length,
     () => documents.catalogs.documentTypes.length,
 ], setSensibleDefaults);
 
@@ -221,14 +213,8 @@ async function submit() {
     // FormData permite enviar los campos estructurados y múltiples binarios en la misma solicitud.
     error.value = null;
 
-    const expedientTypeId = positiveIntegerId(form.expedient_type_id);
     const responsibleOfficeId = positiveIntegerId(form.responsible_office_id);
     const documentTypeId = positiveIntegerId(form.document_type_id);
-
-    if (!expedientTypeId) {
-        error.value = 'Seleccione un tipo de expediente antes de registrar el expediente.';
-        return;
-    }
 
     if (!responsibleOfficeId) {
         error.value = 'No fue posible determinar la oficina responsable. Actualice la sesión o solicite a Recursos Humanos verificar su asignación vigente.';
@@ -250,7 +236,6 @@ async function submit() {
     try {
         const data = {
             ...form,
-            expedient_type_id: expedientTypeId,
             confidentiality_level_id: positiveIntegerId(form.confidentiality_level_id),
             responsible_office_id: responsibleOfficeId,
             summary: form.summary || null,
@@ -302,7 +287,7 @@ async function submit() {
 
             <form class="form-grid" @submit.prevent="submit">
                 <p v-if="error" class="alert alert--error form-grid__full" role="alert">{{ error }}</p>
-                <div v-if="documents.busy.catalogs" class="entry-mode-notice form-grid__full" role="status"><p><strong>Cargando datos institucionales…</strong> Estamos consultando tipos de expediente, tipos documentales, confidencialidad y oficinas.</p></div>
+                <div v-if="documents.busy.catalogs" class="entry-mode-notice form-grid__full" role="status"><p><strong>Cargando datos institucionales…</strong> Estamos consultando tipos documentales, confidencialidad y oficinas.</p></div>
                 <div v-else-if="catalogError || documents.catalogLoadError" class="alert alert--error form-grid__full" role="alert"><span>{{ catalogError || documents.catalogLoadError }}</span> <button class="text-button" type="button" @click="loadRequiredCatalogs">Reintentar carga</button></div>
 
                 <div class="entry-mode-notice form-grid__full">
@@ -310,14 +295,6 @@ async function submit() {
                     <p v-else><strong>Atención:</strong> este expediente quedará sin documento inicial hasta que se incorpore documentación por el flujo correspondiente.</p>
                     <button class="text-button" type="button" @click="exceptionalEntry = !exceptionalEntry">{{ exceptionalEntry ? 'Volver al registro documentado' : 'Registrar excepcionalmente sin documento' }}</button>
                 </div>
-
-                <label v-if="hasManyExpedientTypes" class="field">
-                    <span>Tipo de expediente</span>
-                    <SearchableSelect v-model="form.expedient_type_id" :options="documents.catalogs.expedientTypes.map((type) => ({ value: type.id, label: `${type.name} · ${type.category}` }))" placeholder="Seleccione el trámite" />
-                    <select v-show="false" v-model="form.expedient_type_id" disabled><option value="" disabled>Seleccione el trámite</option><option v-for="type in documents.catalogs.expedientTypes" :key="type.id" :value="type.id">{{ type.name }} · {{ type.category }}</option></select>
-                    <small>Clasifica el trámite completo; no es el tipo de nota, informe o circular que lo inicia.</small>
-                </label>
-                <div v-else class="field field--static"><span>Tipo de expediente</span><strong>{{ documents.catalogs.expedientTypes[0]?.name || (documents.catalogsLoaded ? 'No hay tipos activos' : 'Catálogo pendiente de carga') }}</strong><small v-if="documents.catalogsLoaded && !documents.catalogs.expedientTypes.length">Solicite a un superadministrador que active un tipo de expediente.</small></div>
 
                 <label v-if="hasManyConfidentialityLevels" class="field">
                     <span>Confidencialidad</span>

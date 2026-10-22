@@ -10,7 +10,6 @@ use Carbon\CarbonImmutable;
 readonly class CreateExpedientData
 {
     public function __construct(
-        public int $expedientTypeId,
         public ?int $confidentialityLevelId,
         public string $subject,
         public ?string $summary,
@@ -30,7 +29,6 @@ readonly class CreateExpedientData
     public static function fromValidated(array $validated): self
     {
         return new self(
-            expedientTypeId: (int) $validated['expedient_type_id'],
             confidentialityLevelId: isset($validated['confidentiality_level_id']) ? (int) $validated['confidentiality_level_id'] : null,
             subject: $validated['subject'],
             summary: $validated['summary'] ?? null,

@@ -5,7 +5,7 @@ Estado: **backend e interfaz web implementados**.
 ## Interfaz operativa
 
 - La aplicación web Vue ofrece inicio de sesión, tablero, bandeja de expedientes y un detalle a pantalla completa organizado por resumen, derivaciones, documentos, ciclo de vida y acceso.
-- Los superadministradores disponen de Administración para crear, editar, activar o inactivar oficinas, definir su dependencia en el organigrama y conservar las asignaciones históricas de responsables y funcionarios. También administran los tipos de expediente.
+- Los superadministradores disponen de Administración para crear, editar, activar o inactivar oficinas, definir su dependencia en el organigrama y conservar las asignaciones históricas de responsables y funcionarios.
 - El usuario selecciona las oficinas desde un directorio operativo de solo lectura que refleja su jerarquía. Este directorio expone únicamente código, nombre y dependencia de oficinas activas, nunca membresías ni jefaturas.
 - Cuando un catálogo o las oficinas disponibles contienen una única opción, la interfaz la utiliza por defecto y la presenta como dato fijo; evita obligar una selección redundante.
 - La sesión informa al usuario sobre sus propias oficinas vigentes. En un ingreso interno, SIGAL deriva automáticamente la oficina remitente y el usuario registrador; únicamente un usuario con más de una oficina vigente elige cuál quedará responsable. La autorización final siempre se aplica en la API.
@@ -15,6 +15,7 @@ Estado: **backend e interfaz web implementados**.
 ## Modelo institucional
 
 - Un expediente es el proceso administrativo que agrupa documentos; no es un documento.
+- El expediente no recibe un tipo fijo: su naturaleza puede evolucionar durante el trámite. Los documentos se clasifican individualmente y los procesos especializados se reconocen por su relación explícita con el módulo que los administra, como una solicitud de Almacenes.
 - Cada documento pertenece obligatoriamente a un expediente. Un expediente puede reunir documentos de distintos tipos y de varias oficinas.
 - Una derivación es un acto administrativo: no desplaza archivos. Puede referenciar uno o más documentos del expediente mediante una relación muchos-a-muchos.
 - La ruta institucional se numera como `SIGAL-000001/AAAA-AAAA` y se reinicia por legislatura. Los documentos oficiales se numeran por oficina, legislatura y tipo documental, con una serie institucional persistente.
@@ -64,7 +65,7 @@ Estado: **backend e interfaz web implementados**.
 
 - El flujo normal inicia con el registro de un documento de origen. En una unica transaccion se crean el expediente, su antecedente inicial y todos los anexos cargados.
 - El ingreso exige tipo documental, número y contenido redactado o al menos un archivo adjunto. La interfaz asigna automáticamente la fecha institucional actual tanto al registro como al documento inicial. El remitente y su tipo se solicitan únicamente si el documento fue recibido desde una persona o institución externa y la oficina posee autorización; en un ingreso interno se derivan de la oficina responsable y de la sesión.
-- La prioridad se estandariza como Normal, Alta o Urgente; Normal es el valor inicial tanto para el expediente como para sus derivaciones. El campo de clasificación queda fuera del nuevo registro por ser redundante con el tipo de expediente y la confidencialidad, aunque se conserva en históricos.
+- La prioridad se estandariza como Normal, Alta o Urgente; Normal es el valor inicial tanto para el expediente como para sus derivaciones. Los campos heredados de tipo y clasificación del expediente quedan fuera del nuevo registro; los valores anteriores se conservan únicamente como historia.
 - El documento inicial conserva el antecedente recibido: no puede editarse, emitirse, corregirse ni recibir anexos posteriormente. Un documento de origen externo no se atribuye a una oficina emisora interna.
 - La creacion de un expediente sin documento permanece disponible solamente como ruta excepcional. Los documentos posteriores se crean dentro del mismo expediente, nunca abren uno nuevo.
 - Una oficina puede crear, editar, emitir o adjuntar documentacion solo antes de la primera derivacion cuando es responsable, o despues de recibir una derivacion dirigida a ella. Esta regla se valida tambien en el servidor.

@@ -37,7 +37,6 @@ class ExpedientRegistrationService
 
             return $expedient->refresh()->load([
                 'legislature',
-                'expedientType',
                 'confidentialityLevel',
                 'originOffice',
                 'responsibleOffice',

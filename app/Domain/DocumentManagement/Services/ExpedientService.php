@@ -13,7 +13,6 @@ use App\Domain\Legislatures\Services\LegislativeAuthorizationService;
 use App\Models\ConfidentialityLevel;
 use App\Models\Expedient;
 use App\Models\ExpedientAccessGrant;
-use App\Models\ExpedientType;
 use App\Models\Legislature;
 use App\Models\Office;
 use App\Models\User;
@@ -47,7 +46,6 @@ class ExpedientService
                 ]);
             }
 
-            $expedientType = ExpedientType::query()->active()->findOrFail($data->expedientTypeId);
             $responsibleOffice = Office::query()->active()->supportingStaffing()->lockForUpdate()->findOrFail($data->responsibleOfficeId);
             $confidentialityLevel = $this->resolveConfidentialityLevel($data->confidentialityLevelId);
 
@@ -83,7 +81,6 @@ class ExpedientService
 
             $expedient = Expedient::query()->create([
                 'legislature_id' => $legislature->id,
-                'expedient_type_id' => $expedientType->id,
                 'confidentiality_level_id' => $confidentialityLevel->id,
                 'route_number' => $route->number,
                 'route_code' => $route->formatted,
@@ -118,7 +115,6 @@ class ExpedientService
 
             return $expedient->load([
                 'legislature',
-                'expedientType',
                 'confidentialityLevel',
                 'originOffice',
                 'responsibleOffice',
@@ -166,7 +162,6 @@ class ExpedientService
         return [
             'id' => $expedient->id,
             'legislature_id' => $expedient->legislature_id,
-            'expedient_type_id' => $expedient->expedient_type_id,
             'confidentiality_level_id' => $expedient->confidentiality_level_id,
             'route_number' => $expedient->route_number,
             'route_code' => $expedient->route_code,

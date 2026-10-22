@@ -31,7 +31,6 @@ Los archivos de `app/Http/Requests` declaran reglas de validación, normalizan d
 - `EmployeePolicy`: kardex, importación y contratos.
 - `OfficePolicy`: organigrama y membresías.
 - `LegislaturePolicy`: período y Directiva.
-- `ExpedientTypePolicy`: catálogos.
 - `ExpedientPolicy`: visibilidad, tenencia, documentos, movimientos, acceso y ciclo de vida.
 
 Vue puede ocultar acciones por usabilidad, pero la Policy es la autoridad real.

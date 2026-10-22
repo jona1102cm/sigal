@@ -32,7 +32,6 @@ class ExpedientController extends Controller
 {
     private const RELATIONS = [
         'legislature',
-        'expedientType',
         'confidentialityLevel',
         'originOffice',
         'responsibleOffice',

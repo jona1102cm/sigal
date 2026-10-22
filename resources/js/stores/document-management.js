@@ -25,7 +25,6 @@ function appendFormValue(body, key, value) {
 export const useDocumentManagementStore = defineStore('documentManagement', {
     state: () => ({
         catalogs: {
-            expedientTypes: [],
             documentTypes: [],
             confidentialityLevels: [],
             offices: [],
@@ -55,7 +54,6 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
         administrationOffices: [],
         selectedOffice: null,
         officeMemberships: [],
-        administrationExpedientTypes: [],
         legislatures: [],
         legislativeComposition: { members: [], bodies: [] },
         legislativeDirectory: { legislature: null, members: [], bodies: [] },
@@ -87,12 +85,11 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
             return this.run('catalogs', async () => {
                 this.catalogLoadError = null;
                 const results = await Promise.allSettled([
-                    getAll('/expedient-types'),
                     getAll('/document-types'),
                     getAll('/confidentiality-levels'),
                     getAll('/offices/directory'),
                 ]);
-                const keys = ['expedientTypes', 'documentTypes', 'confidentialityLevels', 'offices'];
+                const keys = ['documentTypes', 'confidentialityLevels', 'offices'];
                 const failures = [];
 
                 results.forEach((result, index) => {
@@ -571,31 +568,6 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
             return this.run(`membership-${membershipId}`, async () => {
                 await request(`/offices/${officeId}/memberships/${membershipId}/close`, { method: 'POST' });
                 await Promise.all([this.loadOrganizationAdministration(), this.loadOfficeMemberships(officeId)]);
-            });
-        },
-
-        async loadExpedientTypeAdministration() {
-            return this.run('expedient-types-administration', async () => {
-                this.administrationExpedientTypes = await getAll('/expedient-types?include_inactive=1');
-            });
-        },
-
-        async saveExpedientType(data, typeId = null) {
-            return this.run('expedient-type-save', async () => {
-                if (typeId) {
-                    await request(`/expedient-types/${typeId}`, { method: 'PATCH', body: data });
-                } else {
-                    await request('/expedient-types', { method: 'POST', body: data });
-                }
-
-                await Promise.all([this.loadExpedientTypeAdministration(), this.loadCatalogs()]);
-            });
-        },
-
-        async changeExpedientTypeStatus(type, action) {
-            return this.run(`expedient-type-${type.id}`, async () => {
-                await request(`/expedient-types/${type.id}/${action}`, { method: 'POST' });
-                await Promise.all([this.loadExpedientTypeAdministration(), this.loadCatalogs()]);
             });
         },
 

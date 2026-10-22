@@ -499,7 +499,7 @@ async function referToPlenary() {
                 <span class="badge badge--large" :class="`badge--${selected.status}`">{{ selected.status_label }}</span>
             </div>
             <div class="detail-meta">
-                <span>{{ selected.expedient_type?.name }}</span><span>•</span><span>Registro: {{ formatDate(selected.received_on) }}</span><span>•</span><span>{{ officeLabel(selected.responsible_office) }}</span>
+                <span>Registro: {{ formatDate(selected.received_on) }}</span><span>•</span><span>{{ officeLabel(selected.responsible_office) }}</span>
             </div>
         </header>
 

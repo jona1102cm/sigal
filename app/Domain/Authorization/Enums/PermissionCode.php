@@ -27,7 +27,6 @@ enum PermissionCode: string
     case WarehouseCatalogManage = 'warehouse.catalog.manage';
     case LegislaturesManage = 'administration.legislatures.manage';
     case OrganizationManage = 'administration.organization.manage';
-    case ExpedientTypesManage = 'administration.expedient_types.manage';
     case UsersManage = 'administration.users.manage';
     case RolePermissionsManage = 'administration.role_permissions.manage';
     case OperationalResetManage = 'administration.operational_reset.manage';
@@ -52,7 +51,6 @@ enum PermissionCode: string
             self::WarehouseCatalogManage => 'Administrar categorías, unidades y materiales',
             self::LegislaturesManage => 'Administrar legislaturas y Directiva',
             self::OrganizationManage => 'Administrar organigrama y oficinas',
-            self::ExpedientTypesManage => 'Administrar tipos de expediente',
             self::UsersManage => 'Administrar usuarios, roles, accesos y contraseñas',
             self::RolePermissionsManage => 'Configurar la matriz de permisos',
             self::OperationalResetManage => 'Ejecutar el reinicio preoperativo',
@@ -86,7 +84,6 @@ enum PermissionCode: string
             self::WarehouseCatalogManage => 'Catálogo de materiales',
             self::LegislaturesManage => 'Legislaturas y Directiva',
             self::OrganizationManage => 'Organigrama y oficinas',
-            self::ExpedientTypesManage => 'Tipos de expediente',
             self::UsersManage => 'Usuarios y accesos',
             self::RolePermissionsManage => 'Roles y permisos',
             self::OperationalResetManage => 'Reinicio preoperativo',

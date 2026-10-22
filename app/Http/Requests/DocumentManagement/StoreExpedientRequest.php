@@ -34,7 +34,6 @@ class StoreExpedientRequest extends FormRequest
     public static function registrationRules(): array
     {
         return [
-            'expedient_type_id' => ['required', 'integer', 'exists:expedient_types,id'],
             'confidentiality_level_id' => ['nullable', 'integer', 'exists:confidentiality_levels,id'],
             'subject' => ['required', 'string', 'max:255'],
             'summary' => ['nullable', 'string'],
@@ -70,7 +69,6 @@ class StoreExpedientRequest extends FormRequest
     public static function registrationMessages(): array
     {
         return [
-            'expedient_type_id.exists' => 'El tipo de expediente seleccionado ya no está disponible. Actualice el formulario y vuelva a seleccionarlo.',
             'confidentiality_level_id.exists' => 'El nivel de confidencialidad seleccionado ya no está disponible. Actualice el formulario y vuelva a seleccionarlo.',
             'responsible_office_id.required' => 'No fue posible determinar la oficina responsable. Actualice la sesión o solicite a Recursos Humanos verificar su asignación vigente.',
             'responsible_office_id.exists' => 'La oficina responsable seleccionada ya no está disponible. Actualice el formulario y vuelva a seleccionarla.',
