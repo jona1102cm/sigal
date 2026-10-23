@@ -194,6 +194,34 @@ export const useHumanResourcesStore = defineStore('humanResources', {
             });
         },
 
+        async previewRotation(contractId, data) {
+            return this.run(`preview-rotation-${contractId}`, async () => {
+                const payload = await request(`/human-resources/contracts/${contractId}/rotations/preview`, {
+                    method: 'POST',
+                    body: data,
+                });
+                return payload.data;
+            });
+        },
+
+        async rotateEmployee(contractId, formData) {
+            return this.run(`rotate-contract-${contractId}`, async () => {
+                const payload = await request(`/human-resources/contracts/${contractId}/rotations`, {
+                    method: 'POST',
+                    body: formData,
+                });
+                if (this.selected) await this.selectEmployee(this.selected.id);
+                await this.loadEmployees({ page: this.pagination?.current_page ?? 1 });
+                return payload.data;
+            });
+        },
+
+        async downloadRotationAttachment(attachment) {
+            return this.run(`rotation-attachment-${attachment.id}`, async () => {
+                await download(attachment.download_url.replace('/api', ''), attachment.original_name);
+            });
+        },
+
         async downloadAttachment(attachment) {
             return this.run(`attachment-${attachment.id}`, async () => {
                 await download(attachment.download_url.replace('/api', ''), attachment.original_name);

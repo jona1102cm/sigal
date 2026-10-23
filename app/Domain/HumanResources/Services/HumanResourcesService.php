@@ -16,6 +16,7 @@ use App\Domain\Organization\Enums\OfficeMembershipRole;
 use App\Models\Employee;
 use App\Models\EmployeeAttachment;
 use App\Models\EmploymentContract;
+use App\Models\EmploymentRotation;
 use App\Models\Office;
 use App\Models\OfficeMembership;
 use App\Models\OfficePosition;
@@ -234,6 +235,7 @@ class HumanResourcesService
                 $membership = OfficeMembership::query()->create([
                     'employment_contract_id' => $contract->id,
                     'office_id' => $position->office_id,
+                    'office_position_id' => $position->id,
                     'user_id' => $user->id,
                     'membership_role' => $position->membership_role,
                     'position_title' => $position->name,
@@ -263,6 +265,7 @@ class HumanResourcesService
                 $contract->setRelation('employee', $employee);
                 $contract->setRelation('officePosition', $position);
                 $contract->setRelation('officeMembership', $membership);
+                $contract->setRelation('currentOfficeMembership', $membership);
 
                 $this->activityLogger->record(
                     event: $isNewEmployee ? 'human_resources.contract.created' : 'human_resources.contract.renewed',
@@ -335,11 +338,10 @@ class HumanResourcesService
 
             $this->assertPositionRoleAllowed($target->office, $data->membershipRole);
             if ($data->membershipRole === OfficeMembershipRole::Manager
-                && EmploymentContract::query()
+                && OfficeMembership::query()
                     ->where('office_position_id', $target->id)
-                    ->whereNull('ended_at')
-                    ->where('starts_on', '<=', today())
-                    ->where(fn ($query) => $query->whereNull('ends_on')->orWhere('ends_on', '>=', today()))
+                    ->where('effective_from', '<=', now())
+                    ->where(fn ($query) => $query->whereNull('effective_to')->orWhere('effective_to', '>', now()))
                     ->count() > 1) {
                 throw ValidationException::withMessages([
                     'membership_role' => 'No se puede convertir este cargo en responsable porque tiene más de un contrato vigente. Primero regularice la dotación del cargo.',
@@ -351,13 +353,8 @@ class HumanResourcesService
                 'membership_role' => $data->membershipRole,
             ]);
 
-            $contractIds = EmploymentContract::query()
-                ->where('office_position_id', $target->id)
-                ->whereNull('ended_at')
-                ->lockForUpdate()
-                ->pluck('id');
             $memberships = OfficeMembership::query()
-                ->whereIn('employment_contract_id', $contractIds)
+                ->where('office_position_id', $target->id)
                 ->whereNull('effective_to')
                 ->lockForUpdate()
                 ->get();
@@ -613,7 +610,7 @@ class HumanResourcesService
         bool $expired,
     ): EmploymentContract {
         $target = EmploymentContract::query()
-            ->with(['employee.user', 'officePosition.office', 'officeMembership', 'roleAssignments.role'])
+            ->with(['employee.user', 'officePosition.office', 'officeMemberships', 'roleAssignments.role'])
             ->lockForUpdate()
             ->findOrFail($contract->id);
 
@@ -644,6 +641,29 @@ class HumanResourcesService
                 context: $context,
             );
             $membership->update(['effective_to' => $endedAt]);
+        }
+
+        $openRotations = EmploymentRotation::query()
+            ->where('employment_contract_id', $target->id)
+            ->whereNull('effective_to')
+            ->lockForUpdate()
+            ->get();
+        foreach ($openRotations as $rotation) {
+            $rotation->update([
+                'effective_to' => $endedAt,
+                'ended_by' => $actor?->id,
+            ]);
+            $this->activityLogger->record(
+                event: 'human_resources.employment_rotation.ended_on_contract_end',
+                actor: $actor,
+                subject: $rotation,
+                context: $context,
+                oldValues: ['effective_to' => null, 'ended_by' => null],
+                newValues: [
+                    'effective_to' => $endedAt->toIso8601String(),
+                    'ended_by' => $actor?->id,
+                ],
+            );
         }
 
         UserRoleAssignment::query()

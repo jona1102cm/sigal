@@ -12,7 +12,7 @@
 - Recursos Humanos según permisos separados de consulta, kardex, importación, cargos y contratos.
 - Administración institucional según cada capacidad administrativa; usuarios y matriz de permisos siguen reservados a superadministración.
 
-El menú colapsable conserva poco espacio cuando está contraído y cada módulo despliega únicamente sus subopciones. El detalle de expediente sustituye la bandeja dentro del área principal para disponer del ancho completo.
+El menú colapsable conserva poco espacio cuando está contraído y cada módulo despliega únicamente sus subopciones. El detalle de expediente sustituye la bandeja dentro del área principal para disponer del ancho completo. El panel principal personaliza el saludo con los nombres del kardex y la hora institucional de Bolivia: mañana desde las 05:00, tarde desde las 12:00 y noche desde las 19:00.
 
 ## Estado Pinia
 
@@ -26,7 +26,7 @@ Mantiene catálogos, las bandejas Nuevos/Pendientes/Finalizados, el contador ind
 
 ### `stores/human-resources.js`
 
-Carga oficinas/cargos/catálogos, lista funcionarios y coordina altas, ediciones, contratos, archivos e importación. Los errores por fila de Excel se muestran sin convertir una importación fallida en registros parciales invisibles.
+Carga oficinas/cargos/catálogos, lista funcionarios y coordina altas, ediciones, contratos, rotaciones, archivos e importación. La rotación exige una previsualización del impacto antes de confirmar y vuelve a consultar kardex/listado para reflejar la nueva oficina sin recargar la página. Los errores por fila de Excel se muestran sin convertir una importación fallida en registros parciales invisibles.
 
 ### `stores/legislatures.js`
 
@@ -57,7 +57,7 @@ No consumir `fetch` directamente desde un componente salvo una razón documentad
 | `ExpedientDetail` | Vista completa del flujo, documentos, estados y acciones. |
 | `RichTextEditor` | Edición opcional de informe HTML. |
 | `SearchableSelect` | Selección estándar con filtrado mientras se escribe. |
-| `HumanResourcesWorkspace` | Kardex, contratos, foto, cargos y edición. |
+| `HumanResourcesWorkspace` | Kardex, contratos, rotaciones con previsualización, foto, cargos y edición. |
 | `EmployeeBulkImportDialog` | Descarga de plantilla, carga y resultado de importación. |
 | `AdministrationWorkspace` | Contenedor de usuarios, organización, legislaturas, catálogos y reset. |
 | `UserAccessAdministration` | Usuarios, estado, roles, alcance del observador y reset de emergencia. |

@@ -30,6 +30,20 @@ Funcionario, contrato, cargo, membresía de oficina y rol de sistema son concept
 - Una nueva contratación reutiliza kardex y cuenta, sin duplicar la persona.
 - Existe una cuenta institucional independiente con rol `human_resources_manager`, además del acceso del superadministrador.
 
+## Rotaciones de personal
+
+Una rotación no modifica el contrato ni su fuente presupuestaria. SIGAL conserva el cargo y oficina originales en `employment_contracts` y abre una nueva asignación operativa en `office_memberships`.
+
+- Solo superadministración o RR. HH. con `human_resources.rotations.manage` pueden registrar rotaciones.
+- La oficina/cargo de destino y la fecha/hora efectiva son obligatorios. Se admite una fecha pasada dentro del contrato para regularizar movimientos ya ejecutados; no se programan rotaciones futuras.
+- Motivo, número/fecha de memorándum y archivo de respaldo son opcionales.
+- La disposición queda vigente hasta una nueva rotación, retorno o finalización contractual. Cada nueva disposición cierra exactamente la anterior.
+- Antes de confirmar, la API previsualiza origen, destino, expedientes personales que se liberarán, dotación restante y advertencias de oficina sin personal o sin responsable.
+- La oficina puede quedar temporalmente sin personal o responsable, pero SIGAL advierte y registra la decisión. Un cargo responsable de destino se rechaza si produciría dos titulares superpuestos.
+- Las asignaciones personales pendientes de Gestión documental se liberan para que la oficina de origen las reasigne; las autorizaciones de equipo de esa oficina también se cierran.
+- El funcionario conserva consulta histórica sobre expedientes no confidenciales en los que participó directamente. Los confidenciales permanecen ocultos salvo concesión expresa de superadministración. La consulta histórica nunca concede operación vigente.
+- El cierre del contrato cierra la asignación operativa y la rotación abiertas, inactiva la cuenta según las reglas generales y preserva todo el historial.
+
 ## Importación masiva
 
 Superadministración y RR. HH. pueden descargar una plantilla XLSX en español y subirla llena. La importación mantiene intacto el alta manual y aplica las mismas reglas de negocio.
@@ -52,6 +66,8 @@ El scheduler ejecuta diariamente la activación de contratos que comienzan y el 
 - `employees`: kardex personal.
 - `office_positions`: catálogo de cargos por oficina y función responsable/funcionario.
 - `employment_contracts`: historial contractual y asignaciones originadas.
+- `employment_rotations`: disposiciones de cambio operativo, vigencia y respaldo administrativo.
+- `employment_rotation_attachments`: metadatos, ruta y huella del archivo opcional.
 - `employee_attachments`: respaldos y fotografía.
 - `users`: identidad de acceso reutilizable.
 - `office_memberships`: ubicación histórica.

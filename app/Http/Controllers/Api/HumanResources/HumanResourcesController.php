@@ -67,6 +67,8 @@ class HumanResourcesController extends Controller
             ->with([
                 'user.currentRoleAssignments.role',
                 'openContract.officePosition.office',
+                'openContract.currentOfficeMembership.office',
+                'openContract.currentOfficeMembership.officePosition.office',
                 'profilePhoto',
             ])
             ->when($search !== '', function ($query) use ($search): void {
@@ -97,6 +99,12 @@ class HumanResourcesController extends Controller
             'user.currentRoleAssignments.role',
             'contracts' => fn ($query) => $query->latest('starts_on'),
             'contracts.officePosition.office',
+            'contracts.currentOfficeMembership.office',
+            'contracts.currentOfficeMembership.officePosition.office',
+            'contracts.rotations.sourceOfficeMembership.office',
+            'contracts.rotations.destinationOfficePosition.office',
+            'contracts.rotations.attachment',
+            'contracts.rotations.createdBy',
             'supportingAttachments',
             'profilePhoto',
         ]);
@@ -127,6 +135,8 @@ class HumanResourcesController extends Controller
         $employee = $result->employee->load([
             'user.currentRoleAssignments.role',
             'openContract.officePosition.office',
+            'openContract.currentOfficeMembership.office',
+            'openContract.currentOfficeMembership.officePosition.office',
             'supportingAttachments',
             'profilePhoto',
         ]);
@@ -222,6 +232,8 @@ class HumanResourcesController extends Controller
         return new EmployeeResource($employee->fresh()->load([
             'user.currentRoleAssignments.role',
             'openContract.officePosition.office',
+            'openContract.currentOfficeMembership.office',
+            'openContract.currentOfficeMembership.officePosition.office',
             'profilePhoto',
         ]));
     }
@@ -238,6 +250,8 @@ class HumanResourcesController extends Controller
         return new EmployeeResource($employee->load([
             'user.currentRoleAssignments.role',
             'openContract.officePosition.office',
+            'openContract.currentOfficeMembership.office',
+            'openContract.currentOfficeMembership.officePosition.office',
             'supportingAttachments',
             'profilePhoto',
         ]));
@@ -256,6 +270,8 @@ class HumanResourcesController extends Controller
         return new EmployeeResource($employee->fresh()->load([
             'user.currentRoleAssignments.role',
             'openContract.officePosition.office',
+            'openContract.currentOfficeMembership.office',
+            'openContract.currentOfficeMembership.officePosition.office',
             'supportingAttachments',
             'profilePhoto',
         ]));

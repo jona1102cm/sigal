@@ -1,6 +1,7 @@
 <?php
 
 use App\Domain\Authorization\Enums\RoleCode;
+use App\Models\Employee;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\UserRoleAssignment;
@@ -11,6 +12,36 @@ test('an unauthenticated API request returns 401 even without an Accept header',
     $this->get('/api/auth/me')
         ->assertUnauthorized()
         ->assertJson(['message' => 'Unauthenticated.']);
+});
+
+test('the authenticated session exposes employee first names for the personalized greeting', function () {
+    try {
+        DB::connection()->getPdo();
+    } catch (Throwable) {
+        $this->markTestSkipped('Requiere PostgreSQL disponible en la base de pruebas sigal_test.');
+    }
+
+    $this->artisan('migrate:fresh', ['--seed' => true])->assertExitCode(0);
+
+    $employee = Employee::query()->create([
+        'identity_card' => '12345678',
+        'first_names' => 'JONATHAN EMANUEL',
+        'last_names' => 'CHAVEZ MAMANI',
+        'mobile_phone' => '70000000',
+        'birth_date' => '1990-01-01',
+        'academic_degree' => 'LICENCIATURA',
+        'profession' => 'INGENIERO DE SISTEMAS',
+    ]);
+    $user = User::factory()->create([
+        'employee_id' => $employee->id,
+        'name' => $employee->fullName(),
+    ]);
+
+    Sanctum::actingAs($user);
+
+    $this->getJson('/api/auth/me')
+        ->assertOk()
+        ->assertJsonPath('data.first_names', 'JONATHAN EMANUEL');
 });
 
 test('a superadministrator can manage access while inactive users lose access and retain history', function () {

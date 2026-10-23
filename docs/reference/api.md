@@ -58,6 +58,9 @@ Las respuestas de colección usan `data`, `links` y `meta` de paginación. Los e
 | POST | `/human-resources/contracts/{contract}/extend` | Extiende fecha final. |
 | POST | `/human-resources/contracts/{contract}/finish` | Finaliza contrato y efectos de acceso. |
 | GET | `/human-resources/attachments/{attachment}/download` | Descarga autorizada. |
+| POST | `/human-resources/contracts/{contract}/rotations/preview` | Valida destino/fecha y previsualiza efectos sin mutar datos. |
+| POST | `/human-resources/contracts/{contract}/rotations` | Registra rotación y su respaldo opcional de forma transaccional. |
+| GET | `/human-resources/rotation-attachments/{attachment}/download` | Descarga autorizada del respaldo de rotación. |
 
 ## Organización
 

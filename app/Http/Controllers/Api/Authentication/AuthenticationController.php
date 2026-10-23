@@ -68,6 +68,7 @@ class AuthenticationController extends Controller
     private function sessionRelations(): array
     {
         return [
+            'employee',
             'currentRoleAssignments.role.permissions',
             'currentOfficeMemberships.office',
             'officeManagerAssignments.officeMembership',

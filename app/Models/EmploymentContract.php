@@ -64,6 +64,23 @@ class EmploymentContract extends Model
         return $this->hasOne(OfficeMembership::class);
     }
 
+    /** Todas las asignaciones operativas originadas por este contrato. */
+    public function officeMemberships(): HasMany
+    {
+        return $this->hasMany(OfficeMembership::class);
+    }
+
+    /** Asignación operativa que se encuentra abierta, incluida una rotación. */
+    public function currentOfficeMembership(): HasOne
+    {
+        return $this->hasOne(OfficeMembership::class)->whereNull('effective_to');
+    }
+
+    public function rotations(): HasMany
+    {
+        return $this->hasMany(EmploymentRotation::class)->latest('effective_from')->latest('id');
+    }
+
     /** @return HasMany<UserRoleAssignment, $this> */
     public function roleAssignments(): HasMany
     {

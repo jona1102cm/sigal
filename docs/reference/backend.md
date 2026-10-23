@@ -66,6 +66,7 @@ Servicios principales:
 | `OfficeService` | Árbol organizacional y membresías. |
 | `OfficeHierarchyService` | Expansión consistente de oficinas raíz y todas sus dependencias. |
 | `HumanResourcesService` | Kardex, contrato, cuenta, cargo, membresía y archivos. |
+| `EmploymentRotationService` | Previsualiza y ejecuta el cambio de oficina operativa, libera pendientes y conserva el contrato presupuestario. |
 | `OfficeManagerAssignmentService` | Proyecta el cargo contractual responsable y cierra su historial con la membresía. |
 | `OfficeManagerDelegationService` | Crea y finaliza suplencias administrativas temporales auditables. |
 | `EmployeeImportWorkbookReader` | Lectura segura de la estructura XLSX. |
@@ -117,7 +118,7 @@ Impide ciclos del organigrama, dependencia de nodos inválidos e inactivación d
 
 ### `Domain/HumanResources`
 
-Orquesta el agregado más amplio del sistema. La cuenta es reutilizable y el contrato es histórico. Toda alta manual o masiva desde RR. HH. asigna únicamente `simple_user`; elevar privilegios es una operación administrativa posterior. `EmployeeInitialPasswordGenerator` aplica en ambos flujos la fórmula CI completo más iniciales ASCII de todos los nombres y apellidos. La cuenta se marca para cambio obligatorio antes de habilitar cualquier módulo. Las tareas de consola llaman al mismo servicio para activar o vencer contratos.
+Orquesta el agregado más amplio del sistema. La cuenta es reutilizable y el contrato es histórico. Toda alta manual o masiva desde RR. HH. asigna únicamente `simple_user`; elevar privilegios es una operación administrativa posterior. `EmployeeInitialPasswordGenerator` aplica en ambos flujos la fórmula CI completo más iniciales ASCII de todos los nombres y apellidos. La cuenta se marca para cambio obligatorio antes de habilitar cualquier módulo. Las tareas de consola llaman al mismo servicio para activar o vencer contratos. `EmploymentRotationService` separa el origen presupuestario del destino operativo y coordina membresía, jefatura, autorizaciones, asignaciones documentales, archivos y auditoría en una sola transacción.
 
 ### `Domain/DocumentManagement`
 

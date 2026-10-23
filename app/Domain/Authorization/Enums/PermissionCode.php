@@ -20,6 +20,7 @@ enum PermissionCode: string
     case HumanResourcesImport = 'human_resources.employees.import';
     case HumanResourcesPositions = 'human_resources.positions.manage';
     case HumanResourcesContracts = 'human_resources.contracts.manage';
+    case HumanResourcesRotations = 'human_resources.rotations.manage';
     case WarehouseView = 'warehouse.requests.view';
     case WarehouseRequest = 'warehouse.requests.create';
     case WarehouseApprove = 'warehouse.requests.approve';
@@ -44,6 +45,7 @@ enum PermissionCode: string
             self::HumanResourcesImport => 'Importar funcionarios desde Excel',
             self::HumanResourcesPositions => 'Administrar cargos de oficina',
             self::HumanResourcesContracts => 'Administrar contratos y vigencias',
+            self::HumanResourcesRotations => 'Administrar rotaciones de personal',
             self::WarehouseView => 'Ver solicitudes de materiales autorizadas',
             self::WarehouseRequest => 'Crear solicitudes de materiales',
             self::WarehouseApprove => 'Aprobar, observar, rechazar o derivar solicitudes',
@@ -63,7 +65,7 @@ enum PermissionCode: string
             self::DashboardView => 'Inicio',
             self::ExpedientsView, self::ExpedientsCreate, self::ExpedientsProcess, self::OfficeAccessConfigure => 'Gestión documental',
             self::HumanResourcesView, self::HumanResourcesManage, self::HumanResourcesImport,
-            self::HumanResourcesPositions, self::HumanResourcesContracts => 'Recursos Humanos',
+            self::HumanResourcesPositions, self::HumanResourcesContracts, self::HumanResourcesRotations => 'Recursos Humanos',
             self::WarehouseView, self::WarehouseRequest, self::WarehouseApprove,
             self::WarehouseOperate, self::WarehouseCatalogManage => 'Almacenes',
             default => 'Administración',
@@ -79,6 +81,7 @@ enum PermissionCode: string
             self::HumanResourcesView, self::HumanResourcesManage, self::HumanResourcesImport => 'Funcionarios y kardex',
             self::HumanResourcesPositions => 'Cargos',
             self::HumanResourcesContracts => 'Contratos',
+            self::HumanResourcesRotations => 'Rotaciones',
             self::WarehouseView, self::WarehouseRequest, self::WarehouseApprove => 'Solicitudes',
             self::WarehouseOperate => 'Ingresos, entregas y kardex',
             self::WarehouseCatalogManage => 'Catálogo de materiales',
@@ -119,6 +122,7 @@ enum PermissionCode: string
                 self::HumanResourcesImport,
                 self::HumanResourcesPositions,
                 self::HumanResourcesContracts,
+                self::HumanResourcesRotations,
             ],
             RoleCode::Observer => [
                 self::DashboardView,

@@ -10,7 +10,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'office_id',
+    'office_position_id',
     'employment_contract_id',
+    'employment_rotation_id',
     'user_id',
     'membership_role',
     'position_title',
@@ -40,6 +42,16 @@ class OfficeMembership extends Model
     public function employmentContract(): BelongsTo
     {
         return $this->belongsTo(EmploymentContract::class);
+    }
+
+    public function officePosition(): BelongsTo
+    {
+        return $this->belongsTo(OfficePosition::class);
+    }
+
+    public function employmentRotation(): BelongsTo
+    {
+        return $this->belongsTo(EmploymentRotation::class);
     }
 
     /** @return BelongsTo<User, $this> */

@@ -34,4 +34,14 @@ class OfficePosition extends Model
     {
         return $this->hasMany(EmploymentContract::class);
     }
+
+    public function officeMemberships(): HasMany
+    {
+        return $this->hasMany(OfficeMembership::class);
+    }
+
+    public function destinationRotations(): HasMany
+    {
+        return $this->hasMany(EmploymentRotation::class, 'destination_office_position_id');
+    }
 }

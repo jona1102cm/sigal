@@ -40,6 +40,8 @@ class OperationalResetService
             'employees' => DB::table('employees')->count(),
             'employee_accounts' => DB::table('users')->whereNotNull('employee_id')->count(),
             'employment_contracts' => DB::table('employment_contracts')->count(),
+            'employment_rotations' => DB::table('employment_rotations')->count(),
+            'employment_rotation_attachments' => DB::table('employment_rotation_attachments')->count(),
             'employee_attachments' => DB::table('employee_attachments')->count(),
             'office_memberships' => DB::table('office_memberships')->count(),
             'office_manager_assignments' => DB::table('office_manager_assignments')->count(),
@@ -108,6 +110,9 @@ class OperationalResetService
             DB::table('office_manager_assignments')->delete();
             DB::table('office_document_access_authorizations')->delete();
             DB::table('office_document_access_settings')->delete();
+            DB::table('employment_rotation_attachments')->delete();
+            DB::table('office_memberships')->update(['employment_rotation_id' => null]);
+            DB::table('employment_rotations')->delete();
             DB::table('office_memberships')->delete();
             DB::table('employee_attachments')->delete();
             DB::table('user_role_assignments')->update(['employment_contract_id' => null]);
@@ -186,6 +191,10 @@ class OperationalResetService
                 'storage_path as path',
             ])->all(),
             ...DB::table('employee_attachments')->get([
+                'disk',
+                'path',
+            ])->all(),
+            ...DB::table('employment_rotation_attachments')->get([
                 'disk',
                 'path',
             ])->all(),

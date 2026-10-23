@@ -33,4 +33,9 @@ class EmployeePolicy
     {
         return $user->hasPermission(PermissionCode::HumanResourcesContracts);
     }
+
+    public function manageRotations(User $user, Employee $employee): bool
+    {
+        return $user->hasPermission(PermissionCode::HumanResourcesRotations);
+    }
 }

@@ -1,9 +1,18 @@
 <?php
 
+use App\Domain\Authorization\Enums\PermissionCode;
 use App\Domain\Authorization\Enums\RoleCode;
 use App\Domain\HumanResources\Services\EmployeeImportWorkbookReader;
+use App\Models\ConfidentialityLevel;
 use App\Models\Employee;
 use App\Models\EmploymentContract;
+use App\Models\EmploymentRotation;
+use App\Models\EmploymentRotationAttachment;
+use App\Models\Expedient;
+use App\Models\ExpedientInternalAssignment;
+use App\Models\ExpedientMovement;
+use App\Models\ExpedientMovementRecipient;
+use App\Models\Legislature;
 use App\Models\Office;
 use App\Models\OfficeManagerAssignment;
 use App\Models\OfficeManagerDelegation;
@@ -99,6 +108,241 @@ function employeeImportWorkbook(array $rows): UploadedFile
 
     return UploadedFile::fake()->createWithContent('funcionarios.xlsx', $contents);
 }
+
+function rotationExpedient(
+    User $creator,
+    Office $office,
+    ConfidentialityLevel $confidentiality,
+    int $number,
+): ExpedientMovementRecipient {
+    $legislature = Legislature::query()->firstOrCreate(
+        ['start_year' => 2026, 'end_year' => 2027],
+        ['status' => 'active', 'activated_at' => now()],
+    );
+    $expedient = Expedient::query()->create([
+        'legislature_id' => $legislature->id,
+        'confidentiality_level_id' => $confidentiality->id,
+        'route_number' => $number,
+        'route_code' => "SIGAL-UAT-2026-{$number}",
+        'subject' => "Expediente de rotación {$number}",
+        'summary' => 'Prueba de continuidad histórica.',
+        'origin' => 'internal',
+        'sender_type' => 'organization',
+        'sender_name' => $office->name,
+        'origin_office_id' => $office->id,
+        'responsible_office_id' => $office->id,
+        'received_on' => today(),
+        'priority' => 'normal',
+        'status' => 'pending_response',
+        'created_by' => $creator->id,
+        'is_uat' => true,
+    ]);
+    $movement = ExpedientMovement::query()->create([
+        'expedient_id' => $expedient->id,
+        'sender_office_id' => $office->id,
+        'priority' => 'normal',
+        'requires_response' => true,
+        'sent_by' => $creator->id,
+        'sent_at' => now()->subHour(),
+    ]);
+
+    return ExpedientMovementRecipient::query()->create([
+        'expedient_movement_id' => $movement->id,
+        'recipient_office_id' => $office->id,
+        'recipient_kind' => 'primary',
+        'status' => 'in_process',
+        'received_by' => $creator->id,
+        'received_at' => now()->subMinutes(50),
+    ]);
+}
+
+test('a rotation preserves the budget contract, moves the operational assignment and releases personal pending work', function () {
+    $administrator = humanResourcesAdministrator();
+    Sanctum::actingAs($administrator);
+    $sourceOffice = Office::query()->create([
+        'code' => 'ROT-ORI',
+        'name' => 'Oficina de origen de rotación',
+        'supports_staffing' => true,
+        'requires_manager' => true,
+    ]);
+    $destinationOffice = Office::query()->create([
+        'code' => 'ROT-DES',
+        'name' => 'Oficina de destino de rotación',
+        'supports_staffing' => true,
+        'requires_manager' => false,
+    ]);
+    $sourcePosition = OfficePosition::query()->create([
+        'office_id' => $sourceOffice->id,
+        'name' => 'Responsable presupuestado en origen',
+        'membership_role' => 'manager',
+        'created_by' => $administrator->id,
+    ]);
+    $destinationPosition = OfficePosition::query()->create([
+        'office_id' => $destinationOffice->id,
+        'name' => 'Técnico operativo en destino',
+        'membership_role' => 'official',
+        'created_by' => $administrator->id,
+    ]);
+
+    $this->postJson('/api/human-resources/employees', humanResourcesPayload($sourcePosition, [
+        'starts_on' => today()->subMonth()->toDateString(),
+    ]))->assertCreated();
+    $employee = Employee::query()->where('identity_card', '8123456')->firstOrFail();
+    $employeeUser = $employee->user()->firstOrFail();
+    $contract = $employee->openContract()->firstOrFail();
+    $sourceMembership = $contract->currentOfficeMembership()->firstOrFail();
+
+    $accessSettingId = DB::table('office_document_access_settings')->insertGetId([
+        'office_id' => $sourceOffice->id,
+        'mode' => 'authorized_team',
+        'configured_by' => $administrator->id,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    $authorizationId = DB::table('office_document_access_authorizations')->insertGetId([
+        'office_document_access_setting_id' => $accessSettingId,
+        'user_id' => $employeeUser->id,
+        'authorized_by' => $administrator->id,
+        'effective_from' => now()->subDay(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    $ordinaryRecipient = rotationExpedient(
+        $administrator,
+        $sourceOffice,
+        ConfidentialityLevel::query()->where('code', 'INTERNAL')->firstOrFail(),
+        101,
+    );
+    $confidentialRecipient = rotationExpedient(
+        $administrator,
+        $sourceOffice,
+        ConfidentialityLevel::query()->where('code', 'CONFIDENTIAL')->firstOrFail(),
+        102,
+    );
+    foreach ([$ordinaryRecipient, $confidentialRecipient] as $recipient) {
+        ExpedientInternalAssignment::query()->create([
+            'expedient_movement_recipient_id' => $recipient->id,
+            'user_id' => $employeeUser->id,
+            'assignment_role' => 'responsible',
+            'assigned_by' => $administrator->id,
+            'effective_from' => now()->subMinutes(40),
+        ]);
+    }
+
+    // También debe poder regularizarse una rotación ocurrida el mismo instante
+    // en que comenzó el contrato presupuestario.
+    $effectiveFrom = today()->subMonth()->startOfDay();
+    $payload = [
+        'office_position_id' => $destinationPosition->id,
+        'effective_from' => $effectiveFrom->format('Y-m-d H:i:s'),
+        'reason' => 'Apoyo operativo por necesidad institucional.',
+        'memorandum_number' => 'MEM-RRHH-014/2026',
+        'memorandum_date' => today()->toDateString(),
+    ];
+    $this->postJson("/api/human-resources/contracts/{$contract->id}/rotations/preview", $payload)
+        ->assertOk()
+        ->assertJsonPath('data.contract.budget_office.id', $sourceOffice->id)
+        ->assertJsonPath('data.destination.office_id', $destinationOffice->id)
+        ->assertJsonPath('data.effects.pending_expedients_released', 2)
+        ->assertJsonPath('data.effects.contract_is_unchanged', true)
+        ->assertJsonFragment(['La oficina de origen quedará sin responsable titular hasta una nueva contratación o rotación.']);
+
+    $response = $this->post("/api/human-resources/contracts/{$contract->id}/rotations", [
+        ...$payload,
+        'attachment' => UploadedFile::fake()->create('memorandum-rotacion.pdf', 30, 'application/pdf'),
+    ], ['Accept' => 'application/json']);
+    $response->assertCreated()
+        ->assertJsonPath('data.destination_position.id', $destinationPosition->id)
+        ->assertJsonPath('data.memorandum_number', 'MEM-RRHH-014/2026')
+        ->assertJsonPath('data.attachment.original_name', 'memorandum-rotacion.pdf');
+
+    $rotation = EmploymentRotation::query()->firstOrFail();
+    $currentMembership = $contract->currentOfficeMembership()->firstOrFail();
+    expect($contract->fresh()->office_position_id)->toBe($sourcePosition->id)
+        ->and($sourceMembership->fresh()->effective_to)->not->toBeNull()
+        ->and($currentMembership->office_id)->toBe($destinationOffice->id)
+        ->and($currentMembership->office_position_id)->toBe($destinationPosition->id)
+        ->and($currentMembership->employment_rotation_id)->toBe($rotation->id)
+        ->and(OfficeManagerAssignment::query()->where('office_membership_id', $sourceMembership->id)->value('effective_to'))->not->toBeNull()
+        ->and(ExpedientInternalAssignment::query()->where('user_id', $employeeUser->id)->whereNull('effective_to')->count())->toBe(0)
+        ->and(DB::table('office_document_access_authorizations')->where('id', $authorizationId)->value('effective_to'))->not->toBeNull();
+    Storage::disk('local')->assertExists(EmploymentRotationAttachment::query()->firstOrFail()->path);
+    $this->assertDatabaseHas('activity_logs', ['event' => 'human_resources.employment_rotation.created']);
+
+    $this->getJson("/api/human-resources/employees/{$employee->id}")
+        ->assertOk()
+        ->assertJsonPath('data.contracts.0.office_position.id', $sourcePosition->id)
+        ->assertJsonPath('data.contracts.0.current_assignment.office.id', $destinationOffice->id)
+        ->assertJsonCount(1, 'data.contracts.0.rotations');
+
+    $this->patchJson("/api/human-resources/positions/{$sourcePosition->id}", [
+        'name' => 'Responsable presupuestado corregido',
+        'membership_role' => 'manager',
+    ])->assertOk();
+    expect($currentMembership->fresh()->office_position_id)->toBe($destinationPosition->id)
+        ->and($currentMembership->position_title)->toBe('Técnico operativo en destino');
+
+    $employeeUser->update(['must_change_password' => false]);
+    Sanctum::actingAs($employeeUser);
+    $this->getJson('/api/expedients/'.$ordinaryRecipient->movement->expedient_id)->assertOk();
+    $this->getJson('/api/expedients/'.$confidentialRecipient->movement->expedient_id)->assertForbidden();
+
+    Sanctum::actingAs($administrator);
+    $this->postJson("/api/human-resources/contracts/{$contract->id}/finish")->assertOk();
+    expect($rotation->fresh()->effective_to)->not->toBeNull()
+        ->and($currentMembership->fresh()->effective_to)->not->toBeNull();
+});
+
+test('a rotation cannot create a second responsible in the destination office', function () {
+    $administrator = humanResourcesAdministrator();
+    Sanctum::actingAs($administrator);
+    $sourceOffice = Office::query()->create([
+        'code' => 'ROT-SRC',
+        'name' => 'Origen sin jefatura',
+        'supports_staffing' => true,
+        'requires_manager' => false,
+    ]);
+    $destinationOffice = Office::query()->create([
+        'code' => 'ROT-JEF',
+        'name' => 'Destino con jefatura',
+        'supports_staffing' => true,
+        'requires_manager' => true,
+    ]);
+    $sourcePosition = OfficePosition::query()->create([
+        'office_id' => $sourceOffice->id,
+        'name' => 'Técnico de origen',
+        'membership_role' => 'official',
+        'created_by' => $administrator->id,
+    ]);
+    $managerPosition = OfficePosition::query()->create([
+        'office_id' => $destinationOffice->id,
+        'name' => 'Jefe de destino',
+        'membership_role' => 'manager',
+        'created_by' => $administrator->id,
+    ]);
+
+    $this->postJson('/api/human-resources/employees', humanResourcesPayload($managerPosition, [
+        'identity_card' => '7000001',
+        'first_names' => 'Titular',
+        'last_names' => 'Vigente',
+    ]))->assertCreated();
+    $this->postJson('/api/human-resources/employees', humanResourcesPayload($sourcePosition, [
+        'identity_card' => '7000002',
+        'first_names' => 'Persona',
+        'last_names' => 'Rotada',
+    ]))->assertCreated();
+    $contract = Employee::query()->where('identity_card', '7000002')->firstOrFail()->openContract()->firstOrFail();
+
+    $this->postJson("/api/human-resources/contracts/{$contract->id}/rotations/preview", [
+        'office_position_id' => $managerPosition->id,
+        'effective_from' => now()->format('Y-m-d H:i:s'),
+    ])->assertUnprocessable()
+        ->assertJsonValidationErrors('office_position_id');
+
+    expect(EmploymentRotation::query()->count())->toBe(0)
+        ->and($contract->currentOfficeMembership()->firstOrFail()->office_id)->toBe($sourceOffice->id);
+});
 
 test('a human resources registration creates one employee, account, contract, membership and supporting files', function () {
     $administrator = humanResourcesAdministrator();
@@ -329,6 +573,7 @@ test('the independent human resources account can access its module but not gene
 
     expect($humanResourcesUser->employee_id)->toBeNull()
         ->and($humanResourcesUser->isHumanResourcesManager())->toBeTrue()
+        ->and($humanResourcesUser->hasPermission(PermissionCode::HumanResourcesRotations))->toBeTrue()
         ->and($humanResourcesUser->must_change_password)->toBeTrue();
     $humanResourcesUser->update(['must_change_password' => false]);
     Sanctum::actingAs($humanResourcesUser);

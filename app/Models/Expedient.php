@@ -274,6 +274,16 @@ class Expedient extends Model
                     ->where(function (Builder $participation) use ($user, $membershipOfficeIds, $automaticOfficeIds, $observerVisibilityWindows, $canApproveReopenings): void {
                         $participation->where('created_by', $user->id);
 
+                        // Una rotación no borra la participación personal ya ocurrida.
+                        // El acceso histórico aplica solo a expedientes no reservados;
+                        // actuar continúa sujeto a la custodia y pertenencia vigentes.
+                        $participation->orWhereHas('documents', fn (Builder $document) => $document
+                            ->where(fn (Builder $authorship) => $authorship
+                                ->where('created_by', $user->id)
+                                ->orWhere('issued_by', $user->id)));
+                        $participation->orWhereHas('movements.recipients.internalAssignments', fn (Builder $assignment) => $assignment
+                            ->where('user_id', $user->id));
+
                         if ($automaticOfficeIds->isNotEmpty()) {
                             $participation->orWhereIn('origin_office_id', $automaticOfficeIds)
                                 ->orWhereIn('responsible_office_id', $automaticOfficeIds)

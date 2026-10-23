@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\Organization;
 
+use App\Http\Resources\HumanResources\OfficePositionResource;
 use App\Models\OfficeMembership;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -14,6 +15,7 @@ class OfficeMembershipResource extends JsonResource
         return [
             'id' => $this->id,
             'office_id' => $this->office_id,
+            'office_position_id' => $this->office_position_id,
             'office' => $this->whenLoaded('office', fn () => [
                 'code' => $this->office->code,
                 'name' => $this->office->name,
@@ -26,6 +28,7 @@ class OfficeMembershipResource extends JsonResource
             'membership_role' => $this->membership_role->value,
             'membership_role_label' => $this->membership_role->label(),
             'position_title' => $this->position_title,
+            'office_position' => new OfficePositionResource($this->whenLoaded('officePosition')),
             'effective_from' => $this->effective_from->toIso8601String(),
             'effective_to' => $this->effective_to?->toIso8601String(),
         ];

@@ -15,6 +15,10 @@ class UserResource extends JsonResource
         return [
             'id' => $this->id,
             'name' => $this->name,
+            'first_names' => $this->when(
+                $this->relationLoaded('employee'),
+                fn () => $this->employee?->first_names,
+            ),
             'email' => $this->email,
             'status' => $this->status->value,
             'status_label' => $this->status->label(),

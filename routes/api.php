@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\DocumentManagement\ExpedientLifecycleController;
 use App\Http\Controllers\Api\DocumentManagement\ExpedientMovementController;
 use App\Http\Controllers\Api\DocumentManagement\OfficeDocumentAccessController;
 use App\Http\Controllers\Api\DocumentManagement\OfficeDocumentSequenceController;
+use App\Http\Controllers\Api\HumanResources\EmploymentRotationController;
 use App\Http\Controllers\Api\HumanResources\HumanResourcesController;
 use App\Http\Controllers\Api\Legislatures\LegislativeCompositionController;
 use App\Http\Controllers\Api\Legislatures\LegislativeDirectoryController;
@@ -75,7 +76,10 @@ Route::middleware(['auth:sanctum', 'active.user', 'legislative.context', 'no.sto
         Route::patch('human-resources/positions/{officePosition}', [HumanResourcesController::class, 'updatePosition']);
         Route::post('human-resources/contracts/{contract}/extend', [HumanResourcesController::class, 'extend']);
         Route::post('human-resources/contracts/{contract}/finish', [HumanResourcesController::class, 'finish']);
+        Route::post('human-resources/contracts/{contract}/rotations/preview', [EmploymentRotationController::class, 'preview']);
+        Route::post('human-resources/contracts/{contract}/rotations', [EmploymentRotationController::class, 'store']);
         Route::get('human-resources/attachments/{attachment}/download', [HumanResourcesController::class, 'downloadAttachment']);
+        Route::get('human-resources/rotation-attachments/{attachment}/download', [EmploymentRotationController::class, 'downloadAttachment']);
 
         // Organigrama y pertenencias históricas de usuarios a oficinas.
         Route::get('offices', [OfficeController::class, 'index']);

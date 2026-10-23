@@ -1,11 +1,53 @@
 <script setup>
 /** Resumen operativo derivado de la bandeja ya autorizada por el backend. */
-import { computed } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useDocumentManagementStore } from '../stores/document-management';
+import { useSessionStore } from '../stores/session';
 
 defineProps({ canCreateExpedients: { type: Boolean, default: false }, canCreateWarehouseRequest: { type: Boolean, default: false } });
 const emit = defineEmits(['open-expedients', 'create-expedient', 'select-expedient', 'create-warehouse-request']);
 const documents = useDocumentManagementStore();
+const session = useSessionStore();
+const currentTime = ref(new Date());
+let clockInterval = null;
+
+/**
+ * Mantiene el saludo alineado con la hora institucional aunque el panel permanezca abierto.
+ * La zona horaria explícita evita que la configuración del equipo altere el período del día.
+ */
+onMounted(() => {
+    clockInterval = window.setInterval(() => {
+        currentTime.value = new Date();
+    }, 60_000);
+});
+
+onBeforeUnmount(() => {
+    if (clockInterval !== null) window.clearInterval(clockInterval);
+});
+
+const institutionalHour = computed(() => Number(new Intl.DateTimeFormat('es-BO', {
+    hour: '2-digit',
+    hourCycle: 'h23',
+    timeZone: 'America/La_Paz',
+}).format(currentTime.value)));
+
+const greeting = computed(() => {
+    if (institutionalHour.value >= 5 && institutionalHour.value < 12) return 'Buenos días';
+    if (institutionalHour.value >= 12 && institutionalHour.value < 19) return 'Buenas tardes';
+
+    return 'Buenas noches';
+});
+
+/** Convierte el nombre normalizado del kardex en una presentación legible. */
+const employeeFirstNames = computed(() => {
+    const value = session.user?.first_names?.trim() || session.user?.name?.trim() || '';
+
+    return value
+        .toLocaleLowerCase('es-BO')
+        .replace(/(^|[\s'-])\p{L}/gu, (letter) => letter.toLocaleUpperCase('es-BO'));
+});
+
+const personalizedGreeting = computed(() => [greeting.value, employeeFirstNames.value].filter(Boolean).join(' '));
 
 const metrics = computed(() => {
     const items = documents.expedients;
@@ -30,7 +72,7 @@ function formatDate(value) {
         <header class="page-heading">
             <div>
                 <p class="eyebrow">Vista general</p>
-                <h1>Buenos días</h1>
+                <h1>{{ personalizedGreeting }}</h1>
                 <p class="muted">Controle el avance de los expedientes bajo su alcance.</p>
             </div>
             <div class="inline-actions"><button v-if="canCreateWarehouseRequest" class="button button--ghost" type="button" @click="emit('create-warehouse-request')">Solicitar material</button><button v-if="canCreateExpedients" class="button button--primary" type="button" @click="emit('create-expedient')">+ Registrar expediente</button></div>

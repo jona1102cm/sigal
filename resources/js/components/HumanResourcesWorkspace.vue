@@ -8,8 +8,10 @@ import EmployeeAvatar from './EmployeeAvatar.vue';
 import EmployeeBulkImportDialog from './EmployeeBulkImportDialog.vue';
 import SearchableSelect from './SearchableSelect.vue';
 import { useHumanResourcesStore } from '../stores/human-resources';
+import { useSessionStore } from '../stores/session';
 
 const humanResources = useHumanResourcesStore();
+const session = useSessionStore();
 const search = ref('');
 const recordOpen = ref(false);
 const editOpen = ref(false);
@@ -18,17 +20,27 @@ const positionEditingId = ref(null);
 const existingEmployee = ref(null);
 const credentials = ref(null);
 const bulkImportOpen = ref(false);
+const rotationOpen = ref(false);
+const rotationContract = ref(null);
+const rotationPreview = ref(null);
+const rotationFile = ref(null);
 const extensionDates = reactive({});
 const files = reactive({ profile_photo: null, rejap_certificate: null, cenvi_certificate: null, electoral_registry_certificate: null });
 const editFiles = reactive({ rejap_certificate: null, cenvi_certificate: null, electoral_registry_certificate: null, other_supporting_document: null });
 const form = reactive(newForm());
 const editForm = reactive(newPersonalForm());
 const positionForm = reactive({ office_id: null, name: '', membership_role: 'official' });
+const rotationForm = reactive(newRotationForm());
 let searchTimer = null;
 
 const academicSuggestions = ['Licenciatura', 'Egresado', 'Tecnico Superior', 'Tecnico Medio', 'Bachiller', 'Maestria', 'Doctorado'];
 const officeOptions = computed(() => humanResources.bootstrap.offices.map((office) => ({ value: office.id, label: `${office.code} - ${office.name}` })));
+const rotationOfficeOptions = computed(() => officeOptions.value.map((office) => ({
+    ...office,
+    disabled: Number(office.value) === Number(rotationContract.value?.current_assignment?.office?.id),
+})));
 const positionOptions = computed(() => (humanResources.positionsByOffice[form.office_id] ?? []).map((position) => ({ value: position.id, label: `${position.name} - ${position.membership_role_label}` })));
+const rotationPositionOptions = computed(() => (humanResources.positionsByOffice[rotationForm.office_id] ?? []).map((position) => ({ value: position.id, label: `${position.name} - ${position.membership_role_label}` })));
 const selectedPosition = computed(() => (humanResources.positionsByOffice[form.office_id] ?? [])
     .find((position) => position.id === Number(form.office_position_id)) ?? null);
 const positionIsManager = computed({
@@ -47,6 +59,22 @@ function newForm() {
     return {
         ...newPersonalForm(), contract_type: 'eventual', contract_amount: '', starts_on: new Date().toISOString().slice(0, 10),
         ends_on: '', office_id: null, office_position_id: null, role: 'simple_user',
+    };
+}
+
+function localDateTimeValue() {
+    const now = new Date();
+    return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+}
+
+function newRotationForm() {
+    return {
+        office_id: null,
+        office_position_id: null,
+        effective_from: localDateTimeValue(),
+        reason: '',
+        memorandum_number: '',
+        memorandum_date: '',
     };
 }
 
@@ -91,6 +119,20 @@ watch(() => form.office_id, async (officeId, previousOfficeId) => {
     if (officeId !== previousOfficeId) form.office_position_id = null;
     if (officeId) await humanResources.loadPositions(officeId);
 });
+
+watch(() => rotationForm.office_id, async (officeId, previousOfficeId) => {
+    if (officeId !== previousOfficeId) rotationForm.office_position_id = null;
+    rotationPreview.value = null;
+    if (officeId) await humanResources.loadPositions(officeId);
+});
+
+watch([
+    () => rotationForm.office_position_id,
+    () => rotationForm.effective_from,
+    () => rotationForm.reason,
+    () => rotationForm.memorandum_number,
+    () => rotationForm.memorandum_date,
+], () => { rotationPreview.value = null; });
 
 function uppercase(formData, field) {
     // Normaliza mientras se escribe; el backend repite la normalización por seguridad.
@@ -188,12 +230,52 @@ async function finishContract(contract) {
     await humanResources.finishContract(contract.id);
 }
 
+function openRotation(contract) {
+    rotationContract.value = contract;
+    rotationPreview.value = null;
+    rotationFile.value = null;
+    Object.assign(rotationForm, newRotationForm());
+    rotationOpen.value = true;
+}
+
+function closeRotation() {
+    rotationOpen.value = false;
+    rotationContract.value = null;
+    rotationPreview.value = null;
+    rotationFile.value = null;
+}
+
+function rotationPayload() {
+    return Object.fromEntries(Object.entries(rotationForm).filter(([key, value]) => key !== 'office_id' && value !== null && value !== ''));
+}
+
+async function reviewRotation() {
+    rotationPreview.value = await humanResources.previewRotation(rotationContract.value.id, rotationPayload());
+}
+
+async function submitRotation() {
+    if (!rotationPreview.value) return;
+    const body = new FormData();
+    Object.entries(rotationPayload()).forEach(([key, value]) => body.append(key, value));
+    if (rotationFile.value) body.append('attachment', rotationFile.value);
+    await humanResources.rotateEmployee(rotationContract.value.id, body);
+    closeRotation();
+}
+
+function selectRotationFile(event) {
+    rotationFile.value = event.target.files?.[0] ?? null;
+}
+
 function formatDate(value) {
     return value ? new Intl.DateTimeFormat('es-BO', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(`${value}T12:00:00`)) : 'Sin fecha de finalizacion';
 }
 
 function formatAmount(value) {
     return value === null || value === undefined ? 'No definido' : new Intl.NumberFormat('es-BO', { style: 'currency', currency: 'BOB' }).format(value);
+}
+
+function formatDateTime(value) {
+    return value ? new Intl.DateTimeFormat('es-BO', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : 'Vigente hasta nueva disposición';
 }
 </script>
 
@@ -216,7 +298,7 @@ function formatAmount(value) {
                 <div v-else class="employee-list">
                     <button v-for="employee in humanResources.employees" :key="employee.id" class="employee-row" :class="{ 'is-selected': humanResources.selected?.id === employee.id }" type="button" @click="openEmployee(employee)">
                         <EmployeeAvatar :employee="employee" />
-                        <span class="employee-row__content"><strong>{{ employee.full_name }}</strong><small>CI {{ employee.identity_card }} - {{ employee.profession }}</small><small v-if="employee.open_contract">{{ employee.open_contract.office_position?.office?.code }} - {{ employee.open_contract.office_position?.name }}</small></span>
+                        <span class="employee-row__content"><strong>{{ employee.full_name }}</strong><small>CI {{ employee.identity_card }} - {{ employee.profession }}</small><small v-if="employee.open_contract">{{ employee.open_contract.current_assignment?.office?.code || employee.open_contract.office_position?.office?.code }} - {{ employee.open_contract.current_assignment?.position_title || employee.open_contract.office_position?.name }}</small></span>
                         <span class="employee-row__state" :class="employee.account?.status === 'active' ? 'is-active' : 'is-inactive'">{{ employee.account?.status_label || 'Sin cuenta' }}</span>
                     </button>
                 </div>
@@ -244,7 +326,35 @@ function formatAmount(value) {
                     <section class="detail-subsection">
                         <div class="section-heading"><div><p class="eyebrow">Contratos</p><h3>Historial contractual</h3></div></div>
                         <div v-if="!humanResources.selected.contracts?.length" class="empty-state">No hay contratos registrados.</div>
-                        <div v-else class="contract-list"><article v-for="contract in humanResources.selected.contracts" :key="contract.id" class="contract-card"><header><div><strong>{{ contract.contract_type_label }}</strong><small>{{ contract.office_position?.office?.name }} - {{ contract.office_position?.name }}</small></div><span class="badge" :class="`badge--contract-${contract.state}`">{{ contract.state_label }}</span></header><p>Inicio: {{ formatDate(contract.starts_on) }} - Fin: {{ formatDate(contract.ends_on) }} - Monto: {{ formatAmount(contract.contract_amount) }}</p><div v-if="!contract.ended_at && contract.state !== 'upcoming'" class="contract-card__actions"><template v-if="contract.ends_on"><input v-model="extensionDates[contract.id]" type="date" :min="contract.ends_on" aria-label="Nueva fecha de finalizacion"><button class="text-button" type="button" :disabled="!extensionDates[contract.id] || humanResources.busy[`extend-contract-${contract.id}`]" @click="extendContract(contract)">Extender</button></template><button class="text-button text-button--danger" type="button" :disabled="humanResources.busy[`finish-contract-${contract.id}`]" @click="finishContract(contract)">Finalizar</button></div></article></div>
+                        <div v-else class="contract-list">
+                            <article v-for="contract in humanResources.selected.contracts" :key="contract.id" class="contract-card">
+                                <header><div><strong>{{ contract.contract_type_label }}</strong><small>Origen presupuestario: {{ contract.office_position?.office?.name }} - {{ contract.office_position?.name }}</small></div><span class="badge" :class="`badge--contract-${contract.state}`">{{ contract.state_label }}</span></header>
+                                <p>Inicio: {{ formatDate(contract.starts_on) }} - Fin: {{ formatDate(contract.ends_on) }} - Monto: {{ formatAmount(contract.contract_amount) }}</p>
+                                <div v-if="contract.current_assignment" class="contract-current-assignment">
+                                    <span>Asignación operativa actual</span>
+                                    <strong>{{ contract.current_assignment.office?.name }} - {{ contract.current_assignment.position_title }}</strong>
+                                    <small v-if="contract.rotations?.length">Rotado desde {{ formatDateTime(contract.current_assignment.effective_from) }}</small>
+                                </div>
+                                <div v-if="contract.rotations?.length" class="rotation-history">
+                                    <details>
+                                        <summary>Historial de rotaciones ({{ contract.rotations.length }})</summary>
+                                        <article v-for="rotation in contract.rotations" :key="rotation.id" class="rotation-history__item">
+                                            <strong>{{ rotation.source_assignment?.office?.code }} → {{ rotation.destination_position?.office?.code }}</strong>
+                                            <span>{{ rotation.source_assignment?.office?.name }} a {{ rotation.destination_position?.office?.name }}</span>
+                                            <small>{{ rotation.destination_position?.name }} · {{ formatDateTime(rotation.effective_from) }} · {{ formatDateTime(rotation.effective_to) }}</small>
+                                            <small v-if="rotation.memorandum_number">Memorándum {{ rotation.memorandum_number }}<template v-if="rotation.memorandum_date">, {{ formatDate(rotation.memorandum_date) }}</template></small>
+                                            <small v-if="rotation.reason">{{ rotation.reason }}</small>
+                                            <button v-if="rotation.attachment" class="text-button" type="button" @click="humanResources.downloadRotationAttachment(rotation.attachment)">Descargar respaldo</button>
+                                        </article>
+                                    </details>
+                                </div>
+                                <div v-if="!contract.ended_at && contract.state !== 'upcoming'" class="contract-card__actions">
+                                    <template v-if="contract.ends_on"><input v-model="extensionDates[contract.id]" type="date" :min="contract.ends_on" aria-label="Nueva fecha de finalizacion"><button class="text-button" type="button" :disabled="!extensionDates[contract.id] || humanResources.busy[`extend-contract-${contract.id}`]" @click="extendContract(contract)">Extender</button></template>
+                                    <button v-if="session.canManageHumanResourcesRotations" class="text-button" type="button" @click="openRotation(contract)">Rotar de oficina</button>
+                                    <button class="text-button text-button--danger" type="button" :disabled="humanResources.busy[`finish-contract-${contract.id}`]" @click="finishContract(contract)">Finalizar</button>
+                                </div>
+                            </article>
+                        </div>
                     </section>
                     <section class="detail-subsection">
                         <div class="section-heading"><div><p class="eyebrow">Respaldos</p><h3>Documentacion personal</h3></div><button class="text-button" type="button" @click="openEdit(humanResources.selected)">Actualizar respaldos</button></div>
@@ -310,6 +420,46 @@ function formatAmount(value) {
                     <label class="support-file"><span>Otro documento de respaldo</span><strong>{{ fileLabel(editFiles, 'other_supporting_document', 'Adjuntar si corresponde') }}</strong><input type="file" @change="selectFile($event, editFiles, 'other_supporting_document')"></label>
                 </div></section>
                 <footer class="modal__actions"><button class="button button--ghost" type="button" @click="editOpen = false">Cancelar</button><button class="button button--primary" type="submit" :disabled="humanResources.busy[`update-employee-${humanResources.selected?.id}`] || humanResources.busy[`employee-attachment-${humanResources.selected?.id}`]">Guardar correcciones</button></footer>
+            </form>
+        </section>
+    </div>
+
+    <div v-if="rotationOpen" class="modal-backdrop" @click.self="closeRotation">
+        <section class="modal modal--wide rotation-modal" role="dialog" aria-modal="true" aria-labelledby="employee-rotation-title">
+            <header class="modal__header">
+                <div><p class="eyebrow">Movimiento de personal</p><h2 id="employee-rotation-title">Rotar a {{ humanResources.selected?.full_name }}</h2><p class="muted">El contrato, monto y oficina presupuestaria no cambian. La nueva oficina será la asignación operativa vigente hasta otra disposición.</p></div>
+                <button class="icon-button" type="button" aria-label="Cerrar" @click="closeRotation">x</button>
+            </header>
+            <form class="human-resources-form" @submit.prevent="submitRotation">
+                <p v-if="humanResources.error" class="alert alert--error" role="alert">{{ humanResources.error }}</p>
+                <section>
+                    <div class="form-section-heading"><span>1</span><div><h3>Destino y fecha efectiva</h3><p>La fecha puede ser actual o pasada para regularizar rotaciones ya realizadas.</p></div></div>
+                    <div class="form-grid">
+                        <label class="field"><span>Oficina de destino *</span><SearchableSelect v-model="rotationForm.office_id" :options="rotationOfficeOptions" placeholder="Seleccione una oficina distinta" /></label>
+                        <label class="field"><span>Cargo operativo *</span><SearchableSelect v-model="rotationForm.office_position_id" :options="rotationPositionOptions" :disabled="!rotationForm.office_id || humanResources.busy[`positions-${rotationForm.office_id}`]" :placeholder="rotationForm.office_id ? 'Seleccione un cargo' : 'Seleccione primero la oficina'" /></label>
+                        <label class="field"><span>Fecha y hora efectiva *</span><input v-model="rotationForm.effective_from" type="datetime-local" :max="localDateTimeValue()" required></label>
+                    </div>
+                </section>
+                <section>
+                    <div class="form-section-heading"><span>2</span><div><h3>Respaldo opcional</h3><p>Puede registrar la razón, memorándum y archivo cuando exista una disposición formal.</p></div></div>
+                    <div class="form-grid">
+                        <label class="field field--full"><span>Motivo</span><textarea v-model.trim="rotationForm.reason" rows="3" maxlength="4000" placeholder="Ej.: apoyo temporal por necesidad institucional"></textarea></label>
+                        <label class="field"><span>Número de memorándum</span><input v-model.trim="rotationForm.memorandum_number" maxlength="100"></label>
+                        <label class="field"><span>Fecha del memorándum</span><input v-model="rotationForm.memorandum_date" type="date" :max="localDateTimeValue().slice(0, 10)"></label>
+                        <label class="support-file field--full"><span>Archivo de respaldo</span><strong>{{ rotationFile?.name || 'Adjuntar si corresponde' }}</strong><input type="file" @change="selectRotationFile"></label>
+                    </div>
+                </section>
+                <section v-if="rotationPreview" class="rotation-preview">
+                    <div class="form-section-heading"><span>3</span><div><h3>Revise los efectos antes de guardar</h3><p>La operación se ejecutará en una sola transacción y quedará auditada.</p></div></div>
+                    <div class="rotation-route"><div><span>Asignación actual</span><strong>{{ rotationPreview.source.office_name }}</strong><small>{{ rotationPreview.source.position_title }}</small></div><b aria-hidden="true">→</b><div><span>Nueva asignación</span><strong>{{ rotationPreview.destination.office_name }}</strong><small>{{ rotationPreview.destination.position_name }}</small></div></div>
+                    <div class="rotation-effects"><span><strong>{{ rotationPreview.effects.pending_expedients_released }}</strong> expedientes personales serán liberados</span><span><strong>{{ rotationPreview.effects.remaining_source_members }}</strong> funcionarios quedarán en origen</span><span>El contrato y la cuenta permanecerán vigentes</span></div>
+                    <ul v-if="rotationPreview.warnings.length" class="rotation-warnings"><li v-for="warning in rotationPreview.warnings" :key="warning">{{ warning }}</li></ul>
+                </section>
+                <footer class="modal__actions">
+                    <button class="button button--ghost" type="button" @click="closeRotation">Cancelar</button>
+                    <button v-if="!rotationPreview" class="button button--primary" type="button" :disabled="!rotationForm.office_position_id || !rotationForm.effective_from || humanResources.busy[`preview-rotation-${rotationContract?.id}`]" @click="reviewRotation">Revisar efectos</button>
+                    <button v-else class="button button--primary" type="submit" :disabled="humanResources.busy[`rotate-contract-${rotationContract?.id}`]">{{ humanResources.busy[`rotate-contract-${rotationContract?.id}`] ? 'Registrando rotación...' : 'Confirmar rotación' }}</button>
+                </footer>
             </form>
         </section>
     </div>

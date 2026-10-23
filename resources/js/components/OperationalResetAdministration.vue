@@ -54,6 +54,7 @@ async function performReset() {
             <div><span>En espera del Pleno</span><strong>{{ documents.operationalResetSummary?.plenary_referrals ?? '—' }}</strong></div>
             <div><span>Funcionarios</span><strong>{{ documents.operationalResetSummary?.employees ?? '—' }}</strong></div>
             <div><span>Contratos</span><strong>{{ documents.operationalResetSummary?.employment_contracts ?? '—' }}</strong></div>
+            <div><span>Rotaciones</span><strong>{{ documents.operationalResetSummary?.employment_rotations ?? '—' }}</strong></div>
         </div>
 
         <div class="operational-reset__action">

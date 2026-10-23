@@ -35,7 +35,7 @@ Existe protección para una sola legislatura activa y para impedir solapamiento 
 | Tabla | Propósito |
 |---|---|
 | `offices` | Árbol institucional, código, estado y reglas de dotación/responsable. |
-| `office_memberships` | Pertenencia histórica usuario-oficina. |
+| `office_memberships` | Pertenencia operativa histórica usuario-oficina; vincula contrato, cargo efectivo y rotación cuando corresponde. |
 | `office_document_access_settings` | Modalidad persistente con la que una oficina distribuye sus llegadas. |
 | `office_document_access_authorizations` | Equipo permanente autorizado por una jefatura, con vigencia histórica. |
 | `office_manager_assignments` | Proyección histórica de la titularidad originada por un cargo contractual responsable. |
@@ -43,9 +43,11 @@ Existe protección para una sola legislatura activa y para impedir solapamiento 
 | `employees` | Kardex personal único por CI. |
 | `office_positions` | Cargos propios de cada oficina. |
 | `employment_contracts` | Contratación, vigencia, tipo, monto, cargo, oficina y asignaciones creadas. |
+| `employment_rotations` | Disposición que cambia oficina/cargo operativo sin reescribir contrato, monto u origen presupuestario. |
+| `employment_rotation_attachments` | Respaldo opcional de la rotación con ruta, metadatos y SHA-256. |
 | `employee_attachments` | Foto/certificados/respaldos con ruta, metadatos y hash. |
 
-Contrato, membresía y rol permanecen separados. La membresía de tipo `manager`, derivada del cargo contractual, origina automáticamente `office_manager_assignments`; una delegación suspende temporalmente la operación del titular sin reescribir su contrato ni el historial.
+Contrato, membresía, rotación y rol permanecen separados. Solo puede existir una membresía operativa abierta por contrato y una rotación abierta por contrato. La membresía de tipo `manager`, derivada del cargo contractual o de destino, origina automáticamente `office_manager_assignments`; una delegación suspende temporalmente la operación del titular sin reescribir su contrato ni el historial.
 
 ## Catálogos y numeración documental
 
