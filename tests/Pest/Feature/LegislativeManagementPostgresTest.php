@@ -37,7 +37,9 @@ function legislativeUser(RoleCode $roleCode = RoleCode::SimpleUser, ?Office $off
         OfficeMembership::query()->create([
             'office_id' => $office->id,
             'user_id' => $user->id,
-            'membership_role' => OfficeMembershipRole::Official,
+            'membership_role' => $office->requires_manager
+                ? OfficeMembershipRole::Manager
+                : OfficeMembershipRole::Official,
             'effective_from' => now()->subMinute(),
             'assigned_by' => $user->id,
         ]);

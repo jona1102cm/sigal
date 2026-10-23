@@ -7,7 +7,6 @@ use App\Domain\DocumentManagement\Enums\ExpedientStatus;
 use App\Domain\DocumentManagement\Enums\OfficeCapabilityCode;
 use App\Domain\DocumentManagement\Services\OfficeDocumentAccessService;
 use App\Domain\Legislatures\Services\LegislativeAuthorizationService;
-use App\Domain\Organization\Enums\OfficeMembershipRole;
 use App\Models\Expedient;
 use App\Models\Office;
 use App\Models\User;
@@ -206,8 +205,8 @@ class ExpedientPolicy
                 && $expedient->status !== ExpedientStatus::Voided
                 && $this->membershipsHaveCapability($holderMemberships, OfficeCapabilityCode::VoidExpedients),
             'request_reopening' => $memberships->contains(fn ($membership) => (int) $membership->office_id === (int) $expedient->responsible_office_id
-                && $membership->membership_role === OfficeMembershipRole::Manager),
-            'approve_reopening' => $memberships->contains(fn ($membership) => $membership->membership_role === OfficeMembershipRole::Manager
+                && $user->isCurrentManagerOfOffice((int) $membership->office_id)),
+            'approve_reopening' => $memberships->contains(fn ($membership) => $user->isCurrentManagerOfOffice((int) $membership->office_id)
                 && $this->membershipHasCapability($membership, OfficeCapabilityCode::ApproveReopenings)),
         ];
     }

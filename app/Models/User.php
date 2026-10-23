@@ -86,6 +86,29 @@ class User extends Authenticatable
                 ->orWhere('effective_to', '>', $now));
     }
 
+    /** @return HasMany<OfficeManagerAssignment, $this> */
+    public function officeManagerAssignments(): HasMany
+    {
+        return $this->hasMany(OfficeManagerAssignment::class);
+    }
+
+    /** @return HasMany<OfficeManagerAssignment, $this> */
+    public function currentOfficeManagerAssignments(): HasMany
+    {
+        $now = now();
+
+        return $this->officeManagerAssignments()
+            ->where('effective_from', '<=', $now)
+            ->where(fn ($query) => $query
+                ->whereNull('effective_to')
+                ->orWhere('effective_to', '>', $now))
+            ->whereHas('officeMembership', fn ($membership) => $membership
+                ->where('effective_from', '<=', $now)
+                ->where(fn ($active) => $active
+                    ->whereNull('effective_to')
+                    ->orWhere('effective_to', '>', $now)));
+    }
+
     public function legislatureMemberships(): HasMany
     {
         return $this->hasMany(LegislatureMember::class);
@@ -113,6 +136,18 @@ class User extends Authenticatable
 
     public function isCurrentManagerOfOffice(int $officeId): bool
     {
+        $hasDesignationHistory = OfficeManagerAssignment::query()
+            ->where('office_id', $officeId)
+            ->exists();
+
+        if ($hasDesignationHistory) {
+            return $this->currentOfficeManagerAssignments()
+                ->where('office_id', $officeId)
+                ->exists();
+        }
+
+        // Compatibilidad para instalaciones y pruebas creadas antes de la tabla
+        // histórica. La primera designación explícita vuelve autoritativo el historial.
         return $this->currentOfficeMemberships()
             ->where('office_id', $officeId)
             ->where('membership_role', OfficeMembershipRole::Manager->value)
@@ -124,10 +159,12 @@ class User extends Authenticatable
         $memberships = $this->currentOfficeMemberships()
             ->whereHas('office.capabilities', fn ($query) => $query->where('capability', $capability->value));
 
-        if ($requiresManager) {
-            $memberships->where('membership_role', OfficeMembershipRole::Manager->value);
+        if (! $requiresManager) {
+            return $memberships->exists();
         }
 
-        return $memberships->exists();
+        return $memberships->get()->contains(
+            fn (OfficeMembership $membership) => $this->isCurrentManagerOfOffice((int) $membership->office_id),
+        );
     }
 }

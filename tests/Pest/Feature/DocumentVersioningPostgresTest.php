@@ -66,6 +66,14 @@ test('documents preserve draft revisions and issue immutable corrected versions 
 
     $expedientId = $expedientResponse->json('data.id');
     $juridical = Office::query()->where('code', 'JUR')->firstOrFail();
+    $juridicalManager = User::factory()->create();
+    OfficeMembership::query()->create([
+        'office_id' => $juridical->id,
+        'user_id' => $juridicalManager->id,
+        'membership_role' => OfficeMembershipRole::Manager,
+        'effective_from' => now()->subMinute(),
+        'assigned_by' => $author->id,
+    ]);
 
     $draftResponse = $this->postJson("/api/expedients/{$expedientId}/documents", [
         'document_type_id' => $documentType->id,

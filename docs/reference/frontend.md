@@ -58,6 +58,7 @@ No consumir `fetch` directamente desde un componente salvo una razón documentad
 | `RichTextEditor` | Edición opcional de informe HTML. |
 | `SearchableSelect` | Selección estándar con filtrado mientras se escribe. |
 | `HumanResourcesWorkspace` | Kardex, contratos, foto, cargos y edición. |
+| `OfficeManagerAssignmentsWorkspace` | Designación, reemplazo, suplencia e historial de responsables de oficina. |
 | `EmployeeBulkImportDialog` | Descarga de plantilla, carga y resultado de importación. |
 | `AdministrationWorkspace` | Contenedor de usuarios, organización, legislaturas, catálogos y reset. |
 | `UserAccessAdministration` | Usuarios, estado, roles, alcance del observador y reset de emergencia. |

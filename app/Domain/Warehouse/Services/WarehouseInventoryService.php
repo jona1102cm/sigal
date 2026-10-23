@@ -5,7 +5,6 @@ namespace App\Domain\Warehouse\Services;
 use App\Domain\Audit\DTOs\RequestAuditContext;
 use App\Domain\Audit\Services\ActivityLogger;
 use App\Domain\DocumentManagement\Enums\CatalogStatus;
-use App\Domain\Organization\Enums\OfficeMembershipRole;
 use App\Domain\Warehouse\DTOs\RegisterWarehouseReceiptData;
 use App\Domain\Warehouse\Enums\StockMovementType;
 use App\Models\Office;
@@ -169,9 +168,9 @@ class WarehouseInventoryService
     {
         $office = Office::query()->where('code', 'AFALM')->firstOrFail();
         $membership = $office->currentMemberships()
-            ->where('membership_role', OfficeMembershipRole::Manager->value)
             ->with('user')
-            ->first();
+            ->get()
+            ->first(fn ($candidate) => $candidate->user->isCurrentManagerOfOffice((int) $office->id));
 
         if ($membership === null || ! $membership->user->isActive()) {
             throw ValidationException::withMessages(['warehouse' => 'Recursos Humanos debe registrar al responsable vigente de Activos Fijos y Almacenes.']);

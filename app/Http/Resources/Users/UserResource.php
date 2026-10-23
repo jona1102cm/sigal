@@ -11,6 +11,19 @@ class UserResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        $managerHistoryOfficeIds = $this->relationLoaded('officeManagerAssignments')
+            ? $this->officeManagerAssignments->pluck('office_id')->map(fn ($id) => (int) $id)->unique()
+            : collect();
+        $currentManagerOfficeIds = $this->relationLoaded('officeManagerAssignments')
+            ? $this->officeManagerAssignments
+                ->filter(fn ($assignment) => $assignment->effective_from->lessThanOrEqualTo(now())
+                    && ($assignment->effective_to === null || $assignment->effective_to->isAfter(now()))
+                    && $assignment->relationLoaded('officeMembership')
+                    && $assignment->officeMembership->effective_from->lessThanOrEqualTo(now())
+                    && ($assignment->officeMembership->effective_to === null || $assignment->officeMembership->effective_to->isAfter(now())))
+                ->pluck('office_id')->map(fn ($id) => (int) $id)->unique()
+            : collect();
+
         return [
             'id' => $this->id,
             'name' => $this->name,
@@ -44,6 +57,9 @@ class UserResource extends JsonResource
                     ] : null,
                     'membership_role' => $membership->membership_role->value,
                     'membership_role_label' => $membership->membership_role->label(),
+                    'is_manager' => $managerHistoryOfficeIds->contains((int) $membership->office_id)
+                        ? $currentManagerOfficeIds->contains((int) $membership->office_id)
+                        : $membership->membership_role->value === 'manager',
                     'position_title' => $membership->position_title,
                 ])
                 ->values()),

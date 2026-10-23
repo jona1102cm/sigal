@@ -45,7 +45,7 @@ class OfficeDocumentAccessService
             ->with(['office.documentAccessSetting.currentAuthorizations'])
             ->get()
             ->filter(function (OfficeMembership $membership) use ($user): bool {
-                if ($membership->membership_role === OfficeMembershipRole::Manager) {
+                if ($user->isCurrentManagerOfOffice((int) $membership->office_id)) {
                     return true;
                 }
 
@@ -80,6 +80,41 @@ class OfficeDocumentAccessService
             ->exists();
     }
 
+    /** Indica si al menos una persona podrá recibir y tramitar un ingreso nuevo. */
+    public function hasOperationalRecipient(Office $office): bool
+    {
+        if (! $office->requires_manager) {
+            return $office->currentMemberships()
+                ->whereHas('user', fn ($user) => $user->where('status', 'active'))
+                ->exists();
+        }
+
+        $hasDesignationHistory = $office->managerAssignments()->exists();
+        $hasCurrentManager = $hasDesignationHistory
+            ? $office->currentManagerAssignment()->exists()
+            : $office->currentMemberships()
+                ->where('membership_role', OfficeMembershipRole::Manager->value)
+                ->whereHas('user', fn ($user) => $user->where('status', 'active'))
+                ->exists();
+
+        if ($hasCurrentManager) {
+            return true;
+        }
+
+        $office->loadMissing('documentAccessSetting.currentAuthorizations');
+        if ($this->modeFor($office) !== OfficeDocumentAccessMode::AuthorizedTeam) {
+            return false;
+        }
+
+        $authorizedUserIds = $office->documentAccessSetting?->currentAuthorizations->pluck('user_id') ?? collect();
+
+        return $authorizedUserIds->isNotEmpty()
+            && $office->currentMemberships()
+                ->whereIn('user_id', $authorizedUserIds)
+                ->whereHas('user', fn ($user) => $user->where('status', 'active'))
+                ->exists();
+    }
+
     public function canOperateExpedient(User $user, Expedient $expedient): bool
     {
         $holderOfficeIds = $expedient->currentHolderOfficeIds();
@@ -104,14 +139,14 @@ class OfficeDocumentAccessService
                     continue;
                 }
 
-                if ($membership->membership_role === OfficeMembershipRole::Manager) {
+                if ($user->isCurrentManagerOfOffice((int) $membership->office_id)) {
                     return true;
                 }
 
                 continue;
             }
 
-            if ($membership->membership_role === OfficeMembershipRole::Manager) {
+            if ($user->isCurrentManagerOfOffice((int) $membership->office_id)) {
                 return true;
             }
 
@@ -155,8 +190,9 @@ class OfficeDocumentAccessService
 
         return $user->currentOfficeMemberships()
             ->whereIn('office_id', $individualOfficeIds)
-            ->where('membership_role', OfficeMembershipRole::Manager->value)
             ->whereHas('office', fn ($office) => $office->where('requires_manager', true))
+            ->get()
+            ->filter(fn (OfficeMembership $membership) => $user->isCurrentManagerOfOffice((int) $membership->office_id))
             ->pluck('office_id')
             ->map(fn ($id) => (int) $id)
             ->values();

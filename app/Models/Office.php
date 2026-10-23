@@ -53,6 +53,32 @@ class Office extends Model
                 ->orWhere('effective_to', '>', $now));
     }
 
+    /** @return HasMany<OfficeManagerAssignment, $this> */
+    public function managerAssignments(): HasMany
+    {
+        return $this->hasMany(OfficeManagerAssignment::class);
+    }
+
+    /** Responsable cuya designación se encuentra vigente en este instante. */
+    public function currentManagerAssignment(): HasOne
+    {
+        $now = now();
+
+        return $this->hasOne(OfficeManagerAssignment::class)
+            ->where('effective_from', '<=', $now)
+            ->where(fn ($query) => $query
+                ->whereNull('effective_to')
+                ->orWhere('effective_to', '>', $now))
+            ->whereHas('officeMembership', fn ($membership) => $membership
+                ->where('effective_from', '<=', $now)
+                ->where(fn ($active) => $active
+                    ->whereNull('effective_to')
+                    ->orWhere('effective_to', '>', $now)))
+            ->whereHas('user', fn ($user) => $user->where('status', 'active'))
+            ->latest('effective_from')
+            ->latest('id');
+    }
+
     /** @return HasMany<OfficePosition, $this> */
     public function positions(): HasMany
     {

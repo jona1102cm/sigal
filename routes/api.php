@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\DocumentManagement\ExpedientMovementController;
 use App\Http\Controllers\Api\DocumentManagement\OfficeDocumentAccessController;
 use App\Http\Controllers\Api\DocumentManagement\OfficeDocumentSequenceController;
 use App\Http\Controllers\Api\HumanResources\HumanResourcesController;
+use App\Http\Controllers\Api\HumanResources\OfficeManagerAssignmentController;
 use App\Http\Controllers\Api\Legislatures\LegislativeCompositionController;
 use App\Http\Controllers\Api\Legislatures\LegislativeDirectoryController;
 use App\Http\Controllers\Api\Legislatures\LegislatureController;
@@ -70,6 +71,9 @@ Route::middleware(['auth:sanctum', 'active.user', 'legislative.context', 'no.sto
         Route::post('human-resources/employees/{employee}/profile-photo', [HumanResourcesController::class, 'storeProfilePhoto']);
         Route::post('human-resources/employees/{employee}/attachments', [HumanResourcesController::class, 'storeAttachment']);
         Route::get('human-resources/offices/{office}/positions', [HumanResourcesController::class, 'positions']);
+        Route::get('human-resources/office-manager-assignments', [OfficeManagerAssignmentController::class, 'index']);
+        Route::post('human-resources/offices/{office}/manager-assignments', [OfficeManagerAssignmentController::class, 'store']);
+        Route::post('human-resources/offices/{office}/manager-assignments/{assignment}/end', [OfficeManagerAssignmentController::class, 'end']);
         Route::post('human-resources/positions', [HumanResourcesController::class, 'storePosition']);
         Route::patch('human-resources/positions/{officePosition}', [HumanResourcesController::class, 'updatePosition']);
         Route::post('human-resources/contracts/{contract}/extend', [HumanResourcesController::class, 'extend']);

@@ -70,6 +70,7 @@ class AuthenticationController extends Controller
         return [
             'currentRoleAssignments.role.permissions',
             'currentOfficeMemberships.office',
+            'officeManagerAssignments.officeMembership',
             'currentLegislatureMemberships.legislature',
             'currentLegislatureMemberships.currentBodyMemberships.body.office',
         ];

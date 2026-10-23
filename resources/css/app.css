@@ -314,8 +314,32 @@ input[type='search']::-webkit-search-cancel-button { display: none; -webkit-appe
 .decision-timeline strong { color: #36584c; font-size: .68rem; text-transform: capitalize; }
 .decision-timeline p, .decision-timeline small { margin: .12rem 0 0; color: #7b8c84; font-size: .61rem; }
 
-@media (max-width: 1000px) { .warehouse-request-row { grid-template-columns: 8.5rem 1fr auto; }.warehouse-request-row time { display: none; }.request-line, .receipt-line { grid-template-columns: repeat(2, 1fr); }.catalog-layout { grid-template-columns: 1fr; } }
-@media (max-width: 760px) { .warehouse-toolbar { align-items: stretch; flex-direction: column; }.warehouse-toolbar .search-field { min-width: 0; }.segmented-control { overflow-x: auto; }.warehouse-request-row { grid-template-columns: 1fr; }.warehouse-request-row__status { grid-row: auto; }.request-line, .receipt-line, .delivery-line, .request-status-hero { grid-template-columns: 1fr; }.not-attended-box { grid-template-columns: 1fr; }.warehouse-form { padding: 1rem; }.act-sheet { overflow-x: auto; }.act-document { min-width: 43rem; }.act-screen-toolbar { position: sticky; left: 0; } }
+/* Responsables de oficina: jerarquía temporal separada del cargo contractual. */
+.office-manager-workspace { display: grid; gap: 1rem; }
+.office-manager-selector { padding: 1rem 1.2rem; }
+.office-manager-layout { display: grid; grid-template-columns: minmax(17rem, .72fr) minmax(25rem, 1.28fr); gap: 1rem; }
+.office-manager-current, .office-manager-form, .office-manager-history { padding: 1.2rem; }
+.office-manager-current { display: flex; align-items: flex-start; flex-direction: column; gap: .55rem; background: linear-gradient(145deg, #f7fbf9, #fff); }
+.office-manager-current h2, .office-manager-form h2, .office-manager-history h2 { margin: 0; color: #285244; font-size: 1.05rem; }
+.office-manager-current p, .office-manager-current small { margin: 0; color: #6d8178; }
+.office-manager-current small { font-size: .65rem; }
+.office-manager-current .button { margin-top: auto; }
+.office-manager-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: end; gap: .85rem; }
+.office-manager-form > div:first-child, .office-manager-form > .field--full, .office-manager-form > .alert { grid-column: 1 / -1; }
+.office-manager-form > .button { justify-self: end; grid-column: 1 / -1; }
+.office-manager-history__list { display: grid; margin-top: .75rem; }
+.office-manager-history__list article { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-top: 1px solid #e5ede9; padding: .75rem .25rem; }
+.office-manager-history__list article > div { display: grid; gap: .16rem; }
+.office-manager-history__list article > div:last-child { justify-items: end; text-align: right; }
+.office-manager-history__list strong { color: #315548; font-size: .76rem; }
+.office-manager-history__list span:not(.badge), .office-manager-history__list small { color: #788b82; font-size: .63rem; }
+.status-dot--warning { background: #d48a21; box-shadow: 0 0 0 4px rgba(212, 138, 33, .12); }
+.badge--manager-current { background: #e3f4eb; color: #22684f; }
+.badge--manager-upcoming { background: #e8eef8; color: #3f5f91; }
+.badge--manager-ended { background: #edf0ef; color: #687871; }
+
+@media (max-width: 1000px) { .warehouse-request-row { grid-template-columns: 8.5rem 1fr auto; }.warehouse-request-row time { display: none; }.request-line, .receipt-line { grid-template-columns: repeat(2, 1fr); }.catalog-layout, .office-manager-layout { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .warehouse-toolbar { align-items: stretch; flex-direction: column; }.warehouse-toolbar .search-field { min-width: 0; }.segmented-control { overflow-x: auto; }.warehouse-request-row { grid-template-columns: 1fr; }.warehouse-request-row__status { grid-row: auto; }.request-line, .receipt-line, .delivery-line, .request-status-hero, .office-manager-form { grid-template-columns: 1fr; }.not-attended-box { grid-template-columns: 1fr; }.warehouse-form { padding: 1rem; }.act-sheet { overflow-x: auto; }.act-document { min-width: 43rem; }.act-screen-toolbar { position: sticky; left: 0; }.office-manager-history__list article { align-items: flex-start; flex-direction: column; }.office-manager-history__list article > div:last-child { justify-items: start; text-align: left; } }
 
 @media print {
     @page { size: Letter portrait; margin: 0; }

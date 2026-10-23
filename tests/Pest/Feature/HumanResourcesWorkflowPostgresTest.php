@@ -5,6 +5,7 @@ use App\Domain\HumanResources\Services\EmployeeImportWorkbookReader;
 use App\Models\Employee;
 use App\Models\EmploymentContract;
 use App\Models\Office;
+use App\Models\OfficeManagerAssignment;
 use App\Models\OfficeMembership;
 use App\Models\OfficePosition;
 use App\Models\Role;
@@ -718,4 +719,83 @@ test('an authorized administrator can download the import template and its heade
         ->and($rows[1][18])->toBe('cargo')
         ->and($rows[1])->toHaveCount(19)
         ->and($rows[1])->not->toContain('rol');
+});
+
+test('human resources designates and replaces one auditable office manager without changing contractual positions', function () {
+    $administrator = humanResourcesAdministrator();
+    Sanctum::actingAs($administrator);
+    $office = Office::query()->create([
+        'code' => 'JEF-HIST',
+        'name' => 'Oficina con responsabilidad histórica',
+        'supports_staffing' => true,
+        'requires_manager' => true,
+    ]);
+    $position = OfficePosition::query()->create([
+        'office_id' => $office->id,
+        'name' => 'Profesional de apoyo',
+        'membership_role' => 'official',
+        'created_by' => $administrator->id,
+    ]);
+
+    $first = $this->postJson('/api/human-resources/employees', humanResourcesPayload($position, [
+        'identity_card' => '8300001',
+        'first_names' => 'Ana María',
+        'last_names' => 'Suárez Paz',
+    ]))->assertCreated();
+    $second = $this->postJson('/api/human-resources/employees', humanResourcesPayload($position, [
+        'identity_card' => '8300002',
+        'first_names' => 'Luis Alberto',
+        'last_names' => 'Rojas Soliz',
+    ]))->assertCreated();
+    $firstUserId = $first->json('data.account.id');
+    $secondUserId = $second->json('data.account.id');
+
+    $initialStart = now()->subHour()->toIso8601String();
+    $this->postJson("/api/human-resources/offices/{$office->id}/manager-assignments", [
+        'user_id' => $firstUserId,
+        'effective_from' => $initialStart,
+        'designation_note' => 'Designación inicial de prueba.',
+    ])->assertCreated()
+        ->assertJsonPath('data.user_id', $firstUserId)
+        ->assertJsonPath('data.state', 'current');
+
+    expect(User::query()->findOrFail($firstUserId)->isCurrentManagerOfOffice($office->id))->toBeTrue()
+        ->and(OfficeMembership::query()->where('user_id', $firstUserId)->firstOrFail()->membership_role->value)->toBe('official');
+
+    $replacementStart = now()->subMinute()->toIso8601String();
+    $this->postJson("/api/human-resources/offices/{$office->id}/manager-assignments", [
+        'user_id' => $secondUserId,
+        'effective_from' => $replacementStart,
+        'effective_to' => now()->addMonth()->toIso8601String(),
+        'designation_note' => 'Suplencia temporal.',
+    ])->assertCreated()
+        ->assertJsonPath('data.user_id', $secondUserId)
+        ->assertJsonPath('data.is_temporary', true);
+
+    expect(OfficeManagerAssignment::query()->where('office_id', $office->id)->count())->toBe(2)
+        ->and(OfficeManagerAssignment::query()->where('user_id', $firstUserId)->firstOrFail()->effective_to)->not->toBeNull()
+        ->and(User::query()->findOrFail($firstUserId)->isCurrentManagerOfOffice($office->id))->toBeFalse()
+        ->and(User::query()->findOrFail($secondUserId)->isCurrentManagerOfOffice($office->id))->toBeTrue();
+
+    $this->getJson('/api/human-resources/office-manager-assignments')
+        ->assertOk()
+        ->assertJsonFragment([
+            'code' => 'JEF-HIST',
+            'user_id' => $secondUserId,
+            'state_label' => 'Vigente',
+        ]);
+    $this->assertDatabaseHas('activity_logs', ['event' => 'human_resources.office_manager_assignment.designated']);
+    $this->assertDatabaseHas('activity_logs', ['event' => 'human_resources.office_manager_assignment.replaced']);
+
+    $secondEmployeeId = User::query()->findOrFail($secondUserId)->employee_id;
+    $secondContract = EmploymentContract::query()->where('employee_id', $secondEmployeeId)->whereNull('ended_at')->firstOrFail();
+    $this->postJson("/api/human-resources/contracts/{$secondContract->id}/finish")
+        ->assertOk()
+        ->assertJsonPath('data.state', 'finished');
+
+    expect(User::query()->findOrFail($secondUserId)->isCurrentManagerOfOffice($office->id))->toBeFalse()
+        ->and(OfficeManagerAssignment::query()->where('user_id', $secondUserId)->firstOrFail()->effective_to)->not->toBeNull();
+    $this->assertDatabaseHas('activity_logs', [
+        'event' => 'human_resources.office_manager_assignment.ended_on_contract_end',
+    ]);
 });

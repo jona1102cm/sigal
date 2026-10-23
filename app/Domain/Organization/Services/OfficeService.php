@@ -6,6 +6,7 @@ use App\Domain\Audit\DTOs\RequestAuditContext;
 use App\Domain\Audit\Services\ActivityLogger;
 use App\Domain\Authorization\Enums\UserStatus;
 use App\Domain\DocumentManagement\Enums\OfficeCapabilityCode;
+use App\Domain\HumanResources\Services\OfficeManagerAssignmentService;
 use App\Domain\Organization\DTOs\AssignOfficeMembershipData;
 use App\Domain\Organization\DTOs\CreateOfficeData;
 use App\Domain\Organization\DTOs\UpdateOfficeData;
@@ -24,7 +25,10 @@ use Illuminate\Validation\ValidationException;
  */
 class OfficeService
 {
-    public function __construct(private readonly ActivityLogger $activityLogger) {}
+    public function __construct(
+        private readonly ActivityLogger $activityLogger,
+        private readonly OfficeManagerAssignmentService $officeManagerAssignments,
+    ) {}
 
     public function create(CreateOfficeData $data, User $actor, RequestAuditContext $context): Office
     {
@@ -221,7 +225,16 @@ class OfficeService
             }
 
             $oldValues = $this->membershipSnapshot($target->load(['office', 'user']));
-            $target->update(['effective_to' => now()]);
+            $endedAt = now();
+            $this->officeManagerAssignments->endForMembership(
+                membership: $target,
+                effectiveTo: $endedAt,
+                closureNote: 'Cierre automático por finalización de la pertenencia a la oficina.',
+                auditEvent: 'organization.office_manager_assignment.ended_on_membership_close',
+                actor: $actor,
+                context: $context,
+            );
+            $target->update(['effective_to' => $endedAt]);
 
             $this->activityLogger->record(
                 event: 'organization.office_membership.closed',

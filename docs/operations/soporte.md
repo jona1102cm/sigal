@@ -125,7 +125,7 @@ Revisar log Laravel, variables de entorno, conexión PostgreSQL, permisos/volume
 
 ### Usuario sin oficina responsable
 
-Verificar en RR. HH. contrato activo, oficina, cargo y membresía vigente. Si el cargo debe representar jefatura, comprobar la función del cargo. Cerrar sesión e ingresar de nuevo solo después de corregir los datos; no editar directamente el token.
+Verificar en RR. HH. contrato activo, oficina, cargo y membresía vigente. Luego abrir **Recursos Humanos → Responsables de oficinas** y comprobar la designación efectiva. El cargo de jefatura clasifica el contrato, pero no sustituye la designación histórica. Cerrar sesión e ingresar de nuevo solo después de corregir los datos; no editar directamente el token.
 
 ### Expediente asignado a oficina incorrecta
 

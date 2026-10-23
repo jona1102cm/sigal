@@ -9,6 +9,7 @@ use App\Models\ExpedientMovement;
 use App\Models\Legislature;
 use App\Models\Office;
 use App\Models\OfficeCapability;
+use App\Models\OfficeManagerAssignment;
 use App\Models\OfficeMembership;
 use App\Models\Role;
 use App\Models\User;
@@ -467,4 +468,57 @@ test('each primary recipient can finalize only its own pending participation', f
     $this->getJson('/api/expedients?scope=pending')
         ->assertOk()
         ->assertJsonPath('data.0.id', $expedientId);
+});
+
+test('an administrative office cannot receive a derivation until it has an operational manager', function () {
+    $originOffice = $this->office;
+    $originUser = $this->user;
+    $recipientOffice = Office::query()->where('code', 'SGEN')->firstOrFail();
+
+    Sanctum::actingAs($originUser);
+    $payload = [
+        'subject' => 'Trámite dirigido a una oficina sin responsable',
+        'origin' => 'internal',
+        'responsible_office_id' => $originOffice->id,
+        'received_on' => '2026-08-10',
+        'primary_office_ids' => [$recipientOffice->id],
+    ];
+
+    $this->postJson('/api/expedients', $payload)
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('recipient_offices');
+
+    expect(ExpedientMovement::query()->count())->toBe(0);
+
+    $recipientUser = User::factory()->create();
+    $simpleUserRole = Role::query()->where('code', RoleCode::SimpleUser->value)->firstOrFail();
+    UserRoleAssignment::query()->create([
+        'user_id' => $recipientUser->id,
+        'role_id' => $simpleUserRole->id,
+        'assigned_by' => $originUser->id,
+        'effective_from' => now(),
+    ]);
+    $recipientMembership = OfficeMembership::query()->create([
+        'office_id' => $recipientOffice->id,
+        'user_id' => $recipientUser->id,
+        'membership_role' => OfficeMembershipRole::Official,
+        'effective_from' => now(),
+        'assigned_by' => $originUser->id,
+    ]);
+    OfficeManagerAssignment::query()->create([
+        'office_id' => $recipientOffice->id,
+        'office_membership_id' => $recipientMembership->id,
+        'user_id' => $recipientUser->id,
+        'effective_from' => now(),
+        'designation_note' => 'Responsable designado para habilitar la recepción documental.',
+        'designated_by' => $originUser->id,
+    ]);
+
+    $created = $this->postJson('/api/expedients', $payload)
+        ->assertCreated();
+
+    Sanctum::actingAs($recipientUser);
+    $this->getJson('/api/expedients?scope=pending')
+        ->assertOk()
+        ->assertJsonPath('data.0.id', $created->json('data.id'));
 });

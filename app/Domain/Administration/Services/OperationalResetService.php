@@ -42,6 +42,7 @@ class OperationalResetService
             'employment_contracts' => DB::table('employment_contracts')->count(),
             'employee_attachments' => DB::table('employee_attachments')->count(),
             'office_memberships' => DB::table('office_memberships')->count(),
+            'office_manager_assignments' => DB::table('office_manager_assignments')->count(),
             'material_requests' => DB::table('material_requests')->count(),
             'warehouse_receipts' => DB::table('warehouse_receipts')->count(),
             'warehouse_stock_movements' => DB::table('warehouse_stock_movements')->count(),
@@ -98,6 +99,7 @@ class OperationalResetService
             DB::table('legislature_board_assignments')->delete();
             DB::table('legislatures')->delete();
 
+            DB::table('office_manager_assignments')->delete();
             DB::table('office_memberships')->delete();
             DB::table('employee_attachments')->delete();
             DB::table('user_role_assignments')->update(['employment_contract_id' => null]);

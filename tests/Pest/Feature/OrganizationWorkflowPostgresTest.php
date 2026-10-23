@@ -2,6 +2,7 @@
 
 use App\Domain\Authorization\Enums\RoleCode;
 use App\Models\Office;
+use App\Models\OfficeManagerAssignment;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\UserRoleAssignment;
@@ -90,10 +91,21 @@ test('a superadministrator can manage the office tree and historical memberships
 
     $membershipId = $membershipResponse->json('data.id');
 
+    $this->postJson("/api/human-resources/offices/{$child->id}/manager-assignments", [
+        'user_id' => $manager->id,
+        'effective_from' => now()->toIso8601String(),
+        'designation_note' => 'Designación explícita para comprobar su cierre conjunto.',
+    ])->assertCreated();
+
     $closeMembershipResponse = $this->postJson("/api/offices/{$child->id}/memberships/{$membershipId}/close")
         ->assertOk();
 
-    expect($closeMembershipResponse->json('data.effective_to'))->not->toBeNull();
+    expect($closeMembershipResponse->json('data.effective_to'))->not->toBeNull()
+        ->and(OfficeManagerAssignment::query()->where('office_membership_id', $membershipId)->firstOrFail()->effective_to)->not->toBeNull()
+        ->and($manager->fresh()->isCurrentManagerOfOffice($child->id))->toBeFalse();
+    $this->assertDatabaseHas('activity_logs', [
+        'event' => 'organization.office_manager_assignment.ended_on_membership_close',
+    ]);
 
     $this->postJson("/api/offices/{$child->id}/inactivate")
         ->assertOk()

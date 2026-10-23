@@ -40,6 +40,7 @@ class HumanResourcesService
     public function __construct(
         private readonly ActivityLogger $activityLogger,
         private readonly EmployeeInitialPasswordGenerator $initialPasswordGenerator,
+        private readonly OfficeManagerAssignmentService $officeManagerAssignments,
     ) {}
 
     /**
@@ -586,6 +587,14 @@ class HumanResourcesService
             ->lockForUpdate()
             ->first();
         if ($membership !== null) {
+            $this->officeManagerAssignments->endForMembership(
+                membership: $membership,
+                effectiveTo: $endedAt,
+                closureNote: 'Cierre automático por finalización del contrato asociado.',
+                auditEvent: 'human_resources.office_manager_assignment.ended_on_contract_end',
+                actor: $actor,
+                context: $context,
+            );
             $membership->update(['effective_to' => $endedAt]);
         }
 

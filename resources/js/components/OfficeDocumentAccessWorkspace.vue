@@ -16,12 +16,12 @@ const allOffices = computed(() => flattenOfficeHierarchy(documents.catalogs.offi
 const configurableOffices = computed(() => {
     if (session.isSuperAdministrator) return allOffices.value.filter((office) => office.requires_manager);
     const managedIds = (session.user?.office_memberships ?? [])
-        .filter((membership) => membership.membership_role === 'manager')
+        .filter((membership) => membership.is_manager)
         .map((membership) => Number(membership.office_id));
     return allOffices.value.filter((office) => office.requires_manager && managedIds.includes(Number(office.id)));
 });
 const setting = computed(() => documents.officeAccessSetting);
-const officialMembers = computed(() => setting.value?.members?.filter((member) => member.membership_role === 'official') ?? []);
+const officialMembers = computed(() => setting.value?.members?.filter((member) => !member.is_manager) ?? []);
 
 watch(setting, (value) => {
     if (!value) return;

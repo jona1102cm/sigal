@@ -19,7 +19,6 @@ use App\Domain\DocumentManagement\Services\DocumentService;
 use App\Domain\DocumentManagement\Services\ExpedientMovementService;
 use App\Domain\DocumentManagement\Services\ExpedientService;
 use App\Domain\Legislatures\Services\LegislativeAuthorizationService;
-use App\Domain\Organization\Enums\OfficeMembershipRole;
 use App\Domain\Warehouse\DTOs\DecideWarehouseDeliveryData;
 use App\Domain\Warehouse\DTOs\SaveMaterialRequestData;
 use App\Domain\Warehouse\Enums\FulfillmentOutcome;
@@ -179,7 +178,10 @@ class MaterialRequestService
             $this->assertStatus($target, MaterialRequestStatus::Draft);
             $this->documentService->issue($target->expedient, $target->requestDocument, $actor, $context);
             $office = $target->requestingOffice;
-            $manager = $office->currentMemberships()->where('membership_role', OfficeMembershipRole::Manager->value)->first();
+            $manager = $office->currentMemberships()
+                ->with('user')
+                ->get()
+                ->first(fn ($membership) => $membership->user->isCurrentManagerOfOffice((int) $office->id));
             $actorIsManager = $actor->isCurrentManagerOfOffice($office->id);
 
             if ($office->requires_manager && ! $actorIsManager && $manager === null) {

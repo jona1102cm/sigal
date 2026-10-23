@@ -32,6 +32,7 @@ class ExpedientMovementService
     public function __construct(
         private readonly ActivityLogger $activityLogger,
         private readonly LegislativeAuthorizationService $legislativeAuthorization,
+        private readonly OfficeDocumentAccessService $officeDocumentAccess,
     ) {}
 
     public function create(
@@ -75,9 +76,19 @@ class ExpedientMovementService
 
             $recipientIds = [...$data->primaryOfficeIds, ...$data->copyOfficeIds];
 
-            if (Office::query()->active()->supportingStaffing()->whereIn('id', $recipientIds)->count() !== count($recipientIds)) {
+            $recipientOffices = Office::query()->active()->supportingStaffing()->whereIn('id', $recipientIds)->get();
+            if ($recipientOffices->count() !== count($recipientIds)) {
                 throw ValidationException::withMessages([
                     'recipient_offices' => 'Todas las oficinas destinatarias deben estar activas y admitir funcionarios.',
+                ]);
+            }
+
+            $unattended = $recipientOffices
+                ->reject(fn (Office $office) => $this->legislativeAuthorization->isLegislativeOffice($office->id))
+                ->reject(fn (Office $office) => $this->officeDocumentAccess->hasOperationalRecipient($office));
+            if ($unattended->isNotEmpty()) {
+                throw ValidationException::withMessages([
+                    'recipient_offices' => 'Recursos Humanos debe designar un responsable o equipo autorizado antes de derivar a: '.$unattended->pluck('name')->join(', ').'.',
                 ]);
             }
 

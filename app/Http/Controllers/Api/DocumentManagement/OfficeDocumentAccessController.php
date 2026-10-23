@@ -60,6 +60,7 @@ class OfficeDocumentAccessController extends Controller
                 'position_title' => $membership->position_title,
                 'membership_role' => $membership->membership_role->value,
                 'membership_role_label' => $membership->membership_role->label(),
+                'is_manager' => $membership->user->isCurrentManagerOfOffice((int) $office->id),
             ])->values(),
         ];
     }

@@ -53,6 +53,9 @@ Las respuestas de colección usan `data`, `links` y `meta` de paginación. Los e
 | POST | `/human-resources/employees/{employee}/profile-photo` | Agrega/reemplaza foto conservando historial. |
 | POST | `/human-resources/employees/{employee}/attachments` | Agrega respaldo documental. |
 | GET | `/human-resources/offices/{office}/positions` | Lista cargos de la oficina. |
+| GET | `/human-resources/office-manager-assignments` | Oficinas, candidatos, responsable vigente e historial. |
+| POST | `/human-resources/offices/{office}/manager-assignments` | Designa o reemplaza responsable con vigencia auditable. |
+| POST | `/human-resources/offices/{office}/manager-assignments/{assignment}/end` | Finaliza expresamente una designación. |
 | POST | `/human-resources/positions` | Crea cargo. |
 | PATCH | `/human-resources/positions/{officePosition}` | Corrige cargo. |
 | POST | `/human-resources/contracts/{contract}/extend` | Extiende fecha final. |
