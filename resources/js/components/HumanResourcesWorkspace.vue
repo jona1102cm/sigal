@@ -40,12 +40,20 @@ const rotationOfficeOptions = computed(() => officeOptions.value.map((office) =>
     disabled: Number(office.value) === Number(rotationContract.value?.current_assignment?.office?.id),
 })));
 const positionOptions = computed(() => (humanResources.positionsByOffice[form.office_id] ?? []).map((position) => ({ value: position.id, label: `${position.name} - ${position.membership_role_label}` })));
-const rotationPositionOptions = computed(() => (humanResources.positionsByOffice[rotationForm.office_id] ?? []).map((position) => ({ value: position.id, label: `${position.name} - ${position.membership_role_label}` })));
 const selectedPosition = computed(() => (humanResources.positionsByOffice[form.office_id] ?? [])
     .find((position) => position.id === Number(form.office_position_id)) ?? null);
 const positionIsManager = computed({
     get: () => positionForm.membership_role === 'manager',
     set: (value) => { positionForm.membership_role = value ? 'manager' : 'official'; },
+});
+const rotationNewPositionIsManager = computed({
+    get: () => rotationForm.new_position_membership_role === 'manager',
+    set: (value) => { rotationForm.new_position_membership_role = value ? 'manager' : 'official'; },
+});
+const rotationCanPreview = computed(() => {
+    if (!rotationForm.office_id || !rotationForm.position_mode || !rotationForm.effective_from) return false;
+    if (rotationForm.position_mode === 'create_new') return Boolean(rotationForm.new_position_name.trim());
+    return true;
 });
 
 function newPersonalForm() {
@@ -70,7 +78,9 @@ function localDateTimeValue() {
 function newRotationForm() {
     return {
         office_id: null,
-        office_position_id: null,
+        position_mode: null,
+        new_position_name: '',
+        new_position_membership_role: 'official',
         effective_from: localDateTimeValue(),
         reason: '',
         memorandum_number: '',
@@ -120,14 +130,14 @@ watch(() => form.office_id, async (officeId, previousOfficeId) => {
     if (officeId) await humanResources.loadPositions(officeId);
 });
 
-watch(() => rotationForm.office_id, async (officeId, previousOfficeId) => {
-    if (officeId !== previousOfficeId) rotationForm.office_position_id = null;
+watch(() => rotationForm.office_id, () => {
     rotationPreview.value = null;
-    if (officeId) await humanResources.loadPositions(officeId);
 });
 
 watch([
-    () => rotationForm.office_position_id,
+    () => rotationForm.position_mode,
+    () => rotationForm.new_position_name,
+    () => rotationForm.new_position_membership_role,
     () => rotationForm.effective_from,
     () => rotationForm.reason,
     () => rotationForm.memorandum_number,
@@ -246,7 +256,13 @@ function closeRotation() {
 }
 
 function rotationPayload() {
-    return Object.fromEntries(Object.entries(rotationForm).filter(([key, value]) => key !== 'office_id' && value !== null && value !== ''));
+    const payload = Object.fromEntries(Object.entries(rotationForm).filter(([, value]) => value !== null && value !== ''));
+    if (rotationForm.position_mode !== 'create_new') {
+        delete payload.new_position_name;
+        delete payload.new_position_membership_role;
+    }
+
+    return payload;
 }
 
 async function reviewRotation() {
@@ -339,9 +355,9 @@ function formatDateTime(value) {
                                     <details>
                                         <summary>Historial de rotaciones ({{ contract.rotations.length }})</summary>
                                         <article v-for="rotation in contract.rotations" :key="rotation.id" class="rotation-history__item">
-                                            <strong>{{ rotation.source_assignment?.office?.code }} → {{ rotation.destination_position?.office?.code }}</strong>
-                                            <span>{{ rotation.source_assignment?.office?.name }} a {{ rotation.destination_position?.office?.name }}</span>
-                                            <small>{{ rotation.destination_position?.name }} · {{ formatDateTime(rotation.effective_from) }} · {{ formatDateTime(rotation.effective_to) }}</small>
+                                            <strong>{{ rotation.source_assignment?.office?.code }} → {{ rotation.destination_assignment?.office?.code }}</strong>
+                                            <span>{{ rotation.source_assignment?.office?.name }} a {{ rotation.destination_assignment?.office?.name }}</span>
+                                            <small>{{ rotation.destination_assignment?.position_title }} · {{ rotation.position_assignment_mode_label }} · {{ formatDateTime(rotation.effective_from) }} · {{ formatDateTime(rotation.effective_to) }}</small>
                                             <small v-if="rotation.memorandum_number">Memorándum {{ rotation.memorandum_number }}<template v-if="rotation.memorandum_date">, {{ formatDate(rotation.memorandum_date) }}</template></small>
                                             <small v-if="rotation.reason">{{ rotation.reason }}</small>
                                             <button v-if="rotation.attachment" class="text-button" type="button" @click="humanResources.downloadRotationAttachment(rotation.attachment)">Descargar respaldo</button>
@@ -436,8 +452,22 @@ function formatDateTime(value) {
                     <div class="form-section-heading"><span>1</span><div><h3>Destino y fecha efectiva</h3><p>La fecha puede ser actual o pasada para regularizar rotaciones ya realizadas.</p></div></div>
                     <div class="form-grid">
                         <label class="field"><span>Oficina de destino *</span><SearchableSelect v-model="rotationForm.office_id" :options="rotationOfficeOptions" placeholder="Seleccione una oficina distinta" /></label>
-                        <label class="field"><span>Cargo operativo *</span><SearchableSelect v-model="rotationForm.office_position_id" :options="rotationPositionOptions" :disabled="!rotationForm.office_id || humanResources.busy[`positions-${rotationForm.office_id}`]" :placeholder="rotationForm.office_id ? 'Seleccione un cargo' : 'Seleccione primero la oficina'" /></label>
                         <label class="field"><span>Fecha y hora efectiva *</span><input v-model="rotationForm.effective_from" type="datetime-local" :max="localDateTimeValue()" required></label>
+                        <fieldset class="rotation-position-modes form-grid__full">
+                            <legend>Tratamiento del cargo *</legend>
+                            <label class="check-option">
+                                <input v-model="rotationForm.position_mode" type="radio" value="preserve_current">
+                                <span><strong>Conservar el mismo cargo</strong><small>Solo cambia la oficina operativa. Mantiene la denominación y su condición de responsable o funcionario.</small></span>
+                            </label>
+                            <label class="check-option">
+                                <input v-model="rotationForm.position_mode" type="radio" value="create_new">
+                                <span><strong>Crear un nuevo cargo en destino</strong><small>El cargo se incorporará al catálogo de la oficina y quedará asignado al funcionario en esta misma operación.</small></span>
+                            </label>
+                        </fieldset>
+                        <template v-if="rotationForm.position_mode === 'create_new'">
+                            <label class="field field--full"><span>Nombre del nuevo cargo *</span><input v-model.trim="rotationForm.new_position_name" maxlength="255" placeholder="Ej.: Técnico administrativo II" required></label>
+                            <label class="check-option field--full"><input v-model="rotationNewPositionIsManager" type="checkbox"><span><strong>Es un cargo de jefatura o responsable</strong><small>Solo puede existir un responsable vigente en la oficina de destino.</small></span></label>
+                        </template>
                     </div>
                 </section>
                 <section>
@@ -452,12 +482,12 @@ function formatDateTime(value) {
                 <section v-if="rotationPreview" class="rotation-preview">
                     <div class="form-section-heading"><span>3</span><div><h3>Revise los efectos antes de guardar</h3><p>La operación se ejecutará en una sola transacción y quedará auditada.</p></div></div>
                     <div class="rotation-route"><div><span>Asignación actual</span><strong>{{ rotationPreview.source.office_name }}</strong><small>{{ rotationPreview.source.position_title }}</small></div><b aria-hidden="true">→</b><div><span>Nueva asignación</span><strong>{{ rotationPreview.destination.office_name }}</strong><small>{{ rotationPreview.destination.position_name }}</small></div></div>
-                    <div class="rotation-effects"><span><strong>{{ rotationPreview.effects.pending_expedients_released }}</strong> expedientes personales serán liberados</span><span><strong>{{ rotationPreview.effects.remaining_source_members }}</strong> funcionarios quedarán en origen</span><span>El contrato y la cuenta permanecerán vigentes</span></div>
+                    <div class="rotation-effects"><span><strong>{{ rotationPreview.effects.pending_expedients_released }}</strong> expedientes personales serán liberados</span><span><strong>{{ rotationPreview.effects.remaining_source_members }}</strong> funcionarios quedarán en origen</span><span>{{ rotationPreview.destination.position_mode_label }}</span><span>El contrato y la cuenta permanecerán vigentes</span></div>
                     <ul v-if="rotationPreview.warnings.length" class="rotation-warnings"><li v-for="warning in rotationPreview.warnings" :key="warning">{{ warning }}</li></ul>
                 </section>
                 <footer class="modal__actions">
                     <button class="button button--ghost" type="button" @click="closeRotation">Cancelar</button>
-                    <button v-if="!rotationPreview" class="button button--primary" type="button" :disabled="!rotationForm.office_position_id || !rotationForm.effective_from || humanResources.busy[`preview-rotation-${rotationContract?.id}`]" @click="reviewRotation">Revisar efectos</button>
+                    <button v-if="!rotationPreview" class="button button--primary" type="button" :disabled="!rotationCanPreview || humanResources.busy[`preview-rotation-${rotationContract?.id}`]" @click="reviewRotation">Revisar efectos</button>
                     <button v-else class="button button--primary" type="submit" :disabled="humanResources.busy[`rotate-contract-${rotationContract?.id}`]">{{ humanResources.busy[`rotate-contract-${rotationContract?.id}`] ? 'Registrando rotación...' : 'Confirmar rotación' }}</button>
                 </footer>
             </form>

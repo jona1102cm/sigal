@@ -114,6 +114,12 @@ class Office extends Model
         return $this->hasMany(OfficePosition::class);
     }
 
+    /** Rotaciones históricas cuya asignación operativa llegó a esta oficina. */
+    public function destinationEmploymentRotations(): HasMany
+    {
+        return $this->hasMany(EmploymentRotation::class, 'destination_office_id');
+    }
+
     /** @return HasMany<OfficeCapability, $this> */
     public function capabilities(): HasMany
     {

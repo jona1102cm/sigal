@@ -112,7 +112,7 @@ class OfficeManagerAssignmentService
     }
 
     /**
-     * Proyecta automáticamente el cargo contractual a la responsabilidad vigente.
+     * Proyecta automáticamente el cargo vigente a la responsabilidad de oficina.
      * La operación es idempotente para que importación, alta manual y reparaciones
      * puedan reutilizar exactamente la misma regla.
      */
@@ -129,7 +129,7 @@ class OfficeManagerAssignmentService
 
         if ($target->membership_role !== OfficeMembershipRole::Manager) {
             throw ValidationException::withMessages([
-                'membership_role' => 'Solo un cargo contractual de jefatura puede originar la responsabilidad de oficina.',
+                'membership_role' => 'Solo un cargo vigente de jefatura puede originar la responsabilidad de oficina.',
             ]);
         }
 
@@ -152,7 +152,7 @@ class OfficeManagerAssignmentService
                 userId: (int) $target->user_id,
                 effectiveFrom: $startsAt,
                 effectiveTo: $target->effective_to === null ? null : CarbonImmutable::parse($target->effective_to),
-                designationNote: 'Asignación automática por cargo contractual responsable.',
+                designationNote: 'Asignación automática por cargo vigente de jefatura.',
             ),
             $actor,
             $context,

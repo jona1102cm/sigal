@@ -102,6 +102,7 @@ class HumanResourcesController extends Controller
             'contracts.currentOfficeMembership.office',
             'contracts.currentOfficeMembership.officePosition.office',
             'contracts.rotations.sourceOfficeMembership.office',
+            'contracts.rotations.destinationOffice',
             'contracts.rotations.destinationOfficePosition.office',
             'contracts.rotations.attachment',
             'contracts.rotations.createdBy',

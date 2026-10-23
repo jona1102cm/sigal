@@ -35,7 +35,9 @@ Funcionario, contrato, cargo, membresía de oficina y rol de sistema son concept
 Una rotación no modifica el contrato ni su fuente presupuestaria. SIGAL conserva el cargo y oficina originales en `employment_contracts` y abre una nueva asignación operativa en `office_memberships`.
 
 - Solo superadministración o RR. HH. con `human_resources.rotations.manage` pueden registrar rotaciones.
-- La oficina/cargo de destino y la fecha/hora efectiva son obligatorios. Se admite una fecha pasada dentro del contrato para regularizar movimientos ya ejecutados; no se programan rotaciones futuras.
+- La oficina de destino, el tratamiento del cargo y la fecha/hora efectiva son obligatorios. Se admite una fecha pasada dentro del contrato para regularizar movimientos ya ejecutados; no se programan rotaciones futuras.
+- El tratamiento del cargo ofrece exactamente dos alternativas: conservar la denominación y función organizacional vigentes, sin crear un cargo ajeno en el catálogo de destino; o definir un cargo nuevo que se crea dentro de la oficina destino y se asigna en la misma transacción.
+- Al crear el cargo nuevo se registra expresamente si es funcionario o responsable. Si es responsable, se aplican las mismas restricciones de organigrama y titularidad única que en el alta manual.
 - Motivo, número/fecha de memorándum y archivo de respaldo son opcionales.
 - La disposición queda vigente hasta una nueva rotación, retorno o finalización contractual. Cada nueva disposición cierra exactamente la anterior.
 - Antes de confirmar, la API previsualiza origen, destino, expedientes personales que se liberarán, dotación restante y advertencias de oficina sin personal o sin responsable.
@@ -66,7 +68,7 @@ El scheduler ejecuta diariamente la activación de contratos que comienzan y el 
 - `employees`: kardex personal.
 - `office_positions`: catálogo de cargos por oficina y función responsable/funcionario.
 - `employment_contracts`: historial contractual y asignaciones originadas.
-- `employment_rotations`: disposiciones de cambio operativo, vigencia y respaldo administrativo.
+- `employment_rotations`: disposiciones de cambio operativo, oficina destino, modo de tratamiento y fotografía histórica del cargo asignado.
 - `employment_rotation_attachments`: metadatos, ruta y huella del archivo opcional.
 - `employee_attachments`: respaldos y fotografía.
 - `users`: identidad de acceso reutilizable.

@@ -177,13 +177,6 @@ test('a rotation preserves the budget contract, moves the operational assignment
         'membership_role' => 'manager',
         'created_by' => $administrator->id,
     ]);
-    $destinationPosition = OfficePosition::query()->create([
-        'office_id' => $destinationOffice->id,
-        'name' => 'Técnico operativo en destino',
-        'membership_role' => 'official',
-        'created_by' => $administrator->id,
-    ]);
-
     $this->postJson('/api/human-resources/employees', humanResourcesPayload($sourcePosition, [
         'starts_on' => today()->subMonth()->toDateString(),
     ]))->assertCreated();
@@ -234,7 +227,10 @@ test('a rotation preserves the budget contract, moves the operational assignment
     // en que comenzó el contrato presupuestario.
     $effectiveFrom = today()->subMonth()->startOfDay();
     $payload = [
-        'office_position_id' => $destinationPosition->id,
+        'office_id' => $destinationOffice->id,
+        'position_mode' => 'create_new',
+        'new_position_name' => 'Técnico operativo en destino',
+        'new_position_membership_role' => 'official',
         'effective_from' => $effectiveFrom->format('Y-m-d H:i:s'),
         'reason' => 'Apoyo operativo por necesidad institucional.',
         'memorandum_number' => 'MEM-RRHH-014/2026',
@@ -253,11 +249,17 @@ test('a rotation preserves the budget contract, moves the operational assignment
         'attachment' => UploadedFile::fake()->create('memorandum-rotacion.pdf', 30, 'application/pdf'),
     ], ['Accept' => 'application/json']);
     $response->assertCreated()
-        ->assertJsonPath('data.destination_position.id', $destinationPosition->id)
+        ->assertJsonPath('data.position_assignment_mode', 'create_new')
+        ->assertJsonPath('data.destination_assignment.office.id', $destinationOffice->id)
+        ->assertJsonPath('data.destination_assignment.position_title', 'Técnico operativo en destino')
         ->assertJsonPath('data.memorandum_number', 'MEM-RRHH-014/2026')
         ->assertJsonPath('data.attachment.original_name', 'memorandum-rotacion.pdf');
 
     $rotation = EmploymentRotation::query()->firstOrFail();
+    $destinationPosition = OfficePosition::query()
+        ->where('office_id', $destinationOffice->id)
+        ->where('name', 'Técnico operativo en destino')
+        ->firstOrFail();
     $currentMembership = $contract->currentOfficeMembership()->firstOrFail();
     expect($contract->fresh()->office_position_id)->toBe($sourcePosition->id)
         ->and($sourceMembership->fresh()->effective_to)->not->toBeNull()
@@ -269,6 +271,7 @@ test('a rotation preserves the budget contract, moves the operational assignment
         ->and(DB::table('office_document_access_authorizations')->where('id', $authorizationId)->value('effective_to'))->not->toBeNull();
     Storage::disk('local')->assertExists(EmploymentRotationAttachment::query()->firstOrFail()->path);
     $this->assertDatabaseHas('activity_logs', ['event' => 'human_resources.employment_rotation.created']);
+    $this->assertDatabaseHas('activity_logs', ['event' => 'human_resources.office_position.created']);
 
     $this->getJson("/api/human-resources/employees/{$employee->id}")
         ->assertOk()
@@ -292,6 +295,69 @@ test('a rotation preserves the budget contract, moves the operational assignment
     $this->postJson("/api/human-resources/contracts/{$contract->id}/finish")->assertOk();
     expect($rotation->fresh()->effective_to)->not->toBeNull()
         ->and($currentMembership->fresh()->effective_to)->not->toBeNull();
+});
+
+test('a rotation can preserve the current position without creating a destination catalog entry', function () {
+    $administrator = humanResourcesAdministrator();
+    Sanctum::actingAs($administrator);
+    $sourceOffice = Office::query()->create([
+        'code' => 'ROT-MISMO-ORI',
+        'name' => 'Origen para conservar cargo',
+        'supports_staffing' => true,
+        'requires_manager' => true,
+    ]);
+    $destinationOffice = Office::query()->create([
+        'code' => 'ROT-MISMO-DES',
+        'name' => 'Destino para conservar cargo',
+        'supports_staffing' => true,
+        'requires_manager' => true,
+    ]);
+    $sourcePosition = OfficePosition::query()->create([
+        'office_id' => $sourceOffice->id,
+        'name' => 'Responsable técnico II',
+        'membership_role' => 'manager',
+        'created_by' => $administrator->id,
+    ]);
+
+    $this->postJson('/api/human-resources/employees', humanResourcesPayload($sourcePosition, [
+        'identity_card' => '7000098',
+        'first_names' => 'Cargo',
+        'last_names' => 'Conservado',
+        'starts_on' => today()->subWeek()->toDateString(),
+    ]))->assertCreated();
+    $contract = Employee::query()->where('identity_card', '7000098')->firstOrFail()->openContract()->firstOrFail();
+
+    $payload = [
+        'office_id' => $destinationOffice->id,
+        'position_mode' => 'preserve_current',
+        'effective_from' => now()->format('Y-m-d H:i:s'),
+    ];
+    $this->postJson("/api/human-resources/contracts/{$contract->id}/rotations/preview", $payload)
+        ->assertOk()
+        ->assertJsonPath('data.destination.position_name', 'Responsable técnico II')
+        ->assertJsonPath('data.destination.membership_role', 'manager')
+        ->assertJsonPath('data.effects.position_is_preserved', true)
+        ->assertJsonPath('data.effects.position_will_be_created', false);
+
+    $this->postJson("/api/human-resources/contracts/{$contract->id}/rotations", $payload)
+        ->assertCreated()
+        ->assertJsonPath('data.position_assignment_mode', 'preserve_current')
+        ->assertJsonPath('data.destination_assignment.office.id', $destinationOffice->id)
+        ->assertJsonPath('data.destination_assignment.office_position_id', null)
+        ->assertJsonPath('data.destination_assignment.position_title', 'Responsable técnico II')
+        ->assertJsonPath('data.destination_assignment.membership_role', 'manager');
+
+    $rotation = EmploymentRotation::query()->firstOrFail();
+    $membership = $contract->currentOfficeMembership()->firstOrFail();
+    expect($rotation->destination_office_id)->toBe($destinationOffice->id)
+        ->and($rotation->destination_office_position_id)->toBeNull()
+        ->and($membership->office_id)->toBe($destinationOffice->id)
+        ->and($membership->office_position_id)->toBeNull()
+        ->and($membership->position_title)->toBe('Responsable técnico II')
+        ->and($membership->membership_role->value)->toBe('manager')
+        ->and($contract->fresh()->office_position_id)->toBe($sourcePosition->id)
+        ->and(OfficeManagerAssignment::query()->where('office_id', $destinationOffice->id)->whereNull('effective_to')->count())->toBe(1)
+        ->and(OfficePosition::query()->where('office_id', $destinationOffice->id)->count())->toBe(0);
 });
 
 test('a rotation cannot create a second responsible in the destination office', function () {
@@ -335,10 +401,13 @@ test('a rotation cannot create a second responsible in the destination office', 
     $contract = Employee::query()->where('identity_card', '7000002')->firstOrFail()->openContract()->firstOrFail();
 
     $this->postJson("/api/human-resources/contracts/{$contract->id}/rotations/preview", [
-        'office_position_id' => $managerPosition->id,
+        'office_id' => $destinationOffice->id,
+        'position_mode' => 'create_new',
+        'new_position_name' => 'Responsable alterno de destino',
+        'new_position_membership_role' => 'manager',
         'effective_from' => now()->format('Y-m-d H:i:s'),
     ])->assertUnprocessable()
-        ->assertJsonValidationErrors('office_position_id');
+        ->assertJsonValidationErrors('new_position_membership_role');
 
     expect(EmploymentRotation::query()->count())->toBe(0)
         ->and($contract->currentOfficeMembership()->firstOrFail()->office_id)->toBe($sourceOffice->id);

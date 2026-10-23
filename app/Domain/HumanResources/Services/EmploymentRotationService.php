@@ -6,6 +6,9 @@ use App\Domain\Audit\DTOs\RequestAuditContext;
 use App\Domain\Audit\Services\ActivityLogger;
 use App\Domain\DocumentManagement\Enums\AssignmentRequestStatus;
 use App\Domain\HumanResources\DTOs\CreateEmploymentRotationData;
+use App\Domain\HumanResources\DTOs\CreateOfficePositionData;
+use App\Domain\HumanResources\DTOs\ResolvedEmploymentRotationDestination;
+use App\Domain\HumanResources\Enums\EmploymentRotationPositionMode;
 use App\Domain\Organization\Enums\OfficeMembershipRole;
 use App\Domain\Organization\Enums\OfficeStatus;
 use App\Models\EmploymentContract;
@@ -13,10 +16,10 @@ use App\Models\EmploymentRotation;
 use App\Models\EmploymentRotationAttachment;
 use App\Models\ExpedientAssignmentRequest;
 use App\Models\ExpedientInternalAssignment;
+use App\Models\Office;
 use App\Models\OfficeDocumentAccessAuthorization;
 use App\Models\OfficeManagerAssignment;
 use App\Models\OfficeMembership;
-use App\Models\OfficePosition;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\UploadedFile;
@@ -31,6 +34,7 @@ class EmploymentRotationService
     public function __construct(
         private readonly ActivityLogger $activityLogger,
         private readonly OfficeManagerAssignmentService $officeManagerAssignments,
+        private readonly HumanResourcesService $humanResources,
     ) {}
 
     /** @return array<string, mixed> */
@@ -38,7 +42,7 @@ class EmploymentRotationService
     {
         [$target, $source, $destination] = $this->resolveRotation($contract, $data, false);
 
-        return $this->buildPreview($target, $source, $destination);
+        return $this->buildPreview($target, $source, $destination, $data);
     }
 
     public function rotate(
@@ -53,8 +57,21 @@ class EmploymentRotationService
         try {
             return DB::transaction(function () use ($contract, $data, $attachment, $actor, $context, &$storedPath): EmploymentRotation {
                 [$target, $source, $destination] = $this->resolveRotation($contract, $data, true);
-                $preview = $this->buildPreview($target, $source, $destination);
+                $preview = $this->buildPreview($target, $source, $destination, $data);
                 $operationalClosureAt = CarbonImmutable::now();
+
+                if ($data->positionMode === EmploymentRotationPositionMode::CreateNew) {
+                    $createdPosition = $this->humanResources->createOfficePosition(
+                        new CreateOfficePositionData(
+                            officeId: $destination->office->id,
+                            name: $data->newPositionName,
+                            membershipRole: $data->newPositionMembershipRole,
+                        ),
+                        $actor,
+                        $context,
+                    );
+                    $destination = $destination->withOfficePosition($createdPosition);
+                }
 
                 $openRotation = EmploymentRotation::query()
                     ->where('employment_contract_id', $target->id)
@@ -83,7 +100,11 @@ class EmploymentRotationService
                 $rotation = EmploymentRotation::query()->create([
                     'employment_contract_id' => $target->id,
                     'source_office_membership_id' => $source->id,
-                    'destination_office_position_id' => $destination->id,
+                    'destination_office_id' => $destination->office->id,
+                    'destination_office_position_id' => $destination->officePosition?->id,
+                    'position_assignment_mode' => $data->positionMode,
+                    'destination_position_title' => $destination->positionTitle,
+                    'destination_membership_role' => $destination->membershipRole,
                     'effective_from' => $data->effectiveFrom,
                     'reason' => $data->reason,
                     'memorandum_number' => $data->memorandumNumber,
@@ -121,11 +142,11 @@ class EmploymentRotationService
                 $destinationMembership = OfficeMembership::query()->create([
                     'employment_contract_id' => $target->id,
                     'employment_rotation_id' => $rotation->id,
-                    'office_id' => $destination->office_id,
-                    'office_position_id' => $destination->id,
+                    'office_id' => $destination->office->id,
+                    'office_position_id' => $destination->officePosition?->id,
                     'user_id' => $source->user_id,
-                    'membership_role' => $destination->membership_role,
-                    'position_title' => $destination->name,
+                    'membership_role' => $destination->membershipRole,
+                    'position_title' => $destination->positionTitle,
                     'effective_from' => $data->effectiveFrom,
                     'assigned_by' => $actor->id,
                 ]);
@@ -178,8 +199,11 @@ class EmploymentRotationService
                         'employee_id' => $target->employee_id,
                         'source_office_id' => $source->office_id,
                         'source_office_position_id' => $source->office_position_id,
-                        'destination_office_id' => $destination->office_id,
-                        'destination_office_position_id' => $destination->id,
+                        'destination_office_id' => $destination->office->id,
+                        'destination_office_position_id' => $destination->officePosition?->id,
+                        'position_assignment_mode' => $data->positionMode->value,
+                        'destination_position_title' => $destination->positionTitle,
+                        'destination_membership_role' => $destination->membershipRole->value,
                         'effective_from' => $data->effectiveFrom->toIso8601String(),
                         'reason' => $data->reason,
                         'memorandum_number' => $data->memorandumNumber,
@@ -201,7 +225,7 @@ class EmploymentRotationService
     }
 
     /**
-     * @return array{0: EmploymentContract, 1: OfficeMembership, 2: OfficePosition}
+     * @return array{0: EmploymentContract, 1: OfficeMembership, 2: ResolvedEmploymentRotationDestination}
      */
     private function resolveRotation(
         EmploymentContract $contract,
@@ -249,45 +273,56 @@ class EmploymentRotationService
             ]);
         }
 
-        $destinationQuery = OfficePosition::query()->with('office');
-        $destination = ($lock ? $destinationQuery->lockForUpdate() : $destinationQuery)
-            ->findOrFail($data->destinationOfficePositionId);
-        if ($destination->office->status !== OfficeStatus::Active || ! $destination->office->supports_staffing) {
+        $destinationQuery = Office::query();
+        $destinationOffice = ($lock ? $destinationQuery->lockForUpdate() : $destinationQuery)
+            ->findOrFail($data->destinationOfficeId);
+        if ($destinationOffice->status !== OfficeStatus::Active || ! $destinationOffice->supports_staffing) {
             throw ValidationException::withMessages([
-                'office_position_id' => 'La oficina de destino debe estar activa y admitir funcionarios.',
+                'office_id' => 'La oficina de destino debe estar activa y admitir funcionarios.',
             ]);
         }
-        if ((int) $destination->office_id === (int) $source->office_id) {
+        if ((int) $destinationOffice->id === (int) $source->office_id) {
             throw ValidationException::withMessages([
-                'office_position_id' => 'Seleccione una oficina distinta. Los cambios de cargo dentro de la misma oficina no son rotaciones.',
+                'office_id' => 'Seleccione una oficina distinta. Los cambios de cargo dentro de la misma oficina no son rotaciones.',
             ]);
         }
-        if ($destination->membership_role === OfficeMembershipRole::Manager && ! $destination->office->requires_manager) {
+
+        $destinationRole = $data->positionMode === EmploymentRotationPositionMode::PreserveCurrent
+            ? $source->membership_role
+            : $data->newPositionMembershipRole;
+        $destinationTitle = $data->positionMode === EmploymentRotationPositionMode::PreserveCurrent
+            ? $source->position_title
+            : $data->newPositionName;
+        $roleErrorField = $data->positionMode === EmploymentRotationPositionMode::CreateNew
+            ? 'new_position_membership_role'
+            : 'position_mode';
+
+        if ($destinationRole === OfficeMembershipRole::Manager && ! $destinationOffice->requires_manager) {
             throw ValidationException::withMessages([
-                'office_position_id' => 'La oficina de destino no admite un cargo responsable propio.',
+                $roleErrorField => 'La oficina de destino no admite un cargo responsable propio.',
             ]);
         }
         if (OfficeMembership::query()
-            ->where('office_id', $destination->office_id)
+            ->where('office_id', $destinationOffice->id)
             ->where('user_id', $source->user_id)
             ->whereNull('effective_to')
             ->when($lock, fn ($query) => $query->lockForUpdate())
             ->exists()) {
             throw ValidationException::withMessages([
-                'office_position_id' => 'El funcionario ya tiene una pertenencia vigente en la oficina de destino.',
+                'office_id' => 'El funcionario ya tiene una pertenencia vigente en la oficina de destino.',
             ]);
         }
 
-        if ($destination->membership_role === OfficeMembershipRole::Manager) {
+        if ($destinationRole === OfficeMembershipRole::Manager) {
             $managerConflict = OfficeManagerAssignment::query()
-                ->where('office_id', $destination->office_id)
+                ->where('office_id', $destinationOffice->id)
                 ->where(fn ($query) => $query
                     ->whereNull('effective_to')
                     ->orWhere('effective_to', '>', $data->effectiveFrom))
                 ->when($lock, fn ($query) => $query->lockForUpdate())
                 ->exists();
             $legacyManagerConflict = OfficeMembership::query()
-                ->where('office_id', $destination->office_id)
+                ->where('office_id', $destinationOffice->id)
                 ->where('membership_role', OfficeMembershipRole::Manager->value)
                 ->whereNull('effective_to')
                 ->whereKeyNot($source->id)
@@ -296,19 +331,28 @@ class EmploymentRotationService
 
             if ($managerConflict || $legacyManagerConflict) {
                 throw ValidationException::withMessages([
-                    'office_position_id' => 'La oficina de destino ya tiene una jefatura vigente o superpuesta. Seleccione otro cargo o regularice primero esa responsabilidad.',
+                    $roleErrorField => 'La oficina de destino ya tiene una jefatura vigente o superpuesta. Regularice primero esa responsabilidad o cree un cargo que no sea de jefatura.',
                 ]);
             }
         }
 
-        return [$target, $source, $destination];
+        return [
+            $target,
+            $source,
+            new ResolvedEmploymentRotationDestination(
+                office: $destinationOffice,
+                positionTitle: $destinationTitle,
+                membershipRole: $destinationRole,
+            ),
+        ];
     }
 
     /** @return array<string, mixed> */
     private function buildPreview(
         EmploymentContract $contract,
         OfficeMembership $source,
-        OfficePosition $destination,
+        ResolvedEmploymentRotationDestination $destination,
+        CreateEmploymentRotationData $data,
     ): array {
         $activeMembersAfterRotation = OfficeMembership::query()
             ->where('office_id', $source->office_id)
@@ -361,19 +405,23 @@ class EmploymentRotationService
                 'position_title' => $source->position_title,
             ],
             'destination' => [
-                'office_id' => $destination->office_id,
+                'office_id' => $destination->office->id,
                 'office_code' => $destination->office->code,
                 'office_name' => $destination->office->name,
-                'office_position_id' => $destination->id,
-                'position_name' => $destination->name,
-                'membership_role' => $destination->membership_role->value,
-                'membership_role_label' => $destination->membership_role->label(),
+                'office_position_id' => $destination->officePosition?->id,
+                'position_name' => $destination->positionTitle,
+                'membership_role' => $destination->membershipRole->value,
+                'membership_role_label' => $destination->membershipRole->label(),
+                'position_mode' => $data->positionMode->value,
+                'position_mode_label' => $data->positionMode->label(),
             ],
             'effects' => [
                 'pending_expedients_released' => $pendingExpedients,
                 'remaining_source_members' => $activeMembersAfterRotation,
                 'contract_is_unchanged' => true,
                 'account_remains_active' => true,
+                'position_is_preserved' => $data->positionMode === EmploymentRotationPositionMode::PreserveCurrent,
+                'position_will_be_created' => $data->positionMode === EmploymentRotationPositionMode::CreateNew,
             ],
             'warnings' => $warnings,
         ];
@@ -499,6 +547,7 @@ class EmploymentRotationService
     {
         return [
             'sourceOfficeMembership.office',
+            'destinationOffice',
             'destinationOfficePosition.office',
             'destinationOfficeMembership.office',
             'attachment',

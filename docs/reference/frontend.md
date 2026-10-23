@@ -26,7 +26,7 @@ Mantiene catálogos, las bandejas Nuevos/Pendientes/Finalizados, el contador ind
 
 ### `stores/human-resources.js`
 
-Carga oficinas/cargos/catálogos, lista funcionarios y coordina altas, ediciones, contratos, rotaciones, archivos e importación. La rotación exige una previsualización del impacto antes de confirmar y vuelve a consultar kardex/listado para reflejar la nueva oficina sin recargar la página. Los errores por fila de Excel se muestran sin convertir una importación fallida en registros parciales invisibles.
+Carga oficinas/cargos/catálogos, lista funcionarios y coordina altas, ediciones, contratos, rotaciones, archivos e importación. La rotación permite conservar el cargo o crear uno nuevo dentro de la oficina destino, exige una previsualización del impacto antes de confirmar y vuelve a consultar kardex/listado para reflejar la nueva oficina sin recargar la página. Los errores por fila de Excel se muestran sin convertir una importación fallida en registros parciales invisibles.
 
 ### `stores/legislatures.js`
 

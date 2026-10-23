@@ -43,11 +43,11 @@ Existe protección para una sola legislatura activa y para impedir solapamiento 
 | `employees` | Kardex personal único por CI. |
 | `office_positions` | Cargos propios de cada oficina. |
 | `employment_contracts` | Contratación, vigencia, tipo, monto, cargo, oficina y asignaciones creadas. |
-| `employment_rotations` | Disposición que cambia oficina/cargo operativo sin reescribir contrato, monto u origen presupuestario. |
+| `employment_rotations` | Disposición que cambia oficina operativa sin reescribir contrato, monto u origen presupuestario; guarda el modo de conservar o crear cargo y su fotografía histórica. |
 | `employment_rotation_attachments` | Respaldo opcional de la rotación con ruta, metadatos y SHA-256. |
 | `employee_attachments` | Foto/certificados/respaldos con ruta, metadatos y hash. |
 
-Contrato, membresía, rotación y rol permanecen separados. Solo puede existir una membresía operativa abierta por contrato y una rotación abierta por contrato. La membresía de tipo `manager`, derivada del cargo contractual o de destino, origina automáticamente `office_manager_assignments`; una delegación suspende temporalmente la operación del titular sin reescribir su contrato ni el historial.
+Contrato, membresía, rotación y rol permanecen separados. Solo puede existir una membresía operativa abierta por contrato y una rotación abierta por contrato. Una rotación con cargo conservado deja `office_position_id` en `NULL` en la nueva membresía y conserva denominación/función como fotografía, evitando enlazar un cargo perteneciente a otra oficina. Si se crea un cargo, este sí pertenece al catálogo de destino y queda referenciado. La membresía de tipo `manager`, derivada del cargo contractual o del tratamiento elegido, origina automáticamente `office_manager_assignments`; una delegación suspende temporalmente la operación del titular sin reescribir su contrato ni el historial.
 
 ## Catálogos y numeración documental
 
