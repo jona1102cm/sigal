@@ -43,6 +43,7 @@ class DocumentService
         private readonly NumberSequenceService $numberSequenceService,
         private readonly RichTextSanitizer $richTextSanitizer,
         private readonly LegislativeAuthorizationService $legislativeAuthorization,
+        private readonly OfficeDocumentAccessService $officeDocumentAccess,
     ) {}
 
     public function createDraft(
@@ -218,6 +219,7 @@ class DocumentService
                     $target->documentType,
                     $target->issuingOffice,
                     $institutionalWorkflow,
+                    $target,
                 );
             }
             $oldValues = $this->snapshot($target);
@@ -243,7 +245,7 @@ class DocumentService
                 'acting_body_membership_id' => $this->legislativeAuthorization->isLegislativeOffice($target->issuing_office_id)
                     ? $context->actingBodyMembershipId : null,
                 'legislative_sender_snapshot' => $this->legislativeAuthorization->isLegislativeOffice($target->issuing_office_id)
-                    ? $this->legislativeSenderSnapshot($actor, $context) : null,
+                    ? $this->legislativeSenderSnapshot($target->issuingOffice, $actor, $context) : null,
                 'issued_at' => now(),
             ]);
 
@@ -497,7 +499,22 @@ class DocumentService
 
     private function assertCanManageOfficeDocuments(User $actor, Office $office, Expedient $expedient, RequestAuditContext $context): void
     {
-        $belongsToOffice = $actor->currentOfficeMemberships()->where('office_id', $office->id)->exists();
+        $belongsToOriginOffice = $actor->currentOfficeMemberships()
+            ->where('office_id', $office->id)
+            ->exists();
+        $isUndistributedOriginWork = $belongsToOriginOffice
+            && (int) $expedient->origin_office_id === (int) $office->id
+            && (int) $expedient->responsible_office_id === (int) $office->id
+            && ! $expedient->movements()->exists();
+        $isMaterialRequestAuthor = $expedient->materialRequest()
+            ->where('requesting_user_id', $actor->id)
+            ->where('requesting_office_id', $office->id)
+            ->exists();
+        $canOperateThroughOffice = $this->officeDocumentAccess->canOperateOffice(
+            $actor,
+            $expedient,
+            (int) $office->id,
+        );
         $actsAsAuthority = $this->legislativeAuthorization->canActForOfficeInExpedient(
             $actor,
             $expedient,
@@ -505,9 +522,9 @@ class DocumentService
             $context->actingLegislatureMemberId,
             $context->actingBodyMembershipId,
         );
-        if (! $belongsToOffice && ! $actsAsAuthority) {
+        if (! $isUndistributedOriginWork && ! $isMaterialRequestAuthor && ! $canOperateThroughOffice && ! $actsAsAuthority) {
             throw ValidationException::withMessages([
-                'office' => 'El usuario debe pertenecer al equipo administrativo o actuar como autoridad legislativa vigente.',
+                'office' => 'El usuario debe integrar el equipo operativo autorizado o actuar como autoridad legislativa vigente.',
             ]);
         }
 
@@ -528,16 +545,22 @@ class DocumentService
             return;
         }
 
+        $canOperateThroughOffice = $this->officeDocumentAccess->canOperateOffice(
+            $actor,
+            $expedient,
+            (int) $office->id,
+        );
+        $canActAsAuthority = $this->legislativeAuthorization->canActForOfficeInExpedient(
+            $actor,
+            $expedient,
+            $office->id,
+            $context->actingLegislatureMemberId,
+            $context->actingBodyMembershipId,
+        );
         if (! $expedient->isCurrentlyHeldByOffice($office->id)
-            || ! $this->legislativeAuthorization->canActForOfficeInExpedient(
-                $actor,
-                $expedient,
-                $office->id,
-                $context->actingLegislatureMemberId,
-                $context->actingBodyMembershipId,
-            )) {
+            || (! $canOperateThroughOffice && ! $canActAsAuthority)) {
             throw ValidationException::withMessages([
-                'document' => 'El asesor puede preparar el borrador; solo la autoridad legislativa vigente puede emitirlo.',
+                'document' => 'Solo la autoridad legislativa o el equipo autorizado desde Acceso de mi oficina puede emitirlo.',
             ]);
         }
     }
@@ -547,13 +570,20 @@ class DocumentService
         DocumentType $documentType,
         Office $office,
         InstitutionalWorkflow $institutionalWorkflow,
+        ?Document $document = null,
     ): void {
         $isWarehouseReceptionAct = $institutionalWorkflow === InstitutionalWorkflow::WarehouseMaterialRequest
             && $expedient->materialRequest()->exists()
             && $documentType->code === 'MINUTES'
             && $office->code === 'AFALM';
+        $isWarehouseRequestDocument = $institutionalWorkflow === InstitutionalWorkflow::WarehouseMaterialRequest
+            && $document !== null
+            && $expedient->materialRequest()
+                ->where('requesting_office_id', $office->id)
+                ->where('request_document_id', $document->id)
+                ->exists();
 
-        if (! $isWarehouseReceptionAct) {
+        if (! $isWarehouseReceptionAct && ! $isWarehouseRequestDocument) {
             throw ValidationException::withMessages([
                 'document' => 'El documento automático no corresponde al flujo institucional autorizado.',
             ]);
@@ -561,7 +591,7 @@ class DocumentService
     }
 
     /** @return array<string, mixed>|null */
-    private function legislativeSenderSnapshot(User $actor, RequestAuditContext $context): ?array
+    private function legislativeSenderSnapshot(Office $office, User $actor, RequestAuditContext $context): ?array
     {
         if ($context->actingBodyMembershipId !== null) {
             $membership = LegislativeBodyMembership::query()
@@ -598,6 +628,33 @@ class DocumentService
                 'type' => 'assembly_member',
                 'name' => $member->user->name,
                 'from' => [['name' => $member->user->name, 'role' => 'assembly_member', 'role_label' => 'Asambleísta']],
+                'issued_by' => $actor->name,
+            ];
+        }
+
+        $body = $this->legislativeAuthorization->currentBodyForOffice($office->id);
+        if ($body !== null) {
+            $body->load('currentMemberships.legislatureMember.user');
+            $directive = $body->currentMemberships
+                ->filter(fn (LegislativeBodyMembership $member) => $member->role !== LegislativeBodyRole::Member)
+                ->sortBy(fn (LegislativeBodyMembership $member) => array_search($member->role, [
+                    LegislativeBodyRole::Chief,
+                    LegislativeBodyRole::DeputyChief,
+                    LegislativeBodyRole::President,
+                    LegislativeBodyRole::VicePresident,
+                    LegislativeBodyRole::Secretary,
+                ], true))
+                ->map(fn (LegislativeBodyMembership $member) => [
+                    'name' => $member->legislatureMember->user->name,
+                    'role' => $member->role->value,
+                    'role_label' => $member->role->label(),
+                ])->values()->all();
+
+            return [
+                'type' => 'legislative_body',
+                'name' => $body->name,
+                'body_type' => $body->body_type->value,
+                'from' => $directive,
                 'issued_by' => $actor->name,
             ];
         }

@@ -40,7 +40,9 @@ export const useSessionStore = defineStore('session', {
         },
         canConfigureOfficeAccess() {
             return this.hasPermission('document_management.office_access.configure')
-                && (this.isSuperAdministrator || (this.user?.office_memberships ?? []).some((membership) => membership.is_manager));
+                && (this.isSuperAdministrator
+                    || (this.user?.office_memberships ?? []).some((membership) => membership.can_view_document_access)
+                    || this.legislativeProfiles.some((profile) => profile.is_principal_authority || profile.is_effective_authority));
         },
         canUseWarehouse() {
             return this.hasPermission('warehouse.requests.view');

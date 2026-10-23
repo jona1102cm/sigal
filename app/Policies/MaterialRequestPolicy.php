@@ -175,7 +175,16 @@ class MaterialRequestPolicy
             ->exists();
 
         return $membershipExists
-            && app(OfficeDocumentAccessService::class)->canOperateExpedient($user, $materialRequest->expedient);
+            // El módulo posee una etapa única y decisiones serializadas propias.
+            // Aquí se valida quién integra el equipo habilitado de la oficina,
+            // sin exigir la toma de control usada por la bandeja documental libre.
+            && app(OfficeDocumentAccessService::class)->canRequestOperationalControl(
+                $user,
+                $materialRequest->expedient,
+                (int) $user->currentOfficeMemberships()
+                    ->whereHas('office', fn ($office) => $office->where('code', $officeCode))
+                    ->value('office_id'),
+            );
     }
 
     private function canViewCommissionRequest(User $user, MaterialRequest $materialRequest): bool

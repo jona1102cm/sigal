@@ -60,7 +60,8 @@ class ExpedientInternalAssignmentService
                 ]);
             }
 
-            if (! $actor->isSuperAdministrator() && ! $actor->isCurrentManagerOfOffice($target->recipient_office_id)) {
+            if (! $this->officeAccess->manageableInternalAssignmentOfficeIds($actor, $targetExpedient)
+                ->contains((int) $target->recipient_office_id)) {
                 throw ValidationException::withMessages(['recipient' => 'Solo la jefatura vigente puede distribuir este ingreso.']);
             }
 
@@ -107,6 +108,16 @@ class ExpedientInternalAssignmentService
                     'effective_from' => $now,
                 ]);
             }
+
+            // Una reasignación directa de la jefatura deja sin objeto cualquier
+            // solicitud de control todavía pendiente para esta misma llegada.
+            $target->pendingAssignmentRequests()->update([
+                'status' => 'cancelled',
+                'decided_by' => $actor->id,
+                'decision_note' => 'Cancelada automáticamente por reasignación de la jefatura.',
+                'decided_at' => $now,
+                'updated_at' => $now,
+            ]);
 
             $target->load(['currentInternalAssignments.user', 'recipientOffice']);
             $this->activityLogger->record(

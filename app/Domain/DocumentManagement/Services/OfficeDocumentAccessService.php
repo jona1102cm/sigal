@@ -5,6 +5,7 @@ namespace App\Domain\DocumentManagement\Services;
 use App\Domain\Audit\DTOs\RequestAuditContext;
 use App\Domain\Audit\Services\ActivityLogger;
 use App\Domain\DocumentManagement\Enums\OfficeDocumentAccessMode;
+use App\Domain\Legislatures\Services\LegislativeAuthorizationService;
 use App\Domain\Organization\Enums\OfficeMembershipRole;
 use App\Models\Expedient;
 use App\Models\ExpedientInternalAssignment;
@@ -23,7 +24,10 @@ use Illuminate\Validation\ValidationException;
  */
 class OfficeDocumentAccessService
 {
-    public function __construct(private readonly ActivityLogger $activityLogger) {}
+    public function __construct(
+        private readonly ActivityLogger $activityLogger,
+        private readonly LegislativeAuthorizationService $legislativeAuthorization,
+    ) {}
 
     public function modeFor(Office $office): OfficeDocumentAccessMode
     {
@@ -45,7 +49,7 @@ class OfficeDocumentAccessService
             ->with(['office.documentAccessSetting.currentAuthorizations'])
             ->get()
             ->filter(function (OfficeMembership $membership) use ($user): bool {
-                if ($user->isCurrentManagerOfOffice((int) $membership->office_id)) {
+                if ($user->hasCurrentOfficeLeadershipVisibility((int) $membership->office_id)) {
                     return true;
                 }
 
@@ -117,51 +121,94 @@ class OfficeDocumentAccessService
 
     public function canOperateExpedient(User $user, Expedient $expedient): bool
     {
-        $holderOfficeIds = $expedient->currentHolderOfficeIds();
-        $memberships = $user->currentOfficeMemberships()
-            ->whereIn('office_id', $holderOfficeIds)
-            ->with(['office.documentAccessSetting.currentAuthorizations'])
-            ->get();
+        return $expedient->currentHolderOfficeIds()
+            ->contains(fn ($officeId) => $this->canOperateOffice($user, $expedient, (int) $officeId));
+    }
 
-        foreach ($memberships as $membership) {
-            $office = $membership->office;
-            $mode = $this->modeFor($office);
-
-            if ($mode === OfficeDocumentAccessMode::ManagerAssignment) {
-                // Mientras la jefatura aún no distribuyó el ingreso, ella es el único
-                // actor posible. Al designar responsable, la exclusividad pasa a ese
-                // funcionario y la jefatura conserva únicamente lectura y reasignación.
-                if ($this->hasAnyResponsibleAssignment($expedient, (int) $membership->office_id)) {
-                    if ($this->hasResponsibleAssignment($user, $expedient, (int) $membership->office_id)) {
-                        return true;
-                    }
-
-                    continue;
-                }
-
-                if ($user->isCurrentManagerOfOffice((int) $membership->office_id)) {
-                    return true;
-                }
-
-                continue;
-            }
-
-            if ($user->isCurrentManagerOfOffice((int) $membership->office_id)) {
-                return true;
-            }
-
-            if ($mode === OfficeDocumentAccessMode::AllMembers) {
-                return true;
-            }
-
-            if ($mode === OfficeDocumentAccessMode::AuthorizedTeam
-                && $office->documentAccessSetting?->currentAuthorizations
-                    ->contains(fn ($authorization) => (int) $authorization->user_id === (int) $user->id)) {
-                return true;
-            }
+    /** Evalúa la autorización operativa para una oficina concreta que posee el expediente. */
+    public function canOperateOffice(User $user, Expedient $expedient, int $officeId): bool
+    {
+        if (! $expedient->currentHolderOfficeIds()->contains($officeId)) {
+            return false;
         }
 
-        return false;
+        $membership = $user->currentOfficeMemberships()
+            ->where('office_id', $officeId)
+            ->with(['office.documentAccessSetting.currentAuthorizations'])
+            ->first();
+
+        if ($membership === null) {
+            return false;
+        }
+
+        $office = $membership->office;
+        $mode = $this->modeFor($office);
+        $isLegislativeOffice = $this->legislativeAuthorization->isLegislativeOffice($officeId);
+
+        // Toda llegada principal que exige respuesta necesita una toma o asignación
+        // explícita. Abrir, pertenecer al equipo o ser jefatura nunca equivale a
+        // asumirla; estas condiciones solo habilitan a solicitar o tomar control.
+        if ($this->hasActionableArrival($expedient, $officeId)) {
+            return $this->hasResponsibleAssignment($user, $expedient, $officeId);
+        }
+
+        if ($mode === OfficeDocumentAccessMode::ManagerAssignment) {
+            // Mientras la jefatura aún no distribuyó el ingreso, ella es el único actor posible.
+            return ! $isLegislativeOffice && $user->isCurrentManagerOfOffice($officeId);
+        }
+
+        if (! $isLegislativeOffice && $user->isCurrentManagerOfOffice($officeId)) {
+            return true;
+        }
+
+        if ($mode === OfficeDocumentAccessMode::AllMembers) {
+            return true;
+        }
+
+        return $mode === OfficeDocumentAccessMode::AuthorizedTeam
+            && $office->documentAccessSetting?->currentAuthorizations
+                ->contains(fn ($authorization) => (int) $authorization->user_id === (int) $user->id);
+    }
+
+    /**
+     * Comprueba si el usuario pertenece al grupo desde el que puede tomar o
+     * solicitar control, ignorando únicamente que otra persona lo tenga ahora.
+     */
+    public function canRequestOperationalControl(User $user, Expedient $expedient, int $officeId): bool
+    {
+        if (! $expedient->currentHolderOfficeIds()->contains($officeId)) {
+            return false;
+        }
+
+        $membership = $user->currentOfficeMemberships()
+            ->where('office_id', $officeId)
+            ->with(['office.documentAccessSetting.currentAuthorizations'])
+            ->first();
+        if ($membership === null) {
+            return false;
+        }
+
+        $office = $membership->office;
+        $mode = $this->modeFor($office);
+        if ($mode === OfficeDocumentAccessMode::ManagerAssignment) {
+            return $user->isCurrentManagerOfOffice($officeId)
+                || ExpedientInternalAssignment::query()
+                    ->where('user_id', $user->id)
+                    ->where('effective_from', '<=', now())
+                    ->where(fn ($assignment) => $assignment->whereNull('effective_to')->orWhere('effective_to', '>', now()))
+                    ->whereHas('recipient', fn ($recipient) => $recipient
+                        ->where('recipient_office_id', $officeId)
+                        ->whereHas('movement', fn ($movement) => $movement->where('expedient_id', $expedient->id)))
+                    ->exists();
+        }
+
+        if ($user->isCurrentManagerOfOffice($officeId) || $mode === OfficeDocumentAccessMode::AllMembers) {
+            return true;
+        }
+
+        return $mode === OfficeDocumentAccessMode::AuthorizedTeam
+            && $office->documentAccessSetting?->currentAuthorizations
+                ->contains(fn ($authorization) => (int) $authorization->user_id === (int) $user->id);
     }
 
     public function canManageInternalAssignments(User $user, Expedient $expedient): bool
@@ -188,14 +235,23 @@ class OfficeDocumentAccessService
             return $individualOfficeIds->map(fn ($id) => (int) $id)->values();
         }
 
-        return $user->currentOfficeMemberships()
+        $administrativeOfficeIds = $user->currentOfficeMemberships()
             ->whereIn('office_id', $individualOfficeIds)
             ->whereHas('office', fn ($office) => $office->where('requires_manager', true))
             ->get()
-            ->filter(fn (OfficeMembership $membership) => $user->isCurrentManagerOfOffice((int) $membership->office_id))
+            ->filter(fn (OfficeMembership $membership) => ! $this->legislativeAuthorization
+                ->isLegislativeOffice((int) $membership->office_id)
+                && $user->isCurrentManagerOfOffice((int) $membership->office_id))
             ->pluck('office_id')
             ->map(fn ($id) => (int) $id)
             ->values();
+
+        $legislativeOfficeIds = $individualOfficeIds
+            ->filter(fn ($officeId) => $this->legislativeAuthorization
+                ->isEffectiveAuthorityForOffice($user, (int) $officeId))
+            ->map(fn ($id) => (int) $id);
+
+        return $administrativeOfficeIds->merge($legislativeOfficeIds)->unique()->values();
     }
 
     /** @param list<int> $authorizedUserIds */
@@ -280,7 +336,7 @@ class OfficeDocumentAccessService
         });
     }
 
-    private function hasResponsibleAssignment(User $user, Expedient $expedient, int $officeId): bool
+    public function hasResponsibleAssignment(User $user, Expedient $expedient, int $officeId): bool
     {
         $latestMovementId = $expedient->movements()->latest('sent_at')->latest('id')->value('id');
         if ($latestMovementId === null) {
@@ -298,7 +354,7 @@ class OfficeDocumentAccessService
             ->exists();
     }
 
-    private function hasAnyResponsibleAssignment(Expedient $expedient, int $officeId): bool
+    public function hasAnyResponsibleAssignment(Expedient $expedient, int $officeId): bool
     {
         $latestMovementId = $expedient->movements()->latest('sent_at')->latest('id')->value('id');
         if ($latestMovementId === null) {
@@ -312,6 +368,23 @@ class OfficeDocumentAccessService
             ->whereHas('recipient', fn ($recipient) => $recipient
                 ->where('expedient_movement_id', $latestMovementId)
                 ->where('recipient_office_id', $officeId))
+            ->exists();
+    }
+
+    private function hasActionableArrival(Expedient $expedient, int $officeId): bool
+    {
+        $latestMovementId = $expedient->movements()->latest('sent_at')->latest('id')->value('id');
+        if ($latestMovementId === null) {
+            return false;
+        }
+
+        return $expedient->movements()
+            ->whereKey($latestMovementId)
+            ->where('requires_response', true)
+            ->whereHas('recipients', fn ($recipient) => $recipient
+                ->where('recipient_office_id', $officeId)
+                ->where('recipient_kind', 'primary')
+                ->whereNotIn('status', ['responded', 'returned', 'rejected', 'completed']))
             ->exists();
     }
 }

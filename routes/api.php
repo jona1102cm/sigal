@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\DocumentManagement\DocumentCatalogController;
 use App\Http\Controllers\Api\DocumentManagement\DocumentController;
 use App\Http\Controllers\Api\DocumentManagement\DocumentedExpedientEntryController;
 use App\Http\Controllers\Api\DocumentManagement\ExpedientAccessController;
+use App\Http\Controllers\Api\DocumentManagement\ExpedientAttentionController;
 use App\Http\Controllers\Api\DocumentManagement\ExpedientController;
 use App\Http\Controllers\Api\DocumentManagement\ExpedientInternalAssignmentController;
 use App\Http\Controllers\Api\DocumentManagement\ExpedientLifecycleController;
@@ -16,7 +17,6 @@ use App\Http\Controllers\Api\DocumentManagement\ExpedientMovementController;
 use App\Http\Controllers\Api\DocumentManagement\OfficeDocumentAccessController;
 use App\Http\Controllers\Api\DocumentManagement\OfficeDocumentSequenceController;
 use App\Http\Controllers\Api\HumanResources\HumanResourcesController;
-use App\Http\Controllers\Api\HumanResources\OfficeManagerAssignmentController;
 use App\Http\Controllers\Api\Legislatures\LegislativeCompositionController;
 use App\Http\Controllers\Api\Legislatures\LegislativeDirectoryController;
 use App\Http\Controllers\Api\Legislatures\LegislatureController;
@@ -71,9 +71,6 @@ Route::middleware(['auth:sanctum', 'active.user', 'legislative.context', 'no.sto
         Route::post('human-resources/employees/{employee}/profile-photo', [HumanResourcesController::class, 'storeProfilePhoto']);
         Route::post('human-resources/employees/{employee}/attachments', [HumanResourcesController::class, 'storeAttachment']);
         Route::get('human-resources/offices/{office}/positions', [HumanResourcesController::class, 'positions']);
-        Route::get('human-resources/office-manager-assignments', [OfficeManagerAssignmentController::class, 'index']);
-        Route::post('human-resources/offices/{office}/manager-assignments', [OfficeManagerAssignmentController::class, 'store']);
-        Route::post('human-resources/offices/{office}/manager-assignments/{assignment}/end', [OfficeManagerAssignmentController::class, 'end']);
         Route::post('human-resources/positions', [HumanResourcesController::class, 'storePosition']);
         Route::patch('human-resources/positions/{officePosition}', [HumanResourcesController::class, 'updatePosition']);
         Route::post('human-resources/contracts/{contract}/extend', [HumanResourcesController::class, 'extend']);
@@ -93,6 +90,9 @@ Route::middleware(['auth:sanctum', 'active.user', 'legislative.context', 'no.sto
         Route::post('offices/{office}/memberships/{membership}/close', [OfficeController::class, 'closeMembership']);
         Route::get('document-management/offices/{office}/access-setting', [OfficeDocumentAccessController::class, 'show']);
         Route::put('document-management/offices/{office}/access-setting', [OfficeDocumentAccessController::class, 'update']);
+        Route::post('document-management/offices/{office}/manager-delegations', [OfficeDocumentAccessController::class, 'storeManagerDelegation']);
+        Route::post('document-management/offices/{office}/manager-delegations/{delegation}/end', [OfficeDocumentAccessController::class, 'endManagerDelegation']);
+        Route::post('document-management/offices/{office}/legislative-delegations', [OfficeDocumentAccessController::class, 'storeLegislativeDelegation']);
 
         // Catálogos que normalizan los documentos y su nivel de acceso.
         Route::get('document-types', [DocumentCatalogController::class, 'documentTypes']);
@@ -102,12 +102,18 @@ Route::middleware(['auth:sanctum', 'active.user', 'legislative.context', 'no.sto
         Route::post('expedient-entries', [DocumentedExpedientEntryController::class, 'store']);
         Route::post('expedients', [ExpedientController::class, 'store']);
         Route::get('expedients/{expedient}', [ExpedientController::class, 'show']);
+        Route::get('expedients/{expedient}/attention', [ExpedientAttentionController::class, 'show']);
+        Route::post('expedients/{expedient}/read', [ExpedientAttentionController::class, 'markRead']);
         Route::get('expedients/{expedient}/access-grants', [ExpedientAccessController::class, 'index']);
         Route::post('expedients/{expedient}/access-grants', [ExpedientAccessController::class, 'store']);
         Route::post('expedients/{expedient}/access-grants/{grant}/close', [ExpedientAccessController::class, 'close']);
         Route::get('expedients/{expedient}/movements', [ExpedientMovementController::class, 'index']);
         Route::post('expedients/{expedient}/movements', [ExpedientMovementController::class, 'store']);
         Route::post('expedients/{expedient}/movement-recipients/{recipient}/status', [ExpedientMovementController::class, 'updateRecipientStatus']);
+        Route::post('expedients/{expedient}/movement-recipients/{recipient}/claim', [ExpedientAttentionController::class, 'claim']);
+        Route::post('expedients/{expedient}/movement-recipients/{recipient}/assignment-requests', [ExpedientAttentionController::class, 'requestAssignment']);
+        Route::post('expedients/{expedient}/movement-recipients/{recipient}/assignment-requests/{assignmentRequest}/decision', [ExpedientAttentionController::class, 'decide']);
+        Route::post('expedients/{expedient}/movement-recipients/{recipient}/transfer', [ExpedientAttentionController::class, 'transfer']);
         Route::get('expedients/{expedient}/movement-recipients/{recipient}/internal-assignments', [ExpedientInternalAssignmentController::class, 'show']);
         Route::put('expedients/{expedient}/movement-recipients/{recipient}/internal-assignments', [ExpedientInternalAssignmentController::class, 'update']);
         Route::post('expedients/{expedient}/archive', [ExpedientLifecycleController::class, 'archive']);

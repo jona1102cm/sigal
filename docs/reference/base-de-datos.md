@@ -38,12 +38,14 @@ Existe protección para una sola legislatura activa y para impedir solapamiento 
 | `office_memberships` | Pertenencia histórica usuario-oficina. |
 | `office_document_access_settings` | Modalidad persistente con la que una oficina distribuye sus llegadas. |
 | `office_document_access_authorizations` | Equipo permanente autorizado por una jefatura, con vigencia histórica. |
+| `office_manager_assignments` | Proyección histórica de la titularidad originada por un cargo contractual responsable. |
+| `office_manager_delegations` | Suplencias administrativas temporales con titular, delegado, período, motivo y actores. |
 | `employees` | Kardex personal único por CI. |
 | `office_positions` | Cargos propios de cada oficina. |
 | `employment_contracts` | Contratación, vigencia, tipo, monto, cargo, oficina y asignaciones creadas. |
 | `employee_attachments` | Foto/certificados/respaldos con ruta, metadatos y hash. |
 
-Contrato, membresía y rol permanecen separados. El contrato puede referenciar las asignaciones que originó para cerrarlas al terminar sin afectar asignaciones institucionales ajenas.
+Contrato, membresía y rol permanecen separados. La membresía de tipo `manager`, derivada del cargo contractual, origina automáticamente `office_manager_assignments`; una delegación suspende temporalmente la operación del titular sin reescribir su contrato ni el historial.
 
 ## Catálogos y numeración documental
 
@@ -67,10 +69,12 @@ Los contadores se actualizan con bloqueo pesimista. No calcular el siguiente nú
 | `expedient_access_grants` | Acceso extraordinario temporal a usuario u oficina. |
 | `expedient_movements` | Derivación emitida por una oficina. |
 | `expedient_movement_recipients` | Destinatario primario/copia y estado independiente. |
+| `expedient_recipient_reads` | Primera apertura de una llegada por usuario; no concede control operativo. |
 | `expedient_internal_assignments` | Responsable operativo único y colaboradores de lectura para una llegada, con historial. |
+| `expedient_assignment_requests` | Solicitudes, decisiones y cancelaciones para transferir el responsable operativo. |
 | `expedient_reopening_requests` | Solicitud y decisión de reapertura. |
 
-La tenencia vigente se obtiene del último movimiento y sus destinatarios; no debe inferirse solo desde `responsible_office_id`, que conserva contexto del alta. La asignación interna no cambia esa tenencia ni genera una nueva derivación: restringe qué miembro de la oficina puede operar la llegada. Tampoco debe inferirse el módulo o resultado del trámite desde un tipo fijo: las tablas especializadas, por ejemplo `material_requests`, se relacionan directamente con `expedients`.
+La tenencia vigente se obtiene del último movimiento y sus destinatarios; no debe inferirse solo desde `responsible_office_id`, que conserva contexto del alta. La lectura individual, la tenencia de oficina y el responsable operativo son conceptos separados. La asignación interna no cambia la tenencia ni genera una nueva derivación: restringe qué miembro puede operar. Solo puede existir una solicitud pendiente por usuario y llegada; aceptar una cancela las demás. Tampoco debe inferirse el módulo o resultado del trámite desde un tipo fijo: las tablas especializadas, por ejemplo `material_requests`, se relacionan directamente con `expedients`.
 
 ## Documentos y archivos
 

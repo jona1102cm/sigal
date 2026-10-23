@@ -35,7 +35,8 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
         expedients: [],
         pagination: null,
         expedientSearch: '',
-        expedientScope: 'pending',
+        expedientScope: 'new',
+        inboxNewCount: 0,
         expedientLoadVersion: 0,
         expedientsLoaded: false,
         lastExpedientSyncAt: null,
@@ -50,6 +51,7 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
         observerScopes: {},
         officeAccessSetting: null,
         internalAssignment: null,
+        attention: null,
         users: [],
         administrationOffices: [],
         selectedOffice: null,
@@ -126,6 +128,7 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
                 if (requestVersion !== this.expedientLoadVersion) return;
                 this.expedients = list(payload);
                 this.pagination = payload.meta ?? null;
+                this.inboxNewCount = Number(payload.inbox?.new_count ?? 0);
                 this.expedientSearch = search;
                 this.expedientScope = scope;
                 this.expedientsLoaded = true;
@@ -158,6 +161,16 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
                 await this.loadSelectedCollections(id, selectionVersion);
 
                 if (selectionVersion !== this.selectedLoadVersion) return null;
+                await request(`/expedients/${id}/read`, { method: 'POST' });
+                if (selectionVersion !== this.selectedLoadVersion) return null;
+                await this.loadAttention(id, selectionVersion);
+                if (selectionVersion !== this.selectedLoadVersion) return null;
+                await this.loadExpedients(
+                    this.pagination?.current_page ?? 1,
+                    this.expedientSearch,
+                    this.expedientScope,
+                    { silent: true },
+                );
                 return this.selected;
             } catch (error) {
                 if (selectionVersion === this.selectedLoadVersion) this.error = error.message;
@@ -205,15 +218,10 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
         },
 
         async refreshSelectedAndInbox() {
-            await Promise.all([
-                this.refreshSelected(),
-                this.loadExpedients(
-                    this.pagination?.current_page ?? 1,
-                    this.expedientSearch,
-                    this.expedientScope,
-                    { silent: true },
-                ),
-            ]);
+            // selectExpedient ya sincroniza la bandeja tras cargar detalle, lectura
+            // y control. Evitar una segunda consulta concurrente elimina carreras
+            // donde una respuesta anterior podía reemplazar datos más recientes.
+            await this.refreshSelected();
         },
 
         clearSelected() {
@@ -225,6 +233,53 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
             this.reopeningRequests = [];
             this.accessGrants = [];
             this.internalAssignment = null;
+            this.attention = null;
+        },
+
+        async loadAttention(expedientId = this.selected?.id, selectionVersion = this.selectedLoadVersion) {
+            if (!expedientId) return null;
+
+            const payload = await request(`/expedients/${expedientId}/attention`);
+            if (selectionVersion !== this.selectedLoadVersion || Number(this.selected?.id) !== Number(expedientId)) return null;
+            this.attention = payload.data ?? null;
+            return this.attention;
+        },
+
+        async claimAttention(recipientId) {
+            return this.run(`attention-claim-${recipientId}`, async () => {
+                await request(`/expedients/${this.selected.id}/movement-recipients/${recipientId}/claim`, { method: 'POST' });
+                await this.refreshSelectedAndInbox();
+            });
+        },
+
+        async requestAttentionAssignment(recipientId, justification) {
+            return this.run(`attention-request-${recipientId}`, async () => {
+                await request(`/expedients/${this.selected.id}/movement-recipients/${recipientId}/assignment-requests`, {
+                    method: 'POST',
+                    body: { justification: justification || null },
+                });
+                await this.refreshSelectedAndInbox();
+            });
+        },
+
+        async decideAttentionAssignment(recipientId, requestId, decision, decisionNote) {
+            return this.run(`attention-decision-${requestId}`, async () => {
+                await request(`/expedients/${this.selected.id}/movement-recipients/${recipientId}/assignment-requests/${requestId}/decision`, {
+                    method: 'POST',
+                    body: { decision, decision_note: decisionNote || null },
+                });
+                await this.refreshSelectedAndInbox();
+            });
+        },
+
+        async transferAttention(recipientId, newResponsibleUserId, note) {
+            return this.run(`attention-transfer-${recipientId}`, async () => {
+                await request(`/expedients/${this.selected.id}/movement-recipients/${recipientId}/transfer`, {
+                    method: 'POST',
+                    body: { new_responsible_user_id: Number(newResponsibleUserId), note: note || null },
+                });
+                await this.refreshSelectedAndInbox();
+            });
         },
 
         async createExpedient(data) {
@@ -475,6 +530,39 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
             return this.run(`office-access-${officeId}`, async () => {
                 const payload = await request(`/document-management/offices/${officeId}/access-setting`, {
                     method: 'PUT',
+                    body: data,
+                });
+                this.officeAccessSetting = payload.data;
+                return payload.data;
+            });
+        },
+
+        async createOfficeManagerDelegation(officeId, data) {
+            return this.run(`office-delegation-${officeId}`, async () => {
+                const payload = await request(`/document-management/offices/${officeId}/manager-delegations`, {
+                    method: 'POST',
+                    body: data,
+                });
+                this.officeAccessSetting = payload.data;
+                return payload.data;
+            });
+        },
+
+        async endOfficeManagerDelegation(officeId, delegationId, effectiveTo) {
+            return this.run(`office-delegation-end-${delegationId}`, async () => {
+                const payload = await request(`/document-management/offices/${officeId}/manager-delegations/${delegationId}/end`, {
+                    method: 'POST',
+                    body: { effective_to: effectiveTo },
+                });
+                this.officeAccessSetting = payload.data;
+                return payload.data;
+            });
+        },
+
+        async createOfficeLegislativeDelegation(officeId, data) {
+            return this.run(`office-legislative-delegation-${officeId}`, async () => {
+                const payload = await request(`/document-management/offices/${officeId}/legislative-delegations`, {
+                    method: 'POST',
                     body: data,
                 });
                 this.officeAccessSetting = payload.data;

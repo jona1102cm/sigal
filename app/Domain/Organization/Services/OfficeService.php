@@ -10,6 +10,7 @@ use App\Domain\HumanResources\Services\OfficeManagerAssignmentService;
 use App\Domain\Organization\DTOs\AssignOfficeMembershipData;
 use App\Domain\Organization\DTOs\CreateOfficeData;
 use App\Domain\Organization\DTOs\UpdateOfficeData;
+use App\Domain\Organization\Enums\OfficeMembershipRole;
 use App\Domain\Organization\Enums\OfficeStatus;
 use App\Models\Office;
 use App\Models\OfficeMembership;
@@ -182,6 +183,12 @@ class OfficeService
             if ($target->currentMemberships()->where('user_id', $user->id)->exists()) {
                 throw ValidationException::withMessages([
                     'user_id' => 'El usuario ya tiene una membresía vigente en esta oficina.',
+                ]);
+            }
+
+            if ($data->membershipRole === OfficeMembershipRole::Manager) {
+                throw ValidationException::withMessages([
+                    'membership_role' => 'La responsabilidad de oficina se obtiene únicamente mediante un contrato vigente en un cargo clasificado como responsable desde Recursos Humanos.',
                 ]);
             }
 

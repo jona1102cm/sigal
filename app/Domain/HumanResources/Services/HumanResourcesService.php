@@ -219,6 +219,18 @@ class HumanResourcesService
                     ]);
                 }
 
+                if ($position->membership_role === OfficeMembershipRole::Manager
+                    && OfficeMembership::query()
+                        ->where('office_id', $position->office_id)
+                        ->where('membership_role', OfficeMembershipRole::Manager->value)
+                        ->whereNull('effective_to')
+                        ->lockForUpdate()
+                        ->exists()) {
+                    throw ValidationException::withMessages([
+                        'office_position_id' => 'La oficina ya tiene una persona con contrato vigente en el cargo responsable. Finalice o cierre ese contrato antes de registrar al reemplazo.',
+                    ]);
+                }
+
                 $membership = OfficeMembership::query()->create([
                     'employment_contract_id' => $contract->id,
                     'office_id' => $position->office_id,
@@ -228,6 +240,10 @@ class HumanResourcesService
                     'effective_from' => $this->startOfContract($contract),
                     'assigned_by' => $actor->id,
                 ]);
+
+                if ($membership->membership_role === OfficeMembershipRole::Manager) {
+                    $this->officeManagerAssignments->assignFromMembership($membership, $actor, $context);
+                }
 
                 foreach ($attachments as $field => $file) {
                     if (! $file instanceof UploadedFile) {
@@ -318,6 +334,17 @@ class HumanResourcesService
             }
 
             $this->assertPositionRoleAllowed($target->office, $data->membershipRole);
+            if ($data->membershipRole === OfficeMembershipRole::Manager
+                && EmploymentContract::query()
+                    ->where('office_position_id', $target->id)
+                    ->whereNull('ended_at')
+                    ->where('starts_on', '<=', today())
+                    ->where(fn ($query) => $query->whereNull('ends_on')->orWhere('ends_on', '>=', today()))
+                    ->count() > 1) {
+                throw ValidationException::withMessages([
+                    'membership_role' => 'No se puede convertir este cargo en responsable porque tiene más de un contrato vigente. Primero regularice la dotación del cargo.',
+                ]);
+            }
             $oldValues = $this->positionSnapshot($target);
             $target->update([
                 'name' => $data->name,
@@ -336,10 +363,31 @@ class HumanResourcesService
                 ->get();
 
             foreach ($memberships as $membership) {
+                $previousRole = $membership->membership_role;
                 $membership->update([
                     'membership_role' => $data->membershipRole,
                     'position_title' => $data->name,
                 ]);
+
+                if ($previousRole !== $data->membershipRole) {
+                    if ($data->membershipRole === OfficeMembershipRole::Manager) {
+                        $this->officeManagerAssignments->assignFromMembership(
+                            $membership->refresh(),
+                            $actor,
+                            $context,
+                            CarbonImmutable::now(),
+                        );
+                    } else {
+                        $this->officeManagerAssignments->endForMembership(
+                            membership: $membership,
+                            effectiveTo: CarbonImmutable::now(),
+                            closureNote: 'Cierre automático por reclasificación del cargo contractual.',
+                            auditEvent: 'human_resources.office_manager_assignment.ended_on_position_change',
+                            actor: $actor,
+                            context: $context,
+                        );
+                    }
+                }
             }
 
             $this->activityLogger->record(

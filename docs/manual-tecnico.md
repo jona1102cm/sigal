@@ -105,6 +105,8 @@ Las asignaciones de Directiva son intervalos históricos. Reemplazar un titular 
 
 La jerarquía sirve tanto para mostrar el organigrama como para resolver visibilidad, oficina remitente, tenencia de expedientes y supervisión por responsables.
 
+La titularidad administrativa no se captura en una pantalla independiente: un contrato en un `office_position` de tipo `manager` crea la proyección histórica `office_manager_assignments`. `office_manager_delegations` permite una suplencia con intervalo sin alterar contrato, cargo ni titular. En órganos legislativos, la autoridad proviene de `legislative_body_memberships` y las suplencias de `legislative_delegations`.
+
 ### 4.5 Recursos Humanos
 
 El alta coordinada por `HumanResourcesService` registra o reutiliza al funcionario, crea contrato, habilita la cuenta, asigna el rol Usuario simple y abre membresía. La operación es transaccional: una falla impide datos parciales. La elevación a otro rol se realiza después, exclusivamente desde Administración.
@@ -117,6 +119,7 @@ Reglas centrales:
 - La cuenta nace con `must_change_password = true`: puede iniciar sesión, pero el middleware solo permite cambiar la contraseña o cerrar sesión hasta que registre una clave definitiva.
 - Un solo contrato vigente por funcionario.
 - Cargos filtrados por oficina.
+- El cargo responsable asigna automáticamente la titularidad y solo puede existir una persona contractual vigente por oficina.
 - Contratos futuros activan acceso al llegar su fecha.
 - Vencimiento o cierre finaliza membresía/rol contractual e inactiva acceso.
 - Una nueva contratación reutiliza kardex y cuenta.
@@ -143,7 +146,7 @@ La tenencia se determina por el último movimiento, no por quién creó el exped
 
 Los estados por destinatario permiten que cada oficina finalice su propia participación. El estado global se deriva de la combinación del último movimiento: derivado, pendiente, en proceso, respondido parcial/completo u observado.
 
-La llegada a una oficina se distribuye según una configuración persistente. En `manager_assignment`, la jefatura ve y controla inicialmente la llegada, designa un responsable operativo único y colaboradores de lectura; después solo el responsable puede responder o derivar, mientras la jefatura conserva lectura y reasignación. En `authorized_team`, la jefatura y el equipo seleccionado pueden operar las llegadas siguientes. Las oficinas sin responsable usan `all_members`. Cada cambio conserva intervalos históricos y aparece dentro del historial del expediente, pero no crea una derivación entre oficinas.
+La llegada a una oficina se distribuye según una configuración persistente. En `manager_assignment`, la autoridad efectiva controla inicialmente la llegada y puede designar un responsable operativo único y colaboradores de lectura. En `authorized_team`, la autoridad y el equipo seleccionado pueden consultar las llegadas y cualquiera de los habilitados puede tomar voluntariamente una atención libre. Abrir nunca asigna control. Si ya hay responsable, otro integrante habilitado solicita la asignación con justificación opcional; el responsable acepta o rechaza con nota opcional, o transfiere directamente. Aceptar una solicitud cancela las demás para impedir respuestas simultáneas. Las oficinas sin responsable usan `all_members`. En comisiones y bancadas, el personal administrativo conserva lectura por defecto, pero la operación exige pertenecer al equipo autorizado o recibir una asignación individual. Cada cambio conserva intervalos históricos y no crea una derivación entre oficinas.
 
 Los documentos tienen borrador, emisión y correcciones. Una vez emitidos no se sobrescriben. `document_revisions` conserva contenido/versiones y `document_attachments` metadatos/hash. `NumberSequenceService` usa bloqueos para reservar números sin colisiones concurrentes.
 
@@ -207,7 +210,7 @@ Para una entidad o proceso nuevo:
 - `401`: revisar token y sesión.
 - `403`: revisar permiso efectivo, Policy, membresía vigente, alcance/confidencialidad y asignación interna.
 - `422`: leer `errors` de la respuesta; no reemplazar la validación con mensajes genéricos.
-- Bandeja vacía: confirmar contrato/membresía, destinatario del último movimiento y filtro de pendientes/finalizados.
+- Bandeja vacía: confirmar contrato/membresía, destinatario del último movimiento y filtro Nuevos/Pendientes/Finalizados. Una llegada aún no abierta aparece solo en Nuevos para ese usuario.
 - Numeración inesperada: revisar legislatura activa y secuencia de oficina.
 - Contrato no activado/vencido: revisar scheduler y zona `America/La_Paz`.
 - Archivo no visible: revisar volumen `storage`, permisos y metadatos del adjunto.

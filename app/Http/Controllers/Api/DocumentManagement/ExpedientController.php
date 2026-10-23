@@ -11,6 +11,7 @@ use App\Domain\DocumentManagement\DTOs\CreateExpedientMovementData;
 use App\Domain\DocumentManagement\Enums\ExpedientStatus;
 use App\Domain\DocumentManagement\Enums\MovementRecipientKind;
 use App\Domain\DocumentManagement\Enums\MovementRecipientStatus;
+use App\Domain\DocumentManagement\Services\ExpedientAttentionService;
 use App\Domain\DocumentManagement\Services\ExpedientRegistrationService;
 use App\Domain\DocumentManagement\Services\OfficeDocumentAccessService;
 use App\Http\Controllers\Controller;
@@ -40,6 +41,7 @@ class ExpedientController extends Controller
 
     public function __construct(
         private readonly ExpedientRegistrationService $expedientRegistrationService,
+        private readonly ExpedientAttentionService $expedientAttentionService,
         private readonly ActivityLogger $activityLogger,
     ) {}
 
@@ -47,7 +49,12 @@ class ExpedientController extends Controller
     {
         $this->authorize('viewAny', Expedient::class);
         $search = trim((string) $request->query('search', ''));
-        $scope = $request->query('scope') === 'finalized' ? 'finalized' : 'pending';
+        $requestedScope = (string) $request->query('scope', 'new');
+        $scope = in_array($requestedScope, ['new', 'pending', 'finalized'], true) ? $requestedScope : 'new';
+
+        $newCountQuery = Expedient::query()->visibleTo($request->user());
+        $this->expedientAttentionService->applyUnreadScope($newCountQuery, $request->user());
+        $newCount = $newCountQuery->count();
 
         $expedients = Expedient::query()
             ->visibleTo($request->user())
@@ -80,12 +87,20 @@ class ExpedientController extends Controller
             context: RequestAuditContext::fromRequest($request),
         );
 
-        return ExpedientResource::collection($expedients);
+        return ExpedientResource::collection($expedients)->additional([
+            'inbox' => ['new_count' => $newCount],
+        ]);
     }
 
     /** @param Builder<Expedient> $query */
     private function applyInboxScope(Builder $query, User $user, string $scope): void
     {
+        if ($scope === 'new') {
+            $this->expedientAttentionService->applyUnreadScope($query, $user);
+
+            return;
+        }
+
         $officeIds = app(OfficeDocumentAccessService::class)->automaticOfficeIds($user);
         if ($user->hasActiveRole(RoleCode::Observer)) {
             $officeIds = $officeIds
@@ -156,6 +171,7 @@ class ExpedientController extends Controller
                     );
                 });
             });
+            $this->expedientAttentionService->excludeUnread($query, $user);
 
             return;
         }
@@ -184,6 +200,7 @@ class ExpedientController extends Controller
                 }
             });
         });
+        $this->expedientAttentionService->excludeUnread($query, $user);
     }
 
     /**

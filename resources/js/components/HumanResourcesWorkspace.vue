@@ -317,13 +317,13 @@ function formatAmount(value) {
     <div v-if="positionOpen" class="modal-backdrop" @click.self="positionOpen = false">
         <section class="modal position-modal" role="dialog" aria-modal="true">
             <header class="modal__header">
-                <div><p class="eyebrow">Organigrama</p><h2>{{ positionEditingId ? 'Corregir cargo de oficina' : 'Crear cargo de oficina' }}</h2><p class="muted">Esta definición clasifica el cargo dentro del organigrama. La persona responsable vigente se designa por separado y conserva su propio historial.</p></div>
+                <div><p class="eyebrow">Organigrama</p><h2>{{ positionEditingId ? 'Corregir cargo de oficina' : 'Crear cargo de oficina' }}</h2><p class="muted">Esta definición clasifica el cargo dentro del organigrama. Al contratar a una persona en un cargo responsable, SIGAL la reconoce automáticamente como titular de la oficina y conserva el historial.</p></div>
                 <button class="icon-button" type="button" aria-label="Cerrar" @click="positionOpen = false">x</button>
             </header>
             <form class="form-grid" @submit.prevent="savePosition">
                 <label class="field field--full"><span>Oficina</span><SearchableSelect v-model="positionForm.office_id" :options="officeOptions" disabled /></label>
                 <label class="field field--full"><span>Nombre del cargo *</span><input v-model.trim="positionForm.name" required maxlength="255"></label>
-                <label class="check-option field--full"><input v-model="positionIsManager" type="checkbox"><span><strong>Es un cargo de jefatura o responsable</strong><small>Clasifica el cargo contractual dentro del organigrama. Luego designe a la persona vigente desde Recursos Humanos › Responsables de oficinas.</small></span></label>
+                <label class="check-option field--full"><input v-model="positionIsManager" type="checkbox"><span><strong>Es un cargo de jefatura o responsable</strong><small>La persona con contrato vigente en este cargo será automáticamente responsable titular de la oficina. Las suplencias temporales se registran en Gestión documental › Acceso de mi oficina.</small></span></label>
                 <footer class="modal__actions form-grid__full"><button class="button button--ghost" type="button" @click="positionOpen = false">Cancelar</button><button class="button button--primary" type="submit" :disabled="humanResources.busy[positionEditingId ? 'update-position' : 'create-position']">{{ positionEditingId ? 'Guardar corrección' : 'Crear cargo' }}</button></footer>
             </form>
         </section>

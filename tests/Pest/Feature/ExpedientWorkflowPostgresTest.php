@@ -120,7 +120,7 @@ test('a simple user registers routes for their office and confidential expedient
         'received_on' => '2026-08-02',
     ])->assertForbidden();
 
-    $this->getJson('/api/expedients')
+    $this->getJson('/api/expedients?scope=pending')
         ->assertOk()
         ->assertJsonCount(1, 'data')
         ->assertJsonPath('data.0.route_code', 'SIGAL-000001/2026-2027');

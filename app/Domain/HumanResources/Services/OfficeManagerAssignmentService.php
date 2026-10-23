@@ -6,9 +6,11 @@ use App\Domain\Audit\DTOs\RequestAuditContext;
 use App\Domain\Audit\Services\ActivityLogger;
 use App\Domain\Authorization\Enums\UserStatus;
 use App\Domain\HumanResources\DTOs\DesignateOfficeManagerData;
+use App\Domain\Organization\Enums\OfficeMembershipRole;
 use App\Domain\Organization\Enums\OfficeStatus;
 use App\Models\Office;
 use App\Models\OfficeManagerAssignment;
+use App\Models\OfficeManagerDelegation;
 use App\Models\OfficeMembership;
 use App\Models\User;
 use Carbon\CarbonImmutable;
@@ -42,9 +44,11 @@ class OfficeManagerAssignmentService
                 ->lockForUpdate()
                 ->first();
 
-            if ($membership === null || $membership->user->status !== UserStatus::Active) {
+            if ($membership === null
+                || $membership->membership_role !== OfficeMembershipRole::Manager
+                || ($membership->user->status !== UserStatus::Active && $data->effectiveFrom->lessThanOrEqualTo(now()))) {
                 throw ValidationException::withMessages([
-                    'user_id' => 'Seleccione un funcionario activo y con pertenencia vigente a esta oficina en la fecha de inicio.',
+                    'user_id' => 'El responsable debe tener un cargo contractual de jefatura vigente en esta oficina.',
                 ]);
             }
 
@@ -68,6 +72,7 @@ class OfficeManagerAssignmentService
 
             foreach ($overlaps as $previous) {
                 $oldValues = $this->snapshot($previous);
+                $this->closeDelegationsForAssignment($previous, $data->effectiveFrom, $actor, $context);
                 $previous->update([
                     'effective_to' => $data->effectiveFrom,
                     'closure_note' => 'Cierre automático por designación de un nuevo responsable.',
@@ -89,6 +94,7 @@ class OfficeManagerAssignmentService
                 'user_id' => $membership->user_id,
                 'effective_from' => $data->effectiveFrom,
                 'effective_to' => $data->effectiveTo,
+                'source' => 'contract_position',
                 'designation_note' => $data->designationNote,
                 'designated_by' => $actor->id,
             ]);
@@ -103,6 +109,54 @@ class OfficeManagerAssignmentService
 
             return $assignment->load($this->relations());
         });
+    }
+
+    /**
+     * Proyecta automáticamente el cargo contractual a la responsabilidad vigente.
+     * La operación es idempotente para que importación, alta manual y reparaciones
+     * puedan reutilizar exactamente la misma regla.
+     */
+    public function assignFromMembership(
+        OfficeMembership $membership,
+        User $actor,
+        RequestAuditContext $context,
+        ?CarbonImmutable $effectiveFrom = null,
+    ): OfficeManagerAssignment {
+        $target = OfficeMembership::query()
+            ->with(['office', 'user'])
+            ->lockForUpdate()
+            ->findOrFail($membership->id);
+
+        if ($target->membership_role !== OfficeMembershipRole::Manager) {
+            throw ValidationException::withMessages([
+                'membership_role' => 'Solo un cargo contractual de jefatura puede originar la responsabilidad de oficina.',
+            ]);
+        }
+
+        $startsAt = $effectiveFrom ?? CarbonImmutable::parse($target->effective_from);
+        $existing = OfficeManagerAssignment::query()
+            ->where('office_membership_id', $target->id)
+            ->where('effective_from', '<=', $startsAt)
+            ->where(fn ($query) => $query
+                ->whereNull('effective_to')
+                ->orWhere('effective_to', '>', $startsAt))
+            ->first();
+
+        if ($existing !== null) {
+            return $existing->load($this->relations());
+        }
+
+        return $this->designate(
+            $target->office,
+            new DesignateOfficeManagerData(
+                userId: (int) $target->user_id,
+                effectiveFrom: $startsAt,
+                effectiveTo: $target->effective_to === null ? null : CarbonImmutable::parse($target->effective_to),
+                designationNote: 'Asignación automática por cargo contractual responsable.',
+            ),
+            $actor,
+            $context,
+        );
     }
 
     public function end(
@@ -132,6 +186,7 @@ class OfficeManagerAssignmentService
             }
 
             $oldValues = $this->snapshot($target);
+            $this->closeDelegationsForAssignment($target, $effectiveTo, $actor, $context);
             $target->update([
                 'effective_to' => $effectiveTo,
                 'closure_note' => $closureNote,
@@ -160,6 +215,35 @@ class OfficeManagerAssignmentService
         ?User $actor,
         RequestAuditContext $context,
     ): void {
+        OfficeManagerDelegation::query()
+            ->whereNull('cancelled_at')
+            ->where(fn ($delegation) => $delegation
+                ->where('delegate_membership_id', $membership->id)
+                ->orWhereHas('principalAssignment', fn ($assignment) => $assignment
+                    ->where('office_membership_id', $membership->id)))
+            ->where('effective_to', '>', $effectiveTo)
+            ->lockForUpdate()
+            ->each(function (OfficeManagerDelegation $delegation) use ($effectiveTo, $actor, $context): void {
+                $oldValues = [
+                    'effective_to' => $delegation->effective_to->toIso8601String(),
+                    'cancelled_at' => $delegation->cancelled_at?->toIso8601String(),
+                ];
+                $delegation->update($effectiveTo->isAfter($delegation->effective_from)
+                    ? ['effective_to' => $effectiveTo, 'ended_by' => $actor?->id]
+                    : ['cancelled_at' => $effectiveTo, 'ended_by' => $actor?->id]);
+                $this->activityLogger->record(
+                    event: 'organization.office_manager_delegation.ended_on_membership_close',
+                    actor: $actor,
+                    subject: $delegation,
+                    context: $context,
+                    oldValues: $oldValues,
+                    newValues: [
+                        'effective_to' => $delegation->effective_to->toIso8601String(),
+                        'cancelled_at' => $delegation->cancelled_at?->toIso8601String(),
+                    ],
+                );
+            });
+
         OfficeManagerAssignment::query()
             ->where('office_membership_id', $membership->id)
             ->where('effective_from', '<=', $effectiveTo)
@@ -197,6 +281,40 @@ class OfficeManagerAssignmentService
         }
     }
 
+    /** Cierra o cancela suplencias que ya no caben en la vigencia del titular. */
+    private function closeDelegationsForAssignment(
+        OfficeManagerAssignment $assignment,
+        CarbonInterface $effectiveTo,
+        ?User $actor,
+        RequestAuditContext $context,
+    ): void {
+        OfficeManagerDelegation::query()
+            ->where('principal_assignment_id', $assignment->id)
+            ->whereNull('cancelled_at')
+            ->where('effective_to', '>', $effectiveTo)
+            ->lockForUpdate()
+            ->each(function (OfficeManagerDelegation $delegation) use ($effectiveTo, $actor, $context): void {
+                $oldValues = [
+                    'effective_to' => $delegation->effective_to->toIso8601String(),
+                    'cancelled_at' => $delegation->cancelled_at?->toIso8601String(),
+                ];
+                $delegation->update($effectiveTo->isAfter($delegation->effective_from)
+                    ? ['effective_to' => $effectiveTo, 'ended_by' => $actor?->id]
+                    : ['cancelled_at' => $effectiveTo, 'ended_by' => $actor?->id]);
+                $this->activityLogger->record(
+                    event: 'organization.office_manager_delegation.ended_on_principal_change',
+                    actor: $actor,
+                    subject: $delegation,
+                    context: $context,
+                    oldValues: $oldValues,
+                    newValues: [
+                        'effective_to' => $delegation->effective_to->toIso8601String(),
+                        'cancelled_at' => $delegation->cancelled_at?->toIso8601String(),
+                    ],
+                );
+            });
+    }
+
     /** @return list<string> */
     private function relations(): array
     {
@@ -213,6 +331,7 @@ class OfficeManagerAssignmentService
             'user_id' => $assignment->user_id,
             'effective_from' => $assignment->effective_from->toIso8601String(),
             'effective_to' => $assignment->effective_to?->toIso8601String(),
+            'source' => $assignment->source,
             'designation_note' => $assignment->designation_note,
             'closure_note' => $assignment->closure_note,
         ];

@@ -670,7 +670,13 @@ class MaterialRequestService
             ]);
         }
 
-        $this->documentService->issue($request->expedient, $request->requestDocument, $actor, $context);
+        $this->documentService->issue(
+            $request->expedient,
+            $request->requestDocument,
+            $actor,
+            $context,
+            InstitutionalWorkflow::WarehouseMaterialRequest,
+        );
 
         if ($isRevision) {
             $destination = $this->officeForStage($request->current_stage);

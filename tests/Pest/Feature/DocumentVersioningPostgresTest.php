@@ -87,6 +87,12 @@ test('documents preserve draft revisions and issue immutable corrected versions 
         ->assertJsonPath('data.office_reference', 'RRHH 014/2026');
 
     $documentId = $draftResponse->json('data.id');
+    $recipientId = DB::table('expedient_movement_recipients')
+        ->join('expedient_movements', 'expedient_movements.id', '=', 'expedient_movement_recipients.expedient_movement_id')
+        ->where('expedient_movements.expedient_id', $expedientId)
+        ->value('expedient_movement_recipients.id');
+    $this->postJson("/api/expedients/{$expedientId}/movement-recipients/{$recipientId}/claim")
+        ->assertOk();
 
     $this->patchJson("/api/expedients/{$expedientId}/documents/{$documentId}", [
         'title' => 'Informe legal actualizado',

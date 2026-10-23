@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'office_id',
@@ -12,12 +13,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'user_id',
     'effective_from',
     'effective_to',
+    'source',
     'designation_note',
     'closure_note',
     'designated_by',
     'ended_by',
 ])]
-/** Designación histórica e independiente del contrato del responsable de una oficina. */
+/** Proyección histórica del cargo contractual responsable de una oficina. */
 class OfficeManagerAssignment extends Model
 {
     protected function casts(): array
@@ -51,5 +53,10 @@ class OfficeManagerAssignment extends Model
     public function endedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'ended_by');
+    }
+
+    public function delegations(): HasMany
+    {
+        return $this->hasMany(OfficeManagerDelegation::class, 'principal_assignment_id');
     }
 }

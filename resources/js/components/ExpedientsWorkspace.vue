@@ -1,5 +1,5 @@
 <script setup>
-/** Bandeja documental con vistas separadas para pendientes y finalizados. */
+/** Bandeja documental: separa llegadas no leídas, trabajo pendiente e historial. */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import ExpedientDetail from './ExpedientDetail.vue';
 import SearchableSelect from './SearchableSelect.vue';
@@ -23,6 +23,16 @@ const filteredExpedients = computed(() => documents.expedients.filter((expedient
 }));
 
 const statuses = computed(() => Array.from(new Map(documents.expedients.map((item) => [item.status, item.status_label])).entries()));
+const scopeDescription = computed(() => ({
+    new: 'Revise la documentación que llegó y todavía no abrió.',
+    pending: 'Atienda las respuestas pendientes de su oficina.',
+    finalized: 'Consulte los expedientes informativos, finalizados o cerrados.',
+}[inboxScope.value]));
+const emptyScopeMessage = computed(() => ({
+    new: 'No tiene nuevas llegadas con estos filtros.',
+    pending: 'No tiene respuestas pendientes con estos filtros.',
+    finalized: 'No se encontraron expedientes finalizados o cerrados con estos filtros.',
+}[inboxScope.value]));
 const lastUpdatedLabel = computed(() => {
     if (!documents.lastExpedientSyncAt) return 'Sin sincronizar';
 
@@ -100,7 +110,7 @@ function setInboxScope(scope) {
             <div>
                 <p class="eyebrow">Gestión documental</p>
                 <h1>Bandeja de expedientes</h1>
-                <p class="muted">{{ inboxScope === 'pending' ? 'Atienda primero las respuestas pendientes de su oficina.' : 'Consulte los expedientes ya finalizados o cerrados.' }}</p>
+                <p class="muted">{{ scopeDescription }}</p>
             </div>
             <button v-if="session.canCreateExpedients" class="button button--primary" type="button" @click="emit('create-expedient')">+ Registrar expediente</button>
         </header>
@@ -109,6 +119,7 @@ function setInboxScope(scope) {
 
         <section class="panel inbox-panel">
             <div class="inbox-view-switcher" aria-label="Vista de bandeja">
+                <button type="button" :class="{ 'is-active': inboxScope === 'new' }" @click="setInboxScope('new')">Nuevos <span v-if="documents.inboxNewCount" class="inbox-count">{{ documents.inboxNewCount }}</span></button>
                 <button type="button" :class="{ 'is-active': inboxScope === 'pending' }" @click="setInboxScope('pending')">Pendientes de respuesta</button>
                 <button type="button" :class="{ 'is-active': inboxScope === 'finalized' }" @click="setInboxScope('finalized')">Finalizados y cerrados</button>
             </div>
@@ -121,7 +132,7 @@ function setInboxScope(scope) {
             </div>
 
             <div v-if="documents.loading" class="empty-state">Cargando expedientes…</div>
-            <div v-else-if="!filteredExpedients.length" class="empty-state">{{ inboxScope === 'pending' ? 'No tiene respuestas pendientes con estos filtros.' : 'No se encontraron expedientes finalizados o cerrados con estos filtros.' }}</div>
+            <div v-else-if="!filteredExpedients.length" class="empty-state">{{ emptyScopeMessage }}</div>
             <div v-else class="table-wrap">
                 <table class="inbox-table">
                     <thead><tr><th>Ruta</th><th>Referencia</th><th>Responsable</th><th>Registro</th><th>Prioridad</th><th>Estado</th><th><span class="sr-only">Abrir</span></th></tr></thead>

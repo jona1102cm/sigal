@@ -243,6 +243,7 @@ test('documentation can only be created by an office after it receives the deriv
         ->assertJsonPath('data.instruction', 'Elabore el informe jurídico correspondiente.')
         ->assertJsonPath('data.priority', 'high')
         ->assertJsonPath('data.due_on', '2026-08-15');
+    $recipientId = $movement->json('data.recipients.0.id');
 
     $this->postJson("/api/expedients/{$expedientId}/documents", [
         'document_type_id' => $documentType->id,
@@ -256,6 +257,8 @@ test('documentation can only be created by an office after it receives the deriv
     ])->assertForbidden();
 
     Sanctum::actingAs($recipientUser);
+    $this->postJson("/api/expedients/{$expedientId}/movement-recipients/{$recipientId}/claim")
+        ->assertOk();
 
     $this->postJson("/api/expedients/{$expedientId}/documents", [
         'document_type_id' => $documentType->id,
@@ -283,10 +286,13 @@ test('a document can be created and derived as one operation, keeping custody wi
     $expedientId = $entry->json('data.id');
 
     $initialMovement = ExpedientMovement::query()->where('expedient_id', $expedientId)->firstOrFail();
+    $initialRecipientId = $initialMovement->recipients()->value('id');
     expect($initialMovement->sender_office_id)->toBe($originOffice->id)
         ->and($initialMovement->recipients()->value('recipient_office_id'))->toBe($recipientOffice->id);
 
     Sanctum::actingAs($recipientUser);
+    $this->postJson("/api/expedients/{$expedientId}/movement-recipients/{$initialRecipientId}/claim")
+        ->assertOk();
     $documentResponse = $this->postJson("/api/expedients/{$expedientId}/documents", [
         'document_type_id' => $this->documentType->id,
         'issuing_office_id' => $recipientOffice->id,
@@ -312,6 +318,11 @@ test('a document can be created and derived as one operation, keeping custody wi
         ->and($latestMovement->recipients()->value('recipient_office_id'))->toBe($originOffice->id);
 
     Sanctum::actingAs($originUser);
+    $originRecipientId = $latestMovement->recipients()
+        ->where('recipient_office_id', $originOffice->id)
+        ->value('id');
+    $this->postJson("/api/expedients/{$expedientId}/movement-recipients/{$originRecipientId}/claim")
+        ->assertOk();
     $this->getJson("/api/expedients/{$expedientId}")
         ->assertOk()
         ->assertJsonPath('data.current_holder_office_ids.0', $originOffice->id);
@@ -360,12 +371,27 @@ test('returning the current derivation gives custody back to the sending office'
         ->recipients()->value('id');
 
     Sanctum::actingAs($recipientUser);
+    $this->postJson("/api/expedients/{$expedientId}/movement-recipients/{$recipientId}/claim")
+        ->assertOk();
     $this->postJson("/api/expedients/{$expedientId}/movement-recipients/{$recipientId}/status", [
         'status' => 'returned',
         'action_note' => 'Se requiere completar antecedentes.',
     ])->assertOk();
 
     Sanctum::actingAs($originUser);
+    $this->getJson('/api/expedients?scope=new')
+        ->assertOk()
+        ->assertJsonFragment(['id' => $expedientId]);
+    $returnedRecipientId = ExpedientMovement::query()
+        ->where('expedient_id', $expedientId)
+        ->latest('sent_at')
+        ->latest('id')
+        ->firstOrFail()
+        ->recipients()
+        ->where('recipient_office_id', $originOffice->id)
+        ->value('id');
+    $this->postJson("/api/expedients/{$expedientId}/movement-recipients/{$returnedRecipientId}/claim")
+        ->assertOk();
     $this->postJson("/api/expedients/{$expedientId}/documents", [
         'document_type_id' => $this->documentType->id,
         'issuing_office_id' => $originOffice->id,
@@ -419,6 +445,7 @@ test('an informational derivation is delivered without creating a pending respon
     ]);
 
     Sanctum::actingAs($recipientUser);
+    $this->postJson("/api/expedients/{$expedientId}/read")->assertOk();
     $this->getJson('/api/expedients?scope=pending')
         ->assertOk()
         ->assertJsonCount(0, 'data');
@@ -450,6 +477,8 @@ test('each primary recipient can finalize only its own pending participation', f
         ->value('id');
 
     Sanctum::actingAs($firstRecipientUser);
+    $this->postJson("/api/expedients/{$expedientId}/movement-recipients/{$firstRecipientId}/claim")
+        ->assertOk();
     $this->postJson("/api/expedients/{$expedientId}/movement-recipients/{$firstRecipientId}/status", [
         'status' => 'completed',
         'action_note' => 'Participación concluida sin emitir documento adicional.',
@@ -457,6 +486,7 @@ test('each primary recipient can finalize only its own pending participation', f
         ->assertJsonPath('data.status', 'completed');
 
     Sanctum::actingAs($firstRecipientUser);
+    $this->postJson("/api/expedients/{$expedientId}/read")->assertOk();
     $this->getJson('/api/expedients?scope=pending')
         ->assertOk()
         ->assertJsonCount(0, 'data');
@@ -465,6 +495,7 @@ test('each primary recipient can finalize only its own pending participation', f
         ->assertJsonPath('data.0.id', $expedientId);
 
     Sanctum::actingAs($secondRecipientUser);
+    $this->postJson("/api/expedients/{$expedientId}/read")->assertOk();
     $this->getJson('/api/expedients?scope=pending')
         ->assertOk()
         ->assertJsonPath('data.0.id', $expedientId);
@@ -518,6 +549,7 @@ test('an administrative office cannot receive a derivation until it has an opera
         ->assertCreated();
 
     Sanctum::actingAs($recipientUser);
+    $this->postJson('/api/expedients/'.$created->json('data.id').'/read')->assertOk();
     $this->getJson('/api/expedients?scope=pending')
         ->assertOk()
         ->assertJsonPath('data.0.id', $created->json('data.id'));

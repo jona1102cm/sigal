@@ -79,6 +79,35 @@ class Office extends Model
             ->latest('id');
     }
 
+    /** Delegación administrativa activa; suspende temporalmente la actuación del titular. */
+    public function currentManagerDelegation(): HasOne
+    {
+        $now = now();
+
+        return $this->hasOne(OfficeManagerDelegation::class)
+            ->whereNull('cancelled_at')
+            ->where('effective_from', '<=', $now)
+            ->where('effective_to', '>', $now)
+            ->whereHas('principalAssignment', fn ($assignment) => $assignment
+                ->where('effective_from', '<=', $now)
+                ->where(fn ($active) => $active
+                    ->whereNull('effective_to')
+                    ->orWhere('effective_to', '>', $now)))
+            ->whereHas('delegateMembership', fn ($membership) => $membership
+                ->where('effective_from', '<=', $now)
+                ->where(fn ($active) => $active
+                    ->whereNull('effective_to')
+                    ->orWhere('effective_to', '>', $now)))
+            ->whereHas('delegateUser', fn ($user) => $user->where('status', 'active'))
+            ->latest('effective_from')
+            ->latest('id');
+    }
+
+    public function managerDelegations(): HasMany
+    {
+        return $this->hasMany(OfficeManagerDelegation::class);
+    }
+
     /** @return HasMany<OfficePosition, $this> */
     public function positions(): HasMany
     {

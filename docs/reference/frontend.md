@@ -22,7 +22,7 @@ Mantiene token/usuario, restaura `/auth/me`, conserva los permisos efectivos y e
 
 ### `stores/document-management.js`
 
-Mantiene catálogos, bandeja activa/finalizada, filtros, expediente seleccionado, documentos, movimientos y carga. Tras una mutación vuelve a consultar el detalle/bandeja necesarios para que la interfaz refleje la autoridad del servidor. La bandeja también se sincroniza al recuperar foco, al volver visible la pestaña y cada 60 segundos; las respuestas autenticadas usan política `no-store` para evitar datos obsoletos del navegador o proxy.
+Mantiene catálogos, las bandejas Nuevos/Pendientes/Finalizados, el contador individual de llegadas sin abrir, filtros, expediente seleccionado, documentos, movimientos y estado de control operativo. Abrir registra lectura sin tomar control. Las acciones Tomar control, Solicitar asignación, resolver solicitudes y Transferir control vuelven a consultar detalle y bandeja para reflejar inmediatamente la autoridad del servidor. La bandeja también se sincroniza al recuperar foco, al volver visible la pestaña y cada 60 segundos; las respuestas autenticadas usan política `no-store` para evitar datos obsoletos del navegador o proxy.
 
 ### `stores/human-resources.js`
 
@@ -58,12 +58,11 @@ No consumir `fetch` directamente desde un componente salvo una razón documentad
 | `RichTextEditor` | Edición opcional de informe HTML. |
 | `SearchableSelect` | Selección estándar con filtrado mientras se escribe. |
 | `HumanResourcesWorkspace` | Kardex, contratos, foto, cargos y edición. |
-| `OfficeManagerAssignmentsWorkspace` | Designación, reemplazo, suplencia e historial de responsables de oficina. |
 | `EmployeeBulkImportDialog` | Descarga de plantilla, carga y resultado de importación. |
 | `AdministrationWorkspace` | Contenedor de usuarios, organización, legislaturas, catálogos y reset. |
 | `UserAccessAdministration` | Usuarios, estado, roles, alcance del observador y reset de emergencia. |
 | `RolePermissionAdministration` | Matriz de vistas/acciones de los cuatro roles fijos. |
-| `OfficeDocumentAccessWorkspace` | Modalidad persistente y equipo autorizado de las oficinas dirigidas por el usuario. |
+| `OfficeDocumentAccessWorkspace` | Titularidad automática, delegación temporal, modalidad persistente y equipo operativo autorizado. |
 | `OrganizationAdministration` | Oficinas y organigrama. |
 | `LegislatureAdministration` | Legislaturas y Directiva. |
 | `OperationalResetAdministration` | Limpieza controlada de datos beta. |

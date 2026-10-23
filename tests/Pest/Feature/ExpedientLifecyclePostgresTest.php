@@ -89,6 +89,9 @@ test('movements calculate the status and URA with OMAF completes the lifecycle',
 
     Sanctum::actingAs($recipient);
 
+    $this->postJson("/api/expedients/{$expedient->id}/movement-recipients/{$recipientId}/claim")
+        ->assertOk();
+
     $this->postJson("/api/expedients/{$expedient->id}/movement-recipients/{$recipientId}/status", [
         'status' => 'received',
     ])->assertOk();
@@ -116,6 +119,8 @@ test('movements calculate the status and URA with OMAF completes the lifecycle',
     Sanctum::actingAs($archiveOfficer);
 
     $archiveRecipientId = $archiveMovement->json('data.recipients.0.id');
+    $this->postJson("/api/expedients/{$expedient->id}/movement-recipients/{$archiveRecipientId}/claim")
+        ->assertOk();
     $this->postJson("/api/expedients/{$expedient->id}/movement-recipients/{$archiveRecipientId}/status", [
         'status' => 'responded',
         'action_note' => 'URA recibió la documentación concluida.',

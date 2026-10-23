@@ -74,4 +74,19 @@ class ExpedientMovementRecipient extends Model
             ->where('effective_from', '<=', now())
             ->where(fn ($query) => $query->whereNull('effective_to')->orWhere('effective_to', '>', now()));
     }
+
+    public function reads(): HasMany
+    {
+        return $this->hasMany(ExpedientRecipientRead::class);
+    }
+
+    public function assignmentRequests(): HasMany
+    {
+        return $this->hasMany(ExpedientAssignmentRequest::class);
+    }
+
+    public function pendingAssignmentRequests(): HasMany
+    {
+        return $this->assignmentRequests()->where('status', 'pending');
+    }
 }

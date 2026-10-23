@@ -3,6 +3,7 @@
 namespace App\Policies;
 
 use App\Domain\Authorization\Enums\PermissionCode;
+use App\Domain\Legislatures\Services\LegislativeAuthorizationService;
 use App\Models\Office;
 use App\Models\User;
 
@@ -46,7 +47,43 @@ class OfficePolicy
 
     public function configureDocumentAccess(User $user, Office $office): bool
     {
+        $legislativeAuthorization = app(LegislativeAuthorizationService::class);
+
         return $user->hasPermission(PermissionCode::OfficeAccessConfigure)
-            && ($user->isSuperAdministrator() || $user->isCurrentManagerOfOffice($office->id));
+            && ($user->isSuperAdministrator()
+                || ($legislativeAuthorization->isLegislativeOffice($office->id)
+                    ? $legislativeAuthorization->isEffectiveAuthorityForOffice($user, $office->id)
+                    : $user->isCurrentManagerOfOffice($office->id)));
+    }
+
+    public function viewDocumentAccess(User $user, Office $office): bool
+    {
+        $legislativeAuthorization = app(LegislativeAuthorizationService::class);
+
+        return $user->hasPermission(PermissionCode::OfficeAccessConfigure)
+            && ($user->isSuperAdministrator()
+                || ($legislativeAuthorization->isLegislativeOffice($office->id)
+                    ? $legislativeAuthorization->hasAuthorityVisibilityForOffice($user, $office->id)
+                    : $user->hasCurrentOfficeLeadershipVisibility($office->id)));
+    }
+
+    public function manageManagerDelegations(User $user, Office $office): bool
+    {
+        if (app(LegislativeAuthorizationService::class)->isLegislativeOffice($office->id)) {
+            return false;
+        }
+
+        return $user->hasPermission(PermissionCode::OfficeAccessConfigure)
+            && ($user->isSuperAdministrator() || $user->isPrincipalManagerOfOffice($office->id));
+    }
+
+    public function manageLegislativeDelegations(User $user, Office $office): bool
+    {
+        $legislativeAuthorization = app(LegislativeAuthorizationService::class);
+
+        return $legislativeAuthorization->isLegislativeOffice($office->id)
+            && $user->hasPermission(PermissionCode::OfficeAccessConfigure)
+            && ($user->isSuperAdministrator()
+                || $legislativeAuthorization->isPrincipalAuthorityForOffice($user, $office->id));
     }
 }

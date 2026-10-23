@@ -163,14 +163,10 @@ class ExpedientPolicy
                 $actingLegislatureMemberId,
                 $actingBodyMembershipId,
             );
-        $canPrepareAsLegislativeStaff = $user->hasPermission(PermissionCode::ExpedientsProcess)
-            && $holderMemberships->contains(fn ($membership) => app(LegislativeAuthorizationService::class)
-                ->isLegislativeOffice((int) $membership->office_id));
-        $canPrepareDocuments = $canOperate || $canOperateLegislatively || $canPrepareAsLegislativeStaff;
-        $canMoveAdministratively = $canOperate && $holderMemberships->contains(
-            fn ($membership) => ! app(LegislativeAuthorizationService::class)->isLegislativeOffice((int) $membership->office_id),
-        );
-        $canMove = ($canMoveAdministratively || $canOperateLegislatively)
+        // El personal legislativo actúa mediante la misma configuración persistente
+        // de Acceso de mi oficina; pertenecer al área por sí solo no autoriza operar.
+        $canPrepareDocuments = $canOperate || $canOperateLegislatively;
+        $canMove = ($canOperate || $canOperateLegislatively)
             && ! in_array($expedient->status, [
                 ExpedientStatus::Archived,
                 ExpedientStatus::Closed,

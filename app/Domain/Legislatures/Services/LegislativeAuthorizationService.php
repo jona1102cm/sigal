@@ -38,9 +38,7 @@ class LegislativeAuthorizationService
             return false;
         }
 
-        $responsible = $selected->body->currentMemberships()
-            ->whereIn('role', ['chief', 'president'])
-            ->first();
+        $responsible = $this->principalAuthorityMembershipForOffice($officeId);
         if ($responsible === null) {
             return false;
         }
@@ -56,6 +54,38 @@ class LegislativeAuthorizationService
         return (int) $selected->id === (int) $effectiveMembershipId;
     }
 
+    public function isPrincipalAuthorityForOffice(User $user, int $officeId): bool
+    {
+        $principal = $this->principalAuthorityMembershipForOffice($officeId);
+
+        return $principal !== null
+            && (int) $principal->legislatureMember->user_id === (int) $user->id;
+    }
+
+    public function isEffectiveAuthorityForOffice(User $user, int $officeId): bool
+    {
+        $principal = $this->principalAuthorityMembershipForOffice($officeId);
+        if ($principal === null) {
+            return false;
+        }
+
+        $delegation = LegislativeDelegation::query()
+            ->with('delegateMembership.legislatureMember')
+            ->where('principal_membership_id', $principal->id)
+            ->where('effective_from', '<=', now())
+            ->where('effective_to', '>', now())
+            ->first();
+        $effective = $delegation?->delegateMembership ?? $principal;
+
+        return (int) $effective->legislatureMember->user_id === (int) $user->id;
+    }
+
+    public function hasAuthorityVisibilityForOffice(User $user, int $officeId): bool
+    {
+        return $this->isPrincipalAuthorityForOffice($user, $officeId)
+            || $this->isEffectiveAuthorityForOffice($user, $officeId);
+    }
+
     public function canActAsIndividual(User $user, int $legislatureMemberId, ?int $actingLegislatureMemberId): bool
     {
         return $actingLegislatureMemberId !== null
@@ -69,6 +99,15 @@ class LegislativeAuthorizationService
         ?int $actingLegislatureMemberId,
         ?int $actingBodyMembershipId,
     ): bool {
+        $responsible = $recipient->currentInternalAssignments()
+            ->where('assignment_role', 'responsible')
+            ->first();
+        // El perfil político habilita a tomar o recibir el control, pero no sustituye
+        // la asignación explícita exigida para operar una llegada concreta.
+        if ($responsible === null || (int) $responsible->user_id !== (int) $user->id) {
+            return false;
+        }
+
         if ($recipient->attention_legislature_member_id !== null) {
             return $this->canActAsIndividual(
                 $user,
@@ -169,5 +208,30 @@ class LegislativeAuthorizationService
                 ->where(fn ($active) => $active->whereNull('effective_to')->orWhere('effective_to', '>', now()))
                 ->whereHas('legislature', fn ($legislature) => $legislature->active()))
             ->exists();
+    }
+
+    public function currentBodyForOffice(int $officeId): ?LegislativeBody
+    {
+        return LegislativeBody::query()
+            ->where('office_id', $officeId)
+            ->where('effective_from', '<=', now())
+            ->where(fn ($query) => $query->whereNull('effective_to')->orWhere('effective_to', '>', now()))
+            ->whereHas('legislature', fn ($query) => $query->active())
+            ->first();
+    }
+
+    public function principalAuthorityMembershipForOffice(int $officeId): ?LegislativeBodyMembership
+    {
+        return LegislativeBodyMembership::query()
+            ->with(['body', 'legislatureMember'])
+            ->whereIn('role', ['chief', 'president'])
+            ->where('effective_from', '<=', now())
+            ->where(fn ($query) => $query->whereNull('effective_to')->orWhere('effective_to', '>', now()))
+            ->whereHas('body', fn ($query) => $query
+                ->where('office_id', $officeId)
+                ->where('effective_from', '<=', now())
+                ->where(fn ($active) => $active->whereNull('effective_to')->orWhere('effective_to', '>', now()))
+                ->whereHas('legislature', fn ($legislature) => $legislature->active()))
+            ->first();
     }
 }

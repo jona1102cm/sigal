@@ -191,7 +191,7 @@ test('manager assignment grants one operational responsible and read-only collab
     Sanctum::actingAs($manager);
     $this->getJson("/api/expedients/{$expedientId}")
         ->assertOk()
-        ->assertJsonPath('data.permissions.move', true)
+        ->assertJsonPath('data.permissions.move', false)
         ->assertJsonPath('data.permissions.manage_internal_assignments', true);
     $this->putJson("/api/expedients/{$expedientId}/movement-recipients/{$recipientId}/internal-assignments", [
         'responsible_user_id' => $responsible->id,
@@ -256,8 +256,14 @@ test('authorized teams and offices without a manager grant automatic office acce
         'sender_office_id' => $source->id,
         'primary_office_ids' => [$systems->id],
     ])->assertCreated();
+    $teamRecipientId = Expedient::query()->findOrFail($teamExpedientId)
+        ->movements()->latest('id')->firstOrFail()->recipients()->value('id');
 
     Sanctum::actingAs($authorized);
+    $this->getJson("/api/expedients/{$teamExpedientId}")
+        ->assertOk()->assertJsonPath('data.permissions.move', false);
+    $this->postJson("/api/expedients/{$teamExpedientId}/movement-recipients/{$teamRecipientId}/claim")
+        ->assertOk();
     $this->getJson("/api/expedients/{$teamExpedientId}")
         ->assertOk()->assertJsonPath('data.permissions.move', true);
     Sanctum::actingAs($notAuthorized);
@@ -270,8 +276,14 @@ test('authorized teams and offices without a manager grant automatic office acce
         'sender_office_id' => $source->id,
         'primary_office_ids' => [$advisors->id],
     ])->assertCreated();
+    $advisoryRecipientId = Expedient::query()->findOrFail($advisoryExpedientId)
+        ->movements()->latest('id')->firstOrFail()->recipients()->value('id');
 
     Sanctum::actingAs($advisor);
+    $this->getJson("/api/expedients/{$advisoryExpedientId}")
+        ->assertOk()->assertJsonPath('data.permissions.move', false);
+    $this->postJson("/api/expedients/{$advisoryExpedientId}/movement-recipients/{$advisoryRecipientId}/claim")
+        ->assertOk();
     $this->getJson("/api/expedients/{$advisoryExpedientId}")
         ->assertOk()->assertJsonPath('data.permissions.move', true);
 });

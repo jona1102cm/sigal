@@ -109,6 +109,33 @@ class User extends Authenticatable
                     ->orWhere('effective_to', '>', $now)));
     }
 
+    /** @return HasMany<OfficeManagerDelegation, $this> */
+    public function officeManagerDelegations(): HasMany
+    {
+        return $this->hasMany(OfficeManagerDelegation::class, 'delegate_user_id');
+    }
+
+    /** @return HasMany<OfficeManagerDelegation, $this> */
+    public function currentOfficeManagerDelegations(): HasMany
+    {
+        $now = now();
+
+        return $this->officeManagerDelegations()
+            ->whereNull('cancelled_at')
+            ->where('effective_from', '<=', $now)
+            ->where('effective_to', '>', $now)
+            ->whereHas('principalAssignment', fn ($assignment) => $assignment
+                ->where('effective_from', '<=', $now)
+                ->where(fn ($active) => $active
+                    ->whereNull('effective_to')
+                    ->orWhere('effective_to', '>', $now)))
+            ->whereHas('delegateMembership', fn ($membership) => $membership
+                ->where('effective_from', '<=', $now)
+                ->where(fn ($active) => $active
+                    ->whereNull('effective_to')
+                    ->orWhere('effective_to', '>', $now)));
+    }
+
     public function legislatureMemberships(): HasMany
     {
         return $this->hasMany(LegislatureMember::class);
@@ -136,6 +163,32 @@ class User extends Authenticatable
 
     public function isCurrentManagerOfOffice(int $officeId): bool
     {
+        $activeDelegation = OfficeManagerDelegation::query()
+            ->where('office_id', $officeId)
+            ->whereNull('cancelled_at')
+            ->where('effective_from', '<=', now())
+            ->where('effective_to', '>', now())
+            ->whereHas('principalAssignment', fn ($assignment) => $assignment
+                ->where('effective_from', '<=', now())
+                ->where(fn ($active) => $active
+                    ->whereNull('effective_to')
+                    ->orWhere('effective_to', '>', now())))
+            ->whereHas('delegateMembership', fn ($membership) => $membership
+                ->where('effective_from', '<=', now())
+                ->where(fn ($active) => $active
+                    ->whereNull('effective_to')
+                    ->orWhere('effective_to', '>', now())))
+            ->first();
+
+        if ($activeDelegation !== null) {
+            return (int) $activeDelegation->delegate_user_id === (int) $this->id;
+        }
+
+        return $this->isPrincipalManagerOfOffice($officeId);
+    }
+
+    public function isPrincipalManagerOfOffice(int $officeId): bool
+    {
         $hasDesignationHistory = OfficeManagerAssignment::query()
             ->where('office_id', $officeId)
             ->exists();
@@ -152,6 +205,13 @@ class User extends Authenticatable
             ->where('office_id', $officeId)
             ->where('membership_role', OfficeMembershipRole::Manager->value)
             ->exists();
+    }
+
+    /** Titular y delegado conservan lectura; solo isCurrentManagerOfOffice puede actuar. */
+    public function hasCurrentOfficeLeadershipVisibility(int $officeId): bool
+    {
+        return $this->isPrincipalManagerOfOffice($officeId)
+            || $this->currentOfficeManagerDelegations()->where('office_id', $officeId)->exists();
     }
 
     public function hasCurrentOfficeCapability(OfficeCapabilityCode $capability, bool $requiresManager = false): bool

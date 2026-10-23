@@ -3,7 +3,7 @@
  * Vista operativa completa del expediente. Presenta exclusivamente las acciones
  * autorizadas por las Policies que el API devuelve junto con el expediente.
  */
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import RichTextEditor from './RichTextEditor.vue';
 import SearchableMultiSelect from './SearchableMultiSelect.vue';
 import SearchableSelect from './SearchableSelect.vue';
@@ -41,6 +41,10 @@ const editDocumentForm = reactive({ title: '', content: '', office_reference: ''
 const lifecycleReason = ref('');
 const reopeningReason = ref('');
 const decisionNote = ref('');
+const assignmentRequestJustification = ref('');
+const assignmentDecisionNotes = reactive({});
+const transferUserId = ref('');
+const transferNote = ref('');
 const accessForm = reactive({ target: 'office', office_id: '', user_id: '', effective_from: '', effective_to: '', reason: '' });
 
 const tabs = [
@@ -52,6 +56,7 @@ const tabs = [
 ];
 
 const selected = computed(() => documents.selected);
+const attention = computed(() => documents.attention);
 const isTerminal = computed(() => ['closed', 'voided'].includes(selected.value?.status));
 const isDocumentLocked = computed(() => ['archived', 'closed', 'voided'].includes(selected.value?.status));
 const myOfficeIds = computed(() => (props.session.user?.office_memberships ?? []).map((membership) => Number(membership.office_id)));
@@ -124,6 +129,47 @@ const issuingLegislativeDocument = computed(() => selectedIssuingOffice.value
     && documents.legislativeDirectory.bodies.some((body) => Number(body.office_id) === Number(selectedIssuingOffice.value.id))
     && permissions.value.move === true);
 const officeToneNames = ['jade', 'ocean', 'indigo', 'violet', 'plum', 'ruby', 'terracotta', 'gold', 'olive', 'teal', 'slate', 'cocoa'];
+let attentionSyncTimer = null;
+
+function attentionSignature(value) {
+    return value
+        ? `${value.recipient_id}:${value.state}:${value.responsible?.id ?? 'none'}`
+        : 'none';
+}
+
+async function syncAttention() {
+    if (!selected.value || document.visibilityState === 'hidden' || documents.busy.detail) return;
+
+    const selectedId = selected.value.id;
+    const previousSignature = attentionSignature(attention.value);
+    try {
+        const current = await documents.loadAttention(selectedId);
+        if (Number(selected.value?.id) !== Number(selectedId)) return;
+
+        // Solo se recarga el detalle completo cuando la responsabilidad realmente
+        // cambió. Así se actualizan las Policies sin borrar formularios por un sondeo.
+        if (previousSignature !== attentionSignature(current)) await documents.refreshSelected();
+    } catch {
+        // La sincronización periódica es silenciosa; una acción explícita mostrará
+        // cualquier error de autorización o conectividad con su mensaje normal.
+    }
+}
+
+function syncAttentionWhenVisible() {
+    if (document.visibilityState === 'visible') syncAttention();
+}
+
+onMounted(() => {
+    window.addEventListener('focus', syncAttention);
+    document.addEventListener('visibilitychange', syncAttentionWhenVisible);
+    attentionSyncTimer = window.setInterval(syncAttention, 30000);
+});
+
+onBeforeUnmount(() => {
+    window.removeEventListener('focus', syncAttention);
+    document.removeEventListener('visibilitychange', syncAttentionWhenVisible);
+    if (attentionSyncTimer) window.clearInterval(attentionSyncTimer);
+});
 
 watch(selected, () => {
     activeTab.value = 'summary';
@@ -134,6 +180,10 @@ watch(selected, () => {
     error.value = null;
     assignmentRecipientId.value = null;
     issueRouteDocumentId.value = null;
+    assignmentRequestJustification.value = '';
+    transferUserId.value = '';
+    transferNote.value = '';
+    Object.keys(assignmentDecisionNotes).forEach((requestId) => delete assignmentDecisionNotes[requestId]);
 }, { flush: 'post' });
 
 watch([documentOffices, () => documents.catalogs.documentTypes.length], () => {
@@ -307,6 +357,62 @@ async function updateRecipient(recipient, status) {
     const note = window.prompt('Añada una nota para esta actuación (opcional):') ?? '';
     try {
         await documents.updateRecipientStatus(recipient.id, { status, action_note: note || null });
+    } catch (exception) {
+        error.value = exception.message;
+    }
+}
+
+async function claimAttention() {
+    if (!attention.value?.recipient_id) return;
+
+    try {
+        await documents.claimAttention(attention.value.recipient_id);
+    } catch (exception) {
+        error.value = exception.message;
+    }
+}
+
+async function requestAttentionAssignment() {
+    if (!attention.value?.recipient_id) return;
+
+    try {
+        await documents.requestAttentionAssignment(
+            attention.value.recipient_id,
+            assignmentRequestJustification.value.trim() || null,
+        );
+        assignmentRequestJustification.value = '';
+    } catch (exception) {
+        error.value = exception.message;
+    }
+}
+
+async function decideAttentionAssignment(request, decision) {
+    if (!attention.value?.recipient_id) return;
+
+    try {
+        await documents.decideAttentionAssignment(
+            attention.value.recipient_id,
+            request.id,
+            decision,
+            assignmentDecisionNotes[request.id]?.trim() || null,
+        );
+        delete assignmentDecisionNotes[request.id];
+    } catch (exception) {
+        error.value = exception.message;
+    }
+}
+
+async function transferAttention() {
+    if (!attention.value?.recipient_id || !transferUserId.value) return;
+
+    try {
+        await documents.transferAttention(
+            attention.value.recipient_id,
+            transferUserId.value,
+            transferNote.value.trim() || null,
+        );
+        transferUserId.value = '';
+        transferNote.value = '';
     } catch (exception) {
         error.value = exception.message;
     }
@@ -520,6 +626,67 @@ async function referToPlenary() {
                     <article class="summary-card"><span>Confidencialidad</span><strong>{{ selected.confidentiality_level?.name || 'Interno' }}</strong><small>{{ selected.confidentiality_level?.requires_explicit_access ? 'Acceso restringido' : 'Acceso institucional' }}</small></article>
                     <article class="summary-card"><span>Registrado por</span><strong>{{ selected.created_by?.name || '—' }}</strong><small>{{ formatDate(selected.created_at, true) }}</small></article>
                 </div>
+                <article v-if="attention" class="attention-panel" :class="`attention-panel--${attention.state}`">
+                    <header class="attention-panel__header">
+                        <div>
+                            <p class="eyebrow">Atención en {{ officeLabel(attention.office) }}</p>
+                            <h3>Control operativo</h3>
+                        </div>
+                        <span v-if="attention.state === 'informational_or_completed'" class="badge badge--recipient-completed">Solo consulta</span>
+                        <span v-else-if="attention.is_responsible" class="badge badge--recipient-in_process">A su cargo</span>
+                        <span v-else-if="attention.responsible" class="badge badge--recipient-received">Asignado</span>
+                        <span v-else class="badge badge--recipient-received">Sin responsable</span>
+                    </header>
+
+                    <p v-if="attention.state === 'informational_or_completed'" class="attention-panel__explanation">
+                        {{ attention.requires_response ? 'La participación de esta oficina ya finalizó.' : 'La derivación fue enviada para conocimiento y no exige respuesta.' }}
+                    </p>
+
+                    <template v-else-if="attention.state === 'unassigned'">
+                        <p class="attention-panel__explanation">Abrir el expediente no lo asigna automáticamente. Quien vaya a tramitarlo debe tomar el control de forma expresa.</p>
+                        <button v-if="attention.can_claim" class="button button--primary" type="button" :disabled="documents.busy[`attention-claim-${attention.recipient_id}`]" @click="claimAttention">
+                            {{ documents.busy[`attention-claim-${attention.recipient_id}`] ? 'Asignando…' : 'Tomar control' }}
+                        </button>
+                        <p v-else class="form-note">Puede consultar el expediente, pero su perfil actual no está habilitado para asumir esta atención.</p>
+                    </template>
+
+                    <template v-else>
+                        <div class="attention-responsible">
+                            <span>Responsable actual</span>
+                            <strong>{{ attention.responsible?.name }}</strong>
+                            <small>Desde {{ formatDate(attention.responsible?.assigned_at, true) }}</small>
+                        </div>
+
+                        <form v-if="attention.can_request_assignment" class="attention-action-form" @submit.prevent="requestAttentionAssignment">
+                            <label class="field field--full"><span>Justificación breve <small>Opcional</small></span><textarea v-model.trim="assignmentRequestJustification" rows="2" maxlength="1000" placeholder="Indique por qué necesita asumir la atención, si corresponde"></textarea></label>
+                            <button class="button button--secondary" type="submit" :disabled="documents.busy[`attention-request-${attention.recipient_id}`]">Solicitar asignación</button>
+                        </form>
+                        <div v-else-if="attention.has_pending_request && !attention.is_responsible" class="entry-mode-notice">
+                            <p><strong>Solicitud pendiente.</strong> La persona responsable actual puede aceptarla o rechazarla. Mientras tanto, usted conserva acceso de consulta.</p>
+                        </div>
+
+                        <form v-if="attention.can_transfer" class="attention-action-form" @submit.prevent="transferAttention">
+                            <div class="attention-action-form__heading"><strong>Transferir control</strong><small>La otra persona asumirá inmediatamente la responsabilidad exclusiva.</small></div>
+                            <label class="field"><span>Nueva persona responsable</span><SearchableSelect v-model="transferUserId" :options="attention.eligible_transfer_users.map((user) => ({ value: user.id, label: `${user.name} · ${user.position_title}` }))" placeholder="Seleccione una persona" /></label>
+                            <label class="field"><span>Nota <small>Opcional</small></span><input v-model.trim="transferNote" maxlength="1000" placeholder="Motivo o contexto de la transferencia"></label>
+                            <button class="button button--secondary" type="submit" :disabled="!transferUserId || documents.busy[`attention-transfer-${attention.recipient_id}`]">Transferir control</button>
+                        </form>
+
+                        <div v-if="attention.is_responsible && attention.pending_requests.length" class="attention-request-list">
+                            <div class="attention-action-form__heading"><strong>Solicitudes de asignación</strong><small>Al aceptar una, las demás se cancelarán automáticamente.</small></div>
+                            <article v-for="request in attention.pending_requests" :key="request.id" class="attention-request-row">
+                                <div><strong>{{ request.requested_by.name }}</strong><p>{{ request.justification || 'Sin justificación registrada.' }}</p><small>Solicitada {{ formatDate(request.requested_at, true) }}</small></div>
+                                <div class="attention-request-row__actions">
+                                    <input v-model.trim="assignmentDecisionNotes[request.id]" maxlength="1000" placeholder="Nota de decisión (opcional)">
+                                    <div class="inline-actions">
+                                        <button class="button button--primary" type="button" :disabled="documents.busy[`attention-decision-${request.id}`]" @click="decideAttentionAssignment(request, 'accept')">Aceptar</button>
+                                        <button class="button button--ghost" type="button" :disabled="documents.busy[`attention-decision-${request.id}`]" @click="decideAttentionAssignment(request, 'reject')">Rechazar</button>
+                                    </div>
+                                </div>
+                            </article>
+                        </div>
+                    </template>
+                </article>
                 <article class="narrative-card"><span>Nota</span><p>{{ selected.summary || 'Sin nota registrada.' }}</p></article>
                 <div v-if="permissions.refer_to_plenary" class="entry-mode-notice"><div><strong>Tratamiento por el Pleno</strong><p>Secretaría General conserva la custodia. Los asambleístas vigentes podrán consultar el expediente completo en la lista de espera.</p></div><button class="button button--primary" :disabled="documents.busy['plenary-referral-save']" type="button" @click="referToPlenary">Derivar al Pleno</button></div>
             </section>

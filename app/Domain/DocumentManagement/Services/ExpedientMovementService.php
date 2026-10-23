@@ -6,6 +6,7 @@ use App\Domain\Audit\DTOs\RequestAuditContext;
 use App\Domain\Audit\Services\ActivityLogger;
 use App\Domain\DocumentManagement\DTOs\CreateExpedientMovementData;
 use App\Domain\DocumentManagement\DTOs\UpdateMovementRecipientStatusData;
+use App\Domain\DocumentManagement\Enums\AssignmentRequestStatus;
 use App\Domain\DocumentManagement\Enums\ExpedientStatus;
 use App\Domain\DocumentManagement\Enums\InstitutionalWorkflow;
 use App\Domain\DocumentManagement\Enums\MovementRecipientKind;
@@ -18,6 +19,7 @@ use App\Models\ExpedientMovementRecipient;
 use App\Models\LegislatureMember;
 use App\Models\Office;
 use App\Models\User;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -52,19 +54,27 @@ class ExpedientMovementService
             $senderOffice = Office::query()->active()->supportingStaffing()->lockForUpdate()->findOrFail($data->senderOfficeId);
 
             $isLegislativeSender = $this->legislativeAuthorization->isLegislativeOffice($senderOffice->id);
-            $hasOfficeMembership = $actor->currentOfficeMemberships()->where('office_id', $senderOffice->id)->exists();
-            $canActLegislatively = $this->legislativeAuthorization->canActForOffice(
+            $canOperateThroughOffice = $this->officeDocumentAccess->canOperateOffice(
                 $actor,
+                $target,
+                (int) $senderOffice->id,
+            );
+            $canActLegislatively = $this->legislativeAuthorization->canActForOfficeInExpedient(
+                $actor,
+                $target,
                 $senderOffice->id,
+                $context->actingLegislatureMemberId,
                 $context->actingBodyMembershipId,
             );
             $canActAsIndividual = $this->canActAsIndividualHolder($actor, $target, $senderOffice, $context);
-            if (($isLegislativeSender && ! $canActLegislatively && ! $canActAsIndividual)
-                || (! $isLegislativeSender && ! $hasOfficeMembership)) {
+            $authorizedByInstitutionalWorkflow = $institutionalWorkflow === InstitutionalWorkflow::WarehouseMaterialRequest;
+            if (! $authorizedByInstitutionalWorkflow
+                && (($isLegislativeSender && ! $canActLegislatively && ! $canActAsIndividual && ! $canOperateThroughOffice)
+                    || (! $isLegislativeSender && ! $canOperateThroughOffice))) {
                 throw ValidationException::withMessages([
                     'sender_office_id' => $isLegislativeSender
-                        ? 'Solo la autoridad vigente del órgano, o su reemplazo temporal, puede derivar en su representación.'
-                        : 'El usuario debe pertenecer a la oficina remitente.',
+                        ? 'Solo la autoridad vigente o el equipo autorizado desde Acceso de mi oficina puede derivar en representación del órgano.'
+                        : 'La configuración de acceso de la oficina no autoriza al usuario a derivar este expediente.',
                 ]);
             }
 
@@ -94,6 +104,22 @@ class ExpedientMovementService
 
             $this->assertLegislativeChannel($senderOffice, $recipientIds, $institutionalWorkflow);
             $this->assertAttentionRecipients($target, $senderOffice, $data);
+
+            // La salida concluye la responsabilidad interna de la oficina remitente.
+            // El siguiente destino comenzará siempre sin responsable hasta que una
+            // persona tome el control o la jefatura realice una asignación expresa.
+            $previousMovementId = $target->movements()->latest('sent_at')->latest('id')->value('id');
+            if ($previousMovementId !== null) {
+                $previousRecipient = ExpedientMovementRecipient::query()
+                    ->where('expedient_movement_id', $previousMovementId)
+                    ->where('recipient_office_id', $senderOffice->id)
+                    ->where('recipient_kind', MovementRecipientKind::Primary->value)
+                    ->lockForUpdate()
+                    ->first();
+                if ($previousRecipient !== null) {
+                    $this->closeRecipientAttention($previousRecipient, $actor, now());
+                }
+            }
 
             $movement = ExpedientMovement::query()->create([
                 'expedient_id' => $target->id,
@@ -170,16 +196,21 @@ class ExpedientMovementService
                 ->lockForUpdate()
                 ->findOrFail($recipient->id);
 
-            $hasOfficeMembership = $actor->currentOfficeMemberships()->where('office_id', $target->recipient_office_id)->exists();
+            $canOperateThroughOffice = $this->officeDocumentAccess->canOperateOffice(
+                $actor,
+                $targetExpedient,
+                (int) $target->recipient_office_id,
+            );
             $canActLegislatively = $this->legislativeAuthorization->canActOnRecipient(
                 $actor,
                 $target,
                 $context->actingLegislatureMemberId,
                 $context->actingBodyMembershipId,
             );
-            if (! $hasOfficeMembership && ! $canActLegislatively) {
+            $authorizedByInstitutionalWorkflow = $institutionalWorkflow === InstitutionalWorkflow::WarehouseMaterialRequest;
+            if (! $authorizedByInstitutionalWorkflow && ! $canOperateThroughOffice && ! $canActLegislatively) {
                 throw ValidationException::withMessages([
-                    'recipient' => 'El usuario no pertenece al equipo administrativo ni representa al destinatario legislativo.',
+                    'recipient' => 'El usuario no integra el equipo operativo autorizado ni representa al destinatario legislativo.',
                 ]);
             }
 
@@ -229,9 +260,10 @@ class ExpedientMovementService
             ], true) && $institutionalWorkflow !== InstitutionalWorkflow::WarehouseMaterialRequest
                 && ($target->attention_legislature_member_id !== null
                 || $this->legislativeAuthorization->isLegislativeOffice($target->recipient_office_id))
-                && ! $canActLegislatively) {
+                && ! $canActLegislatively
+                && ! $canOperateThroughOffice) {
                 throw ValidationException::withMessages([
-                    'status' => 'El personal administrativo puede recibir y preparar; la finalización corresponde a la autoridad legislativa vigente.',
+                    'status' => 'La finalización corresponde a la autoridad legislativa o al equipo operativo autorizado.',
                 ]);
             }
 
@@ -257,6 +289,13 @@ class ExpedientMovementService
             }
 
             $target->update($attributes);
+
+            // Devolver no deja una custodia implícita en la oficina remitente.
+            // Genera una nueva llegada auditable para que aparezca en Nuevos y la
+            // oficina de origen también deba tomar el control expresamente.
+            if ($data->status === MovementRecipientStatus::Returned && $institutionalWorkflow === null) {
+                $this->createReturnMovement($targetExpedient, $target, $data, $actor, $context);
+            }
 
             $this->activityLogger->record(
                 event: 'document_management.expedient_movement_recipient.updated',
@@ -413,6 +452,64 @@ class ExpedientMovementService
             ->latest('sent_at')
             ->latest('id')
             ->value('instruction');
+    }
+
+    private function createReturnMovement(
+        Expedient $expedient,
+        ExpedientMovementRecipient $returnedRecipient,
+        UpdateMovementRecipientStatusData $data,
+        User $actor,
+        RequestAuditContext $context,
+    ): ExpedientMovement {
+        $returnedRecipient->loadMissing('movement');
+        $returnedAt = now();
+        $this->closeRecipientAttention($returnedRecipient, $actor, $returnedAt);
+
+        $movement = ExpedientMovement::query()->create([
+            'expedient_id' => $expedient->id,
+            'sender_office_id' => $returnedRecipient->recipient_office_id,
+            'instruction' => $data->actionNote,
+            'priority' => $expedient->priority,
+            'due_on' => $expedient->due_on,
+            'requires_response' => true,
+            'sent_by' => $actor->id,
+            'sent_at' => $returnedAt,
+        ]);
+        $movement->recipients()->create([
+            'recipient_office_id' => $returnedRecipient->movement->sender_office_id,
+            'recipient_kind' => MovementRecipientKind::Primary,
+            'status' => MovementRecipientStatus::Pending,
+        ]);
+        $movement->documents()->syncWithoutDetaching(
+            $returnedRecipient->movement->documents()->pluck('documents.id')->all(),
+        );
+
+        $this->activityLogger->record(
+            event: 'document_management.expedient_movement.return_created',
+            actor: $actor,
+            subject: $movement,
+            context: $context,
+            newValues: $this->movementSnapshot($movement->load(['senderOffice', 'recipients.recipientOffice'])),
+        );
+
+        return $movement;
+    }
+
+    /** Cierra control y solicitudes cuando una atención deja de estar operativa. */
+    private function closeRecipientAttention(ExpedientMovementRecipient $recipient, User $actor, Carbon $at): void
+    {
+        $recipient->currentInternalAssignments()
+            ->lockForUpdate()
+            ->get()
+            ->each->update(['effective_to' => $at]);
+        $recipient->pendingAssignmentRequests()
+            ->update([
+                'status' => AssignmentRequestStatus::Cancelled->value,
+                'decided_by' => $actor->id,
+                'decision_note' => 'Cancelada automáticamente al concluir la atención de la oficina.',
+                'decided_at' => $at,
+                'updated_at' => $at,
+            ]);
     }
 
     /** Calcula el estado agregado exclusivamente desde los destinatarios del último movimiento. */

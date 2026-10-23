@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\DocumentManagement;
 
 use App\Domain\Audit\DTOs\RequestAuditContext;
 use App\Domain\DocumentManagement\Services\ExpedientInternalAssignmentService;
+use App\Domain\DocumentManagement\Services\OfficeDocumentAccessService;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\DocumentManagement\UpdateExpedientInternalAssignmentsRequest;
 use App\Models\Expedient;
@@ -14,17 +15,17 @@ use Illuminate\Http\Request;
 /** Permite a la jefatura distribuir un ingreso dentro de su oficina. */
 class ExpedientInternalAssignmentController extends Controller
 {
-    public function __construct(private readonly ExpedientInternalAssignmentService $assignmentService) {}
+    public function __construct(
+        private readonly ExpedientInternalAssignmentService $assignmentService,
+        private readonly OfficeDocumentAccessService $officeAccess,
+    ) {}
 
     public function show(Request $request, Expedient $expedient, ExpedientMovementRecipient $recipient): JsonResponse
     {
         $this->authorize('manageInternalAssignments', $expedient);
         $recipient = $this->recipient($expedient, $recipient);
-        abort_unless(
-            $request->user()->isSuperAdministrator()
-                || $request->user()->isCurrentManagerOfOffice($recipient->recipient_office_id),
-            403,
-        );
+        abort_unless($this->officeAccess->manageableInternalAssignmentOfficeIds($request->user(), $expedient)
+            ->contains((int) $recipient->recipient_office_id), 403);
 
         return response()->json(['data' => $this->payload($recipient)]);
     }

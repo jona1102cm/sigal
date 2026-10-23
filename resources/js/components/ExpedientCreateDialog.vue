@@ -18,6 +18,7 @@ const session = useSessionStore();
 const error = ref(null);
 const catalogError = ref(null);
 const exceptionalEntry = ref(false);
+const deadlineEnabled = ref(false);
 const queuedFiles = ref([]);
 
 function currentInstitutionalDate() {
@@ -120,6 +121,7 @@ watch(() => props.open, async (open) => {
         error.value = null;
         catalogError.value = null;
         exceptionalEntry.value = false;
+        deadlineEnabled.value = false;
         queuedFiles.value = [];
         const institutionalDate = currentInstitutionalDate();
         Object.assign(form, {
@@ -165,6 +167,11 @@ watch(() => form.origin, (origin) => {
 
 watch(canRegisterExternalDocuments, (allowed) => {
     if (!allowed && form.origin === 'external') form.origin = 'internal';
+});
+
+watch(deadlineEnabled, (enabled) => {
+    // Desactivar el plazo también elimina cualquier fecha elegida previamente.
+    if (!enabled) form.due_on = '';
 });
 
 watch(selectedResponsibleOfficeId, (officeId) => {
@@ -347,7 +354,10 @@ async function submit() {
                 <div v-else class="field field--static form-grid__full"><span>Oficina que registra y queda responsable</span><strong>{{ currentOfficeDisplay ? `${currentOfficeDisplay.code} · ${currentOfficeDisplay.name}` : 'No tiene una oficina vigente asignada' }}</strong><small v-if="!currentOfficeDisplay">Recursos Humanos debe registrar o corregir el contrato, cargo y oficina de su kardex.</small></div>
                 <div v-if="form.origin === 'internal' && currentOfficeDisplay" class="entry-mode-notice form-grid__full"><p><strong>Registro interno:</strong> SIGAL dejará constancia de {{ currentOfficeDisplay.name }} como oficina remitente y de {{ session.user?.name }} como usuario que realizó el registro.</p></div>
 
-                <label class="field"><span>Fecha límite</span><input v-model="form.due_on" type="date" :min="form.received_on || undefined"></label>
+                <div class="optional-deadline">
+                    <label class="check-option"><input v-model="deadlineEnabled" type="checkbox"><span><strong>Definir fecha límite</strong><small>Opcional. Actívela únicamente cuando la documentación tenga un plazo concreto.</small></span></label>
+                    <label v-if="deadlineEnabled" class="field"><span>Fecha límite</span><input v-model="form.due_on" type="date" :min="form.received_on || undefined" required></label>
+                </div>
 
                 <div class="entry-mode-notice form-grid__full">
                     <label v-if="exceptionalEntry" class="check-option"><input v-model="form.derive_after_registration" type="checkbox"><span><strong>Derivar al registrar</strong><small>El expediente excepcional se abrirá y enviará directamente a la oficina seleccionada.</small></span></label>

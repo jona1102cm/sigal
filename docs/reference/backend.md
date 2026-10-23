@@ -66,6 +66,8 @@ Servicios principales:
 | `OfficeService` | Árbol organizacional y membresías. |
 | `OfficeHierarchyService` | Expansión consistente de oficinas raíz y todas sus dependencias. |
 | `HumanResourcesService` | Kardex, contrato, cuenta, cargo, membresía y archivos. |
+| `OfficeManagerAssignmentService` | Proyecta el cargo contractual responsable y cierra su historial con la membresía. |
+| `OfficeManagerDelegationService` | Crea y finaliza suplencias administrativas temporales auditables. |
 | `EmployeeImportWorkbookReader` | Lectura segura de la estructura XLSX. |
 | `EmployeeBulkImportService` | Validación/importación masiva con reglas del alta manual. |
 | `ExpedientService` | Creación base del expediente. |
@@ -75,7 +77,7 @@ Servicios principales:
 | `ExpedientMovementService` | Tenencia, destinatarios y estados por oficina. |
 | `ExpedientLifecycleService` | Archivo, cierre, anulación y reapertura. |
 | `ExpedientAccessService` | Concesiones extraordinarias y su cierre. |
-| `OfficeDocumentAccessService` | Modalidad persistente y equipo operativo autorizado por la jefatura. |
+| `OfficeDocumentAccessService` | Modalidad persistente, equipo operativo y alcance de operación de cada oficina. |
 | `ExpedientInternalAssignmentService` | Responsable único y colaboradores históricos de cada llegada. |
 | `NumberSequenceService` | Reserva concurrente de numeración. |
 | `OperationalResetService` | Limpieza controlada de datos de prueba. |

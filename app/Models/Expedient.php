@@ -119,6 +119,15 @@ class Expedient extends Model
         return $this->hasMany(ExpedientMovement::class);
     }
 
+    /** Última derivación autoritativa para bandejas, lectura y control operativo. */
+    public function latestMovement(): HasOne
+    {
+        return $this->hasOne(ExpedientMovement::class)->ofMany([
+            'sent_at' => 'max',
+            'id' => 'max',
+        ]);
+    }
+
     /** @return HasMany<ExpedientReopeningRequest, $this> */
     public function reopeningRequests(): HasMany
     {
@@ -253,8 +262,8 @@ class Expedient extends Model
             }
 
             if ($legislativeAdministrativeOfficeIds->isNotEmpty()) {
-                // El personal administrativo de bancada o comisión tramita y prepara
-                // borradores, incluso cuando la atención política es individual.
+                // El personal administrativo de bancada o comisión puede consultar
+                // toda llegada. Operar sigue dependiendo de Acceso de mi oficina.
                 $visible->orWhereHas('movements.recipients', fn (Builder $recipient) => $recipient
                     ->whereIn('recipient_office_id', $legislativeAdministrativeOfficeIds));
             }

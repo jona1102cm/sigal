@@ -16,7 +16,6 @@ export const useHumanResourcesStore = defineStore('humanResources', {
         pagination: null,
         selected: null,
         positionsByOffice: {},
-        officeManagers: [],
         loading: false,
         busy: {},
         error: null,
@@ -192,34 +191,6 @@ export const useHumanResourcesStore = defineStore('humanResources', {
                 await request(`/human-resources/contracts/${contractId}/finish`, { method: 'POST' });
                 if (this.selected) await this.selectEmployee(this.selected.id);
                 await this.loadEmployees({ page: this.pagination?.current_page ?? 1 });
-            });
-        },
-
-        async loadOfficeManagers() {
-            return this.run('office-managers', async () => {
-                const payload = await request('/human-resources/office-manager-assignments');
-                this.officeManagers = list(payload);
-                return this.officeManagers;
-            });
-        },
-
-        async designateOfficeManager(officeId, data) {
-            return this.run(`office-manager-${officeId}`, async () => {
-                await request(`/human-resources/offices/${officeId}/manager-assignments`, {
-                    method: 'POST',
-                    body: data,
-                });
-                await this.loadOfficeManagers();
-            });
-        },
-
-        async endOfficeManager(officeId, assignmentId, data) {
-            return this.run(`office-manager-end-${assignmentId}`, async () => {
-                await request(`/human-resources/offices/${officeId}/manager-assignments/${assignmentId}/end`, {
-                    method: 'POST',
-                    body: data,
-                });
-                await this.loadOfficeManagers();
             });
         },
 

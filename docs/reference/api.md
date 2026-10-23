@@ -53,9 +53,6 @@ Las respuestas de colección usan `data`, `links` y `meta` de paginación. Los e
 | POST | `/human-resources/employees/{employee}/profile-photo` | Agrega/reemplaza foto conservando historial. |
 | POST | `/human-resources/employees/{employee}/attachments` | Agrega respaldo documental. |
 | GET | `/human-resources/offices/{office}/positions` | Lista cargos de la oficina. |
-| GET | `/human-resources/office-manager-assignments` | Oficinas, candidatos, responsable vigente e historial. |
-| POST | `/human-resources/offices/{office}/manager-assignments` | Designa o reemplaza responsable con vigencia auditable. |
-| POST | `/human-resources/offices/{office}/manager-assignments/{assignment}/end` | Finaliza expresamente una designación. |
 | POST | `/human-resources/positions` | Crea cargo. |
 | PATCH | `/human-resources/positions/{officePosition}` | Corrige cargo. |
 | POST | `/human-resources/contracts/{contract}/extend` | Extiende fecha final. |
@@ -74,6 +71,9 @@ Las respuestas de colección usan `data`, `links` y `meta` de paginación. Los e
 | GET/POST | `/offices/{office}/memberships` | Lista o asigna membresía. |
 | POST | `/offices/{office}/memberships/{membership}/close` | Cierra membresía. |
 | GET/PUT | `/document-management/offices/{office}/access-setting` | Consulta o configura modalidad y equipo documental de la oficina. |
+| POST | `/document-management/offices/{office}/manager-delegations` | Registra una suplencia administrativa temporal. |
+| POST | `/document-management/offices/{office}/manager-delegations/{delegation}/end` | Finaliza o cancela la suplencia administrativa. |
+| POST | `/document-management/offices/{office}/legislative-delegations` | Registra la delegación temporal de Jefe/Presidente a Subjefe/Vicepresidente. |
 
 ## Catálogos documentales
 
@@ -86,11 +86,17 @@ Las respuestas de colección usan `data`, `links` y `meta` de paginación. Los e
 
 | Método | Ruta | Uso |
 |---|---|---|
-| GET | `/expedients` | Bandeja filtrada por alcance y estado. |
+| GET | `/expedients` | Bandeja por `scope=new|pending|finalized`; incluye `inbox.new_count`. |
 | POST | `/expedient-entries` | Alta normal con documento inicial y derivación. |
 | POST | `/expedients` | Alta excepcional sin documento. |
 | GET | `/expedients/{expedient}` | Detalle autorizado. |
 | GET/POST | `/expedients/{expedient}/movements` | Historial o nueva derivación. |
+| GET | `/expedients/{expedient}/attention` | Estado de lectura/control de la llegada vigente para el usuario. |
+| POST | `/expedients/{expedient}/read` | Registra la primera apertura individual sin asignar control. |
+| POST | `/expedients/{expedient}/movement-recipients/{recipient}/claim` | Toma voluntariamente una atención libre. |
+| POST | `/expedients/{expedient}/movement-recipients/{recipient}/assignment-requests` | Solicita el control; `justification` es opcional. |
+| POST | `/expedients/{expedient}/movement-recipients/{recipient}/assignment-requests/{assignmentRequest}/decision` | Acepta/rechaza; `decision_note` es opcional. |
+| POST | `/expedients/{expedient}/movement-recipients/{recipient}/transfer` | Transfiere directamente el responsable único; `note` es opcional. |
 | POST | `/expedients/{expedient}/movement-recipients/{recipient}/status` | Acción de una oficina destinataria. |
 | GET/PUT | `/expedients/{expedient}/movement-recipients/{recipient}/internal-assignments` | Consulta o reemplaza responsable único y colaboradores de una llegada. |
 | GET/POST | `/expedients/{expedient}/access-grants` | Lista o concede acceso extraordinario. |

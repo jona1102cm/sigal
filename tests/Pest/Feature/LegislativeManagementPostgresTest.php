@@ -203,6 +203,11 @@ test('general and personal caucus correspondence enforce the approved readership
     $this->getJson("/api/expedients/{$generalId}")->assertForbidden();
 
     Sanctum::actingAs($chiefUser);
+    $generalRecipientId = Expedient::query()->findOrFail($generalId)
+        ->movements()->latest('id')->firstOrFail()->recipients()->value('id');
+    $this->withHeader('X-SIGAL-Acting-Body-Membership', (string) $chiefPosition->id)
+        ->postJson("/api/expedients/{$generalId}/movement-recipients/{$generalRecipientId}/claim")
+        ->assertOk();
     $this->withHeader('X-SIGAL-Acting-Body-Membership', (string) $chiefPosition->id)
         ->postJson("/api/expedients/{$generalId}/movements", [
             'sender_office_id' => $this->caucusOffice->id,
@@ -255,7 +260,16 @@ test('an active plenary referral exposes the complete confidential expedient wit
 
 test('commission staff prepares a draft while the delegated authority alone emits and derives it', function () {
     $secretariatUser = legislativeUser(RoleCode::SimpleUser, $this->secretariat);
-    $advisor = legislativeUser(RoleCode::SimpleUser, $this->commissionOffice);
+    $advisor = legislativeUser();
+    $contractualManager = legislativeUser(RoleCode::SimpleUser, $this->commissionOffice);
+    OfficeMembership::query()->create([
+        'office_id' => $this->commissionOffice->id,
+        'user_id' => $advisor->id,
+        'membership_role' => OfficeMembershipRole::Official,
+        'position_title' => 'Asesor de comisión',
+        'effective_from' => now()->subMinute(),
+        'assigned_by' => $this->administrator->id,
+    ]);
     $presidentUser = legislativeUser();
     $vicePresidentUser = legislativeUser();
     $president = legislativeMember($this->legislature, $presidentUser, $this->administrator);
@@ -264,6 +278,12 @@ test('commission staff prepares a draft while the delegated authority alone emit
     $presidentPosition = legislativeBodyMember($body, $president, 'president', $this->administrator);
     $vicePresidentPosition = legislativeBodyMember($body, $vicePresident, 'vice_president', $this->administrator);
     $documentType = DocumentType::query()->where('code', 'LETTER')->firstOrFail();
+
+    Sanctum::actingAs($this->administrator);
+    $this->putJson("/api/document-management/offices/{$this->commissionOffice->id}/access-setting", [
+        'mode' => 'authorized_team',
+        'authorized_user_ids' => [$advisor->id],
+    ])->assertOk();
 
     Sanctum::actingAs($secretariatUser);
     $expedientId = $this->postJson('/api/expedients', [
@@ -276,11 +296,15 @@ test('commission staff prepares a draft while the delegated authority alone emit
 
     Sanctum::actingAs($advisor);
     $expedient = Expedient::query()->findOrFail($expedientId);
+    $recipientId = $expedient->movements()->latest('id')->firstOrFail()->recipients()->value('id');
     expect($advisor->can('view', $expedient))->toBeTrue()
         ->and($advisor->hasPermission(PermissionCode::ExpedientsProcess))->toBeTrue()
         ->and($expedient->currentHolderOfficeIds()->all())->toContain($this->commissionOffice->id)
         ->and(app(LegislativeAuthorizationService::class)->isLegislativeOffice($this->commissionOffice->id))->toBeTrue()
-        ->and($advisor->can('manageDocuments', $expedient))->toBeTrue();
+        ->and($advisor->can('manageDocuments', $expedient))->toBeFalse();
+    $this->postJson("/api/expedients/{$expedientId}/movement-recipients/{$recipientId}/claim")
+        ->assertOk();
+    expect($advisor->can('manageDocuments', $expedient->fresh()))->toBeTrue();
     $draftId = $this->postJson("/api/expedients/{$expedientId}/documents", [
         'document_type_id' => $documentType->id,
         'issuing_office_id' => $this->commissionOffice->id,
@@ -289,19 +313,55 @@ test('commission staff prepares a draft while the delegated authority alone emit
         'content' => 'Contenido preparado por el asesor para revisión de la Directiva.',
     ])->assertCreated()->assertJsonPath('data.status', 'draft')->json('data.id');
     expect(Document::query()->findOrFail($draftId)->movements()->count())->toBe(0);
-    $this->postJson("/api/expedients/{$expedientId}/documents/{$draftId}/issue")
-        ->assertUnprocessable();
+
+    $this->postJson("/api/expedients/{$expedientId}/movement-recipients/{$recipientId}/transfer", [
+        'new_responsible_user_id' => $presidentUser->id,
+    ])->assertOk()->assertJsonPath('data.responsible.id', $presidentUser->id);
 
     Sanctum::actingAs($this->administrator);
-    $this->postJson("/api/legislatures/{$this->legislature->id}/legislative-bodies/{$body->id}/delegations", [
-        'principal_membership_id' => $presidentPosition->id,
+    $this->putJson("/api/document-management/offices/{$this->commissionOffice->id}/access-setting", [
+        'mode' => 'manager_assignment',
+        'authorized_user_ids' => [],
+    ])->assertOk();
+
+    Sanctum::actingAs($advisor);
+    $this->getJson("/api/expedients/{$expedientId}")
+        ->assertOk()
+        ->assertJsonPath('data.permissions.manage_documents', false)
+        ->assertJsonPath('data.permissions.move', false);
+    $this->postJson("/api/expedients/{$expedientId}/documents/{$draftId}/issue")
+        ->assertForbidden();
+
+    Sanctum::actingAs($contractualManager);
+    $this->getJson("/api/expedients/{$expedientId}")
+        ->assertOk()
+        ->assertJsonPath('data.permissions.manage_documents', false)
+        ->assertJsonPath('data.permissions.move', false);
+    $this->getJson("/api/document-management/offices/{$this->commissionOffice->id}/access-setting")
+        ->assertForbidden();
+
+    Sanctum::actingAs($presidentUser);
+    $this->postJson("/api/document-management/offices/{$this->commissionOffice->id}/legislative-delegations", [
         'delegate_membership_id' => $vicePresidentPosition->id,
         'effective_from' => now()->subSecond()->toIso8601String(),
         'effective_to' => now()->addHour()->toIso8601String(),
         'reason' => 'Ausencia temporal de la Presidencia de comisión.',
-    ])->assertCreated();
+    ])->assertCreated()
+        ->assertJsonPath('data.leadership.principal.membership_id', $presidentPosition->id)
+        ->assertJsonPath('data.leadership.effective.membership_id', $vicePresidentPosition->id)
+        ->assertJsonPath('data.leadership.effective.kind', 'delegate');
+    $this->postJson("/api/document-management/offices/{$this->commissionOffice->id}/legislative-delegations", [
+        'delegate_membership_id' => $vicePresidentPosition->id,
+        'effective_from' => now()->toIso8601String(),
+        'effective_to' => now()->addMinutes(30)->toIso8601String(),
+        'reason' => 'Intento superpuesto.',
+    ])->assertUnprocessable()->assertJsonValidationErrors('effective_from');
 
-    Sanctum::actingAs($presidentUser);
+    $this->postJson("/api/expedients/{$expedientId}/movement-recipients/{$recipientId}/transfer", [
+        'new_responsible_user_id' => $vicePresidentUser->id,
+        'note' => 'Transferencia a la autoridad delegada vigente.',
+    ])->assertOk()->assertJsonPath('data.responsible.id', $vicePresidentUser->id);
+
     $this->withHeader('X-SIGAL-Acting-Body-Membership', (string) $presidentPosition->id)
         ->postJson("/api/expedients/{$expedientId}/documents/{$draftId}/issue-and-derive", [
             'primary_office_ids' => [$this->secretariat->id],

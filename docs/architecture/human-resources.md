@@ -20,9 +20,9 @@ Funcionario, contrato, cargo, membresía de oficina y rol de sistema son concept
 - Tipo, inicio, oficina y cargo son obligatorios. Fin y monto pueden ser opcionales según el contrato.
 - Un funcionario no puede mantener más de un contrato vigente.
 - Cada cargo pertenece a una oficina; el formulario filtra cargos por la oficina elegida y permite crear uno autorizado cuando falta.
-- El cargo contractual y la responsabilidad operativa son independientes. RR. HH. designa al responsable vigente desde **Responsables de oficinas**, sin renombrar ni alterar su contrato.
-- Cada oficina admite una sola responsabilidad vigente; el reemplazo cierra la anterior en el mismo instante y conserva el historial, motivo y actor.
-- Una designación puede tener fecha final para suplencias. El cierre del contrato o de la membresía termina también la responsabilidad y revoca sus atribuciones.
+- El cargo contractual clasificado como jefatura es la fuente autoritativa del responsable titular. Al registrar manualmente o importar su contrato, SIGAL crea automáticamente la responsabilidad de la oficina; no existe una segunda designación manual.
+- Cada oficina admite un único contrato vigente en un cargo responsable. El cierre o reclasificación del cargo termina también la responsabilidad y conserva el historial, motivo y actor.
+- Una ausencia temporal no cambia el contrato: titular o superadministración registran una delegación con inicio, fin y motivo desde **Gestión documental › Acceso de mi oficina**. Durante la suplencia, el delegado opera y el titular conserva consulta histórica.
 - Registrar un contrato crea o reutiliza la cuenta y abre membresía. Toda cuenta creada por RR. HH., incluso cuando actúa un superadministrador, recibe exclusivamente el rol Usuario simple; los privilegios se asignan después desde Administración.
 - Si no hay correo, SIGAL genera una dirección interna corta y única basada en el CI.
 - Un contrato futuro conserva el acceso inactivo hasta su inicio.
@@ -41,6 +41,7 @@ Superadministración y RR. HH. pueden descargar una plantilla XLSX en español y
 - El lector valida tipo/estructura del libro; el servicio valida encabezados, catálogos, fechas, CI y duplicados.
 - Los errores se reportan por fila para poder corregir el archivo.
 - El alta de cada registro reutiliza el flujo transaccional de RR. HH.; no existe una segunda lógica de contratos para Excel.
+- Si un cargo nuevo se clasifica como jefatura, el funcionario importado queda automáticamente como responsable titular; la importación se rechaza si produciría dos titulares contractuales vigentes en la misma oficina.
 
 ## Operación programada
 
@@ -55,6 +56,7 @@ El scheduler ejecuta diariamente la activación de contratos que comienzan y el 
 - `users`: identidad de acceso reutilizable.
 - `office_memberships`: ubicación histórica.
 - `office_manager_assignments`: historial temporal y auditable de responsables de oficina.
+- `office_manager_delegations`: suplencias administrativas temporales, sin modificar contrato ni titularidad.
 - `user_role_assignments`: permisos históricos.
 
 El alta coordinada registra funcionario, contrato, cuenta, rol y membresía en una transacción. Si una regla falla, no queda una contratación parcial.

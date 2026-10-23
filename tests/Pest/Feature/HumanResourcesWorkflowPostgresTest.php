@@ -6,6 +6,7 @@ use App\Models\Employee;
 use App\Models\EmploymentContract;
 use App\Models\Office;
 use App\Models\OfficeManagerAssignment;
+use App\Models\OfficeManagerDelegation;
 use App\Models\OfficeMembership;
 use App\Models\OfficePosition;
 use App\Models\Role;
@@ -377,7 +378,23 @@ test('a superadministrator can perform the preoperational reset while preserving
         'rejap_certificate' => UploadedFile::fake()->create('reset-rejap.pdf', 20, 'application/pdf'),
     ], ['Accept' => 'application/json'])->assertCreated();
     $employee = Employee::query()->firstOrFail();
+    $employeeUser = $employee->user()->firstOrFail();
     $attachmentPath = $employee->attachments()->firstOrFail()->path;
+    $accessSettingId = DB::table('office_document_access_settings')->insertGetId([
+        'office_id' => $office->id,
+        'mode' => 'authorized_team',
+        'configured_by' => $administrator->id,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    DB::table('office_document_access_authorizations')->insert([
+        'office_document_access_setting_id' => $accessSettingId,
+        'user_id' => $employeeUser->id,
+        'authorized_by' => $administrator->id,
+        'effective_from' => now(),
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
     $legislatureId = DB::table('legislatures')->insertGetId([
         'start_year' => 2026,
         'end_year' => 2027,
@@ -429,7 +446,9 @@ test('a superadministrator can perform the preoperational reset while preserving
         ->and(EmploymentContract::query()->count())->toBe(0)
         ->and(DB::table('legislature_members')->count())->toBe(0)
         ->and(DB::table('legislative_bodies')->count())->toBe(0)
-        ->and(DB::table('legislative_body_memberships')->count())->toBe(0);
+        ->and(DB::table('legislative_body_memberships')->count())->toBe(0)
+        ->and(DB::table('office_document_access_settings')->count())->toBe(0)
+        ->and(DB::table('office_document_access_authorizations')->count())->toBe(0);
     $this->assertDatabaseHas('offices', ['id' => $office->id]);
     $this->assertDatabaseHas('office_positions', ['id' => $position->id]);
     Storage::disk('local')->assertMissing($attachmentPath);
@@ -694,6 +713,10 @@ test('classifying a new manager renames the unused provisional manager position 
         'membership_role' => 'manager',
         'position_title' => 'Jefe de Unidad Administrativa',
     ]);
+    $this->assertDatabaseHas('office_manager_assignments', [
+        'office_id' => $office->id,
+        'source' => 'contract_position',
+    ]);
     $this->assertDatabaseHas('activity_logs', ['event' => 'human_resources.office_position.updated']);
 });
 
@@ -721,7 +744,7 @@ test('an authorized administrator can download the import template and its heade
         ->and($rows[1])->not->toContain('rol');
 });
 
-test('human resources designates and replaces one auditable office manager without changing contractual positions', function () {
+test('a responsible contractual position automatically grants office leadership and supports an auditable temporary delegation', function () {
     $administrator = humanResourcesAdministrator();
     Sanctum::actingAs($administrator);
     $office = Office::query()->create([
@@ -730,63 +753,67 @@ test('human resources designates and replaces one auditable office manager witho
         'supports_staffing' => true,
         'requires_manager' => true,
     ]);
-    $position = OfficePosition::query()->create([
+    $managerPosition = OfficePosition::query()->create([
+        'office_id' => $office->id,
+        'name' => 'Jefe de la oficina',
+        'membership_role' => 'manager',
+        'created_by' => $administrator->id,
+    ]);
+    $officialPosition = OfficePosition::query()->create([
         'office_id' => $office->id,
         'name' => 'Profesional de apoyo',
         'membership_role' => 'official',
         'created_by' => $administrator->id,
     ]);
 
-    $first = $this->postJson('/api/human-resources/employees', humanResourcesPayload($position, [
+    $first = $this->postJson('/api/human-resources/employees', humanResourcesPayload($managerPosition, [
         'identity_card' => '8300001',
         'first_names' => 'Ana María',
         'last_names' => 'Suárez Paz',
     ]))->assertCreated();
-    $second = $this->postJson('/api/human-resources/employees', humanResourcesPayload($position, [
+    $second = $this->postJson('/api/human-resources/employees', humanResourcesPayload($officialPosition, [
         'identity_card' => '8300002',
         'first_names' => 'Luis Alberto',
         'last_names' => 'Rojas Soliz',
     ]))->assertCreated();
     $firstUserId = $first->json('data.account.id');
     $secondUserId = $second->json('data.account.id');
-
-    $initialStart = now()->subHour()->toIso8601String();
-    $this->postJson("/api/human-resources/offices/{$office->id}/manager-assignments", [
-        'user_id' => $firstUserId,
-        'effective_from' => $initialStart,
-        'designation_note' => 'Designación inicial de prueba.',
-    ])->assertCreated()
-        ->assertJsonPath('data.user_id', $firstUserId)
-        ->assertJsonPath('data.state', 'current');
+    User::query()->whereIn('id', [$firstUserId, $secondUserId])->update(['must_change_password' => false]);
 
     expect(User::query()->findOrFail($firstUserId)->isCurrentManagerOfOffice($office->id))->toBeTrue()
-        ->and(OfficeMembership::query()->where('user_id', $firstUserId)->firstOrFail()->membership_role->value)->toBe('official');
+        ->and(OfficeMembership::query()->where('user_id', $firstUserId)->firstOrFail()->membership_role->value)->toBe('manager')
+        ->and(OfficeManagerAssignment::query()->where('user_id', $firstUserId)->where('source', 'contract_position')->exists())->toBeTrue();
 
-    $replacementStart = now()->subMinute()->toIso8601String();
-    $this->postJson("/api/human-resources/offices/{$office->id}/manager-assignments", [
-        'user_id' => $secondUserId,
-        'effective_from' => $replacementStart,
+    $this->postJson("/api/document-management/offices/{$office->id}/manager-delegations", [
+        'delegate_user_id' => $secondUserId,
+        'effective_from' => now()->subMinute()->toIso8601String(),
         'effective_to' => now()->addMonth()->toIso8601String(),
-        'designation_note' => 'Suplencia temporal.',
+        'reason' => 'Suplencia temporal por ausencia de la titular.',
     ])->assertCreated()
-        ->assertJsonPath('data.user_id', $secondUserId)
-        ->assertJsonPath('data.is_temporary', true);
+        ->assertJsonPath('data.leadership.principal.user_id', $firstUserId)
+        ->assertJsonPath('data.leadership.effective.user_id', $secondUserId)
+        ->assertJsonPath('data.leadership.effective.kind', 'delegate');
 
-    expect(OfficeManagerAssignment::query()->where('office_id', $office->id)->count())->toBe(2)
-        ->and(OfficeManagerAssignment::query()->where('user_id', $firstUserId)->firstOrFail()->effective_to)->not->toBeNull()
+    expect(OfficeManagerAssignment::query()->where('office_id', $office->id)->count())->toBe(1)
+        ->and(OfficeManagerDelegation::query()->where('delegate_user_id', $secondUserId)->count())->toBe(1)
         ->and(User::query()->findOrFail($firstUserId)->isCurrentManagerOfOffice($office->id))->toBeFalse()
+        ->and(User::query()->findOrFail($firstUserId)->hasCurrentOfficeLeadershipVisibility($office->id))->toBeTrue()
         ->and(User::query()->findOrFail($secondUserId)->isCurrentManagerOfOffice($office->id))->toBeTrue();
 
-    $this->getJson('/api/human-resources/office-manager-assignments')
+    Sanctum::actingAs(User::query()->findOrFail($firstUserId));
+    $this->getJson("/api/document-management/offices/{$office->id}/access-setting")
         ->assertOk()
-        ->assertJsonFragment([
-            'code' => 'JEF-HIST',
-            'user_id' => $secondUserId,
-            'state_label' => 'Vigente',
-        ]);
-    $this->assertDatabaseHas('activity_logs', ['event' => 'human_resources.office_manager_assignment.designated']);
-    $this->assertDatabaseHas('activity_logs', ['event' => 'human_resources.office_manager_assignment.replaced']);
+        ->assertJsonPath('data.can_update_setting', false);
+    Sanctum::actingAs(User::query()->findOrFail($secondUserId));
+    $this->putJson("/api/document-management/offices/{$office->id}/access-setting", [
+        'mode' => 'authorized_team',
+        'authorized_user_ids' => [$secondUserId],
+    ])->assertOk()->assertJsonPath('data.mode', 'authorized_team');
 
+    $this->assertDatabaseHas('activity_logs', ['event' => 'human_resources.office_manager_assignment.designated']);
+    $this->assertDatabaseHas('activity_logs', ['event' => 'organization.office_manager_delegation.created']);
+
+    Sanctum::actingAs($administrator);
     $secondEmployeeId = User::query()->findOrFail($secondUserId)->employee_id;
     $secondContract = EmploymentContract::query()->where('employee_id', $secondEmployeeId)->whereNull('ended_at')->firstOrFail();
     $this->postJson("/api/human-resources/contracts/{$secondContract->id}/finish")
@@ -794,8 +821,8 @@ test('human resources designates and replaces one auditable office manager witho
         ->assertJsonPath('data.state', 'finished');
 
     expect(User::query()->findOrFail($secondUserId)->isCurrentManagerOfOffice($office->id))->toBeFalse()
-        ->and(OfficeManagerAssignment::query()->where('user_id', $secondUserId)->firstOrFail()->effective_to)->not->toBeNull();
+        ->and(OfficeManagerDelegation::query()->where('delegate_user_id', $secondUserId)->firstOrFail()->effective_to->lessThanOrEqualTo(now()))->toBeTrue();
     $this->assertDatabaseHas('activity_logs', [
-        'event' => 'human_resources.office_manager_assignment.ended_on_contract_end',
+        'event' => 'organization.office_manager_delegation.ended_on_membership_close',
     ]);
 });

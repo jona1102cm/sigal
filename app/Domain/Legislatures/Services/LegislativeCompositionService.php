@@ -288,6 +288,17 @@ class LegislativeCompositionService
                 }
             }
 
+            if (LegislativeDelegation::query()
+                ->where('principal_membership_id', $principal->id)
+                ->where('effective_from', '<', $data->effectiveTo)
+                ->where('effective_to', '>', $data->effectiveFrom)
+                ->lockForUpdate()
+                ->exists()) {
+                throw ValidationException::withMessages([
+                    'effective_from' => 'Ya existe una delegación de esta autoridad que se superpone con el período indicado.',
+                ]);
+            }
+
             $delegation = LegislativeDelegation::query()->create([
                 'legislative_body_id' => $targetBody->id,
                 'principal_membership_id' => $principal->id,

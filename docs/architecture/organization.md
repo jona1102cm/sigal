@@ -26,6 +26,6 @@ La Primera Vicepresidencia, Primera Secretaría, Presidencia, OMAF, Secretaría 
 
 - `office_memberships` conserva la relación histórica entre usuario y oficina, con inicio, cierre y responsable de la asignación.
 - Recursos Humanos es la fuente de cargos y contratos. Solo presenta oficinas activas que admiten funcionarios y sus cargos correspondientes.
-- El cargo puede indicar función `manager` o `official`; un usuario puede conservar varias asignaciones históricas o simultáneas cuando su contratación lo requiera.
-- Solo un superadministrador activo administra la estructura y sus membresías en esta primera etapa. Todas las modificaciones y cierres se auditan.
+- El cargo puede indicar función `manager` u `official`. La función `manager` solo se adquiere mediante el contrato registrado por Recursos Humanos y genera automáticamente la titularidad; Administración no puede nombrar una jefatura mediante una membresía manual.
+- Solo un superadministrador activo administra la estructura y las membresías administrativas excepcionales. Todas las modificaciones y cierres se auditan.
 - Esta información es la fuente para la visibilidad de jefaturas, la recepción de derivaciones y los permisos de URA y OMAF en el motor de Expedientes.
