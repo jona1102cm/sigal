@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\Api\DocumentManagement;
 
 use App\Domain\Audit\DTOs\RequestAuditContext;
+use App\Domain\Audit\Services\ActivityLogger;
 use App\Domain\DocumentManagement\Enums\OfficeDocumentAccessMode;
 use App\Domain\DocumentManagement\Services\OfficeDocumentAccessService;
 use App\Domain\Legislatures\DTOs\CreateLegislativeDelegationData;
 use App\Domain\Legislatures\Services\LegislativeAuthorizationService;
 use App\Domain\Legislatures\Services\LegislativeCompositionService;
 use App\Domain\Organization\DTOs\CreateOfficeManagerDelegationData;
+use App\Domain\Organization\Services\OfficeLeadershipDirectoryService;
 use App\Domain\Organization\Services\OfficeManagerDelegationService;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\DocumentManagement\EndOfficeManagerDelegationRequest;
@@ -31,7 +33,23 @@ class OfficeDocumentAccessController extends Controller
         private readonly OfficeManagerDelegationService $managerDelegations,
         private readonly LegislativeAuthorizationService $legislativeAuthorization,
         private readonly LegislativeCompositionService $legislativeComposition,
+        private readonly OfficeLeadershipDirectoryService $leadershipDirectory,
+        private readonly ActivityLogger $activityLogger,
     ) {}
+
+    public function indexResponsibilities(Request $request): JsonResponse
+    {
+        $this->authorize('viewLeadershipDirectory', Office::class);
+
+        $this->activityLogger->record(
+            event: 'organization.office_leadership_directory.viewed',
+            actor: $request->user(),
+            subject: null,
+            context: RequestAuditContext::fromRequest($request),
+        );
+
+        return response()->json(['data' => $this->leadershipDirectory->current()->values()]);
+    }
 
     public function show(Request $request, Office $office): JsonResponse
     {

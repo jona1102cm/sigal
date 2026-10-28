@@ -25,6 +25,12 @@ class OfficePolicy
             || $user->hasPermission(PermissionCode::WarehouseView);
     }
 
+    /** El panorama institucional de autoridades contiene datos exclusivos de superadministración. */
+    public function viewLeadershipDirectory(User $user): bool
+    {
+        return $user->isActive() && $user->isSuperAdministrator();
+    }
+
     public function view(User $user, Office $office): bool
     {
         return $this->viewAny($user);

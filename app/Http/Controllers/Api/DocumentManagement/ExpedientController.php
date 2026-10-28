@@ -19,6 +19,7 @@ use App\Http\Requests\DocumentManagement\StoreExpedientRequest;
 use App\Http\Resources\DocumentManagement\ExpedientResource;
 use App\Models\Expedient;
 use App\Models\ExpedientInternalAssignment;
+use App\Models\ExpedientRecipientRead;
 use App\Models\LegislativeBody;
 use App\Models\LegislativeBodyMembership;
 use App\Models\User;
@@ -136,10 +137,13 @@ class ExpedientController extends Controller
             ->where(fn ($assignment) => $assignment->whereNull('effective_to')->orWhere('effective_to', '>', now()))
             ->whereHas('recipient', fn ($recipient) => $recipient->whereIn('recipient_office_id', $membershipOfficeIds))
             ->exists();
+        $hasHistoricalReads = $scope === 'finalized'
+            && ExpedientRecipientRead::query()->where('user_id', $user->id)->exists();
 
         if (! $canReviewEveryOffice
             && $officeIds->isEmpty()
             && ! $hasInternalAssignments
+            && ! $hasHistoricalReads
             && $legislatureMemberIds->isEmpty()) {
             $query->whereRaw('1 = 0');
 

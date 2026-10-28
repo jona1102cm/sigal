@@ -446,6 +446,17 @@ test('an informational derivation is delivered without creating a pending respon
 
     Sanctum::actingAs($recipientUser);
     $this->postJson("/api/expedients/{$expedientId}/read")->assertOk();
+
+    // Perder la condición de autoridad o salir del equipo no debe borrar la
+    // consulta histórica de una llegada que el funcionario abrió legítimamente.
+    $recipientUser->currentOfficeMemberships()->update([
+        'membership_role' => OfficeMembershipRole::Official->value,
+    ]);
+
+    $this->getJson("/api/expedients/{$expedientId}")
+        ->assertOk()
+        ->assertJsonPath('data.permissions.move', false)
+        ->assertJsonPath('data.permissions.manage_documents', false);
     $this->getJson('/api/expedients?scope=pending')
         ->assertOk()
         ->assertJsonCount(0, 'data');

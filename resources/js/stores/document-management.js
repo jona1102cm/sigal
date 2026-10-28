@@ -49,6 +49,7 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
         accessGrants: [],
         authorizationMatrix: null,
         observerScopes: {},
+        officeLeadershipDirectory: null,
         officeAccessSetting: null,
         internalAssignment: null,
         attention: null,
@@ -522,6 +523,16 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
             return this.run(`office-access-${officeId}`, async () => {
                 const payload = await request(`/document-management/offices/${officeId}/access-setting`);
                 this.officeAccessSetting = payload.data;
+                return payload.data;
+            });
+        },
+
+        async loadOfficeLeadershipDirectory(force = false) {
+            if (this.officeLeadershipDirectory && !force) return this.officeLeadershipDirectory;
+
+            return this.run('office-leadership-directory', async () => {
+                const payload = await request('/document-management/office-responsibilities');
+                this.officeLeadershipDirectory = payload.data;
                 return payload.data;
             });
         },

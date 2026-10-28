@@ -49,7 +49,7 @@ Estado: **backend e interfaz web implementados**.
 
 ## Lectura y control operativo
 
-- Abrir una llegada registra su primera lectura individual, pero nunca asigna responsabilidad ni habilita por sí solo acciones sobre el expediente.
+- Abrir una llegada registra su primera lectura individual, pero nunca asigna responsabilidad ni habilita por sí solo acciones sobre el expediente. En expedientes no reservados, esa evidencia conserva consulta histórica personal aunque luego cambien el cargo, la oficina o la configuración del equipo; la operación continúa sujeta a la tenencia y autorizaciones vigentes.
 - Una llegada principal vigente que exige respuesta puede estar sin responsable o tener exactamente un responsable operativo. Una restricción transaccional y el historial por intervalos impiden dos responsables simultáneos.
 - Una persona habilitada puede usar **Tomar control** cuando la atención está libre. Mientras otra persona tenga el control, los demás conservan consulta y pueden **Solicitar asignación**; la justificación es opcional.
 - El responsable actual acepta o rechaza cada solicitud con nota opcional. Al aceptar una, SIGAL cierra su asignación anterior, abre la nueva y cancela automáticamente todas las demás solicitudes pendientes de esa llegada.

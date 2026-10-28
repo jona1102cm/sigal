@@ -1114,7 +1114,25 @@ test('a responsible contractual position automatically grants office leadership 
         ->and(User::query()->findOrFail($firstUserId)->hasCurrentOfficeLeadershipVisibility($office->id))->toBeTrue()
         ->and(User::query()->findOrFail($secondUserId)->isCurrentManagerOfOffice($office->id))->toBeTrue();
 
+    Sanctum::actingAs($administrator);
+    $this->getJson('/api/document-management/office-responsibilities')
+        ->assertOk()
+        ->assertJsonFragment([
+            'code' => 'JEF-HIST',
+            'name' => 'Oficina con responsabilidad histórica',
+        ])
+        ->assertJsonFragment([
+            'state' => 'delegated',
+            'state_label' => 'Delegación activa',
+        ])
+        ->assertJsonFragment([
+            'user_id' => $firstUserId,
+            'name' => 'ANA MARÍA SUÁREZ PAZ',
+            'role_label' => 'Responsable titular',
+        ]);
+
     Sanctum::actingAs(User::query()->findOrFail($firstUserId));
+    $this->getJson('/api/document-management/office-responsibilities')->assertForbidden();
     $this->getJson("/api/document-management/offices/{$office->id}/access-setting")
         ->assertOk()
         ->assertJsonPath('data.can_update_setting', false);

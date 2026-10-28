@@ -92,6 +92,7 @@ Route::middleware(['auth:sanctum', 'active.user', 'legislative.context', 'no.sto
         Route::get('offices/{office}/memberships', [OfficeController::class, 'memberships']);
         Route::post('offices/{office}/memberships', [OfficeController::class, 'assignMembership']);
         Route::post('offices/{office}/memberships/{membership}/close', [OfficeController::class, 'closeMembership']);
+        Route::get('document-management/office-responsibilities', [OfficeDocumentAccessController::class, 'indexResponsibilities']);
         Route::get('document-management/offices/{office}/access-setting', [OfficeDocumentAccessController::class, 'show']);
         Route::put('document-management/offices/{office}/access-setting', [OfficeDocumentAccessController::class, 'update']);
         Route::post('document-management/offices/{office}/manager-delegations', [OfficeDocumentAccessController::class, 'storeManagerDelegation']);

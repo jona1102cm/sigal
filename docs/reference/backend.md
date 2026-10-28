@@ -68,6 +68,7 @@ Servicios principales:
 | `HumanResourcesService` | Kardex, contrato, cuenta, cargo, membresía y archivos. |
 | `EmploymentRotationService` | Previsualiza y ejecuta el cambio de oficina operativa; conserva el cargo o crea uno nuevo en destino, libera pendientes y mantiene el contrato presupuestario. |
 | `OfficeManagerAssignmentService` | Proyecta el cargo contractual responsable y cierra su historial con la membresía. |
+| `OfficeLeadershipDirectoryService` | Resuelve en lote titulares contractuales, autoridades legislativas, delegaciones vigentes y oficinas sin responsable. |
 | `OfficeManagerDelegationService` | Crea y finaliza suplencias administrativas temporales auditables. |
 | `EmployeeImportWorkbookReader` | Lectura segura de la estructura XLSX. |
 | `EmployeeBulkImportService` | Validación/importación masiva con reglas del alta manual. |

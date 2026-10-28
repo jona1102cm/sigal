@@ -10,6 +10,8 @@ const documents = useDocumentManagementStore();
 const session = useSessionStore();
 const selectedOfficeId = ref('');
 const saved = ref(false);
+const responsibilitySearch = ref('');
+const responsibilityState = ref('all');
 const form = reactive({ mode: 'manager_assignment', authorized_user_ids: [] });
 const managerDelegation = reactive({ delegate_user_id: '', effective_from: '', effective_to: '', reason: '' });
 const legislativeDelegation = reactive({ delegate_membership_id: '', effective_from: '', effective_to: '', reason: '' });
@@ -30,6 +32,24 @@ const configurableOffices = computed(() => {
     return allOffices.value.filter((office) => office.requires_manager && officeIds.has(Number(office.id)));
 });
 const setting = computed(() => documents.officeAccessSetting);
+const responsibilityRows = computed(() => documents.officeLeadershipDirectory ?? []);
+const responsibilityCounts = computed(() => responsibilityRows.value.reduce((counts, row) => {
+    counts.total += 1;
+    counts[row.state] = (counts[row.state] ?? 0) + 1;
+    return counts;
+}, { total: 0, principal: 0, delegated: 0, missing: 0 }));
+const filteredResponsibilityRows = computed(() => {
+    const search = responsibilitySearch.value.trim().toLocaleLowerCase('es');
+
+    return responsibilityRows.value.filter((row) => {
+        if (responsibilityState.value !== 'all' && row.state !== responsibilityState.value) return false;
+        if (!search) return true;
+
+        return [row.office.code, row.office.name, row.principal?.name, row.effective?.name]
+            .filter(Boolean)
+            .some((value) => value.toLocaleLowerCase('es').includes(search));
+    });
+});
 const officialMembers = computed(() => setting.value?.members?.filter((member) => member.membership_role === 'official') ?? []);
 const leadership = computed(() => setting.value?.leadership ?? null);
 
@@ -49,8 +69,13 @@ watch(selectedOfficeId, async (value) => {
 
 onMounted(async () => {
     if (!documents.catalogs.offices.length) await documents.loadCatalogs();
+    if (session.isSuperAdministrator) await documents.loadOfficeLeadershipDirectory();
     selectedOfficeId.value = configurableOffices.value[0]?.id ?? '';
 });
+
+function inspectResponsibility(row) {
+    selectedOfficeId.value = row.office.id;
+}
 
 function toggleMember(userId) {
     if (!setting.value?.can_update_setting) return;
@@ -86,10 +111,12 @@ async function createManagerDelegation() {
         effective_to: managerDelegation.effective_to,
         reason: managerDelegation.reason,
     });
+    if (session.isSuperAdministrator) await documents.loadOfficeLeadershipDirectory(true);
 }
 
 async function endManagerDelegation(delegationId) {
     await documents.endOfficeManagerDelegation(Number(selectedOfficeId.value), delegationId, localNow());
+    if (session.isSuperAdministrator) await documents.loadOfficeLeadershipDirectory(true);
 }
 
 async function createLegislativeDelegation() {
@@ -109,6 +136,29 @@ async function createLegislativeDelegation() {
         </header>
 
         <p v-if="documents.error" class="alert alert--error" role="alert">{{ documents.error }}</p>
+        <section v-if="session.isSuperAdministrator" class="leadership-directory panel">
+            <header class="leadership-directory__header">
+                <div><p class="eyebrow">Panorama institucional</p><h2>Responsables de oficinas</h2><p class="muted">El titular proviene del cargo contractual o de la composición legislativa. Una delegación solo cambia temporalmente la autoridad operativa.</p></div>
+                <button class="button button--ghost" type="button" :disabled="documents.busy['office-leadership-directory']" @click="documents.loadOfficeLeadershipDirectory(true)">{{ documents.busy['office-leadership-directory'] ? 'Actualizando…' : 'Actualizar' }}</button>
+            </header>
+            <div class="leadership-directory__metrics">
+                <button type="button" :class="{ 'is-active': responsibilityState === 'all' }" @click="responsibilityState = 'all'"><strong>{{ responsibilityCounts.total }}</strong><span>Total</span></button>
+                <button type="button" :class="{ 'is-active': responsibilityState === 'principal' }" @click="responsibilityState = 'principal'"><strong>{{ responsibilityCounts.principal }}</strong><span>Con titular</span></button>
+                <button type="button" :class="{ 'is-active': responsibilityState === 'delegated' }" @click="responsibilityState = 'delegated'"><strong>{{ responsibilityCounts.delegated }}</strong><span>Delegadas</span></button>
+                <button type="button" :class="{ 'is-active': responsibilityState === 'missing' }" @click="responsibilityState = 'missing'"><strong>{{ responsibilityCounts.missing }}</strong><span>Sin titular</span></button>
+            </div>
+            <label class="field leadership-directory__search"><span>Buscar oficina o responsable</span><input v-model.trim="responsibilitySearch" type="search" placeholder="Ej.: Secretaría General, SGEN o nombre del titular"></label>
+            <div v-if="documents.busy['office-leadership-directory'] && !responsibilityRows.length" class="empty-state">Cargando responsables…</div>
+            <div v-else-if="!filteredResponsibilityRows.length" class="empty-state">No existen resultados para este filtro.</div>
+            <div v-else class="leadership-directory__table">
+                <button v-for="row in filteredResponsibilityRows" :key="row.office.id" type="button" @click="inspectResponsibility(row)">
+                    <span class="leadership-directory__office"><b>{{ row.office.code }}</b><strong>{{ row.office.name }}</strong><small>{{ row.office_kind_label }}</small></span>
+                    <span><small>Titular</small><strong>{{ row.principal?.name || row.state_label }}</strong><em v-if="row.principal?.role_label">{{ row.principal.role_label }}</em></span>
+                    <span><small>Autoridad operativa</small><strong>{{ row.effective?.name || 'No definida' }}</strong><em>{{ row.effective?.kind_label || row.access_mode_label }}</em></span>
+                    <i :class="`is-${row.state}`">{{ row.state_label }}</i>
+                </button>
+            </div>
+        </section>
         <div v-if="!configurableOffices.length" class="empty-state">No posee una responsabilidad titular o delegada que permita consultar esta configuración.</div>
         <template v-else>
             <label class="field office-access-workspace__office"><span>Oficina a configurar</span><SearchableSelect v-model="selectedOfficeId" :options="configurableOffices.map((office) => ({ value: office.id, label: office.hierarchy_label }))" placeholder="Seleccione una oficina" /></label>

@@ -284,6 +284,15 @@ class Expedient extends Model
                         $participation->orWhereHas('movements.recipients.internalAssignments', fn (Builder $assignment) => $assignment
                             ->where('user_id', $user->id));
 
+                        // La apertura legítima de una llegada deja una evidencia personal
+                        // durable. Aunque después cambie la jefatura, la configuración del
+                        // equipo o la oficina del funcionario, esa persona conserva consulta
+                        // histórica sobre expedientes no reservados. Esta regla no concede
+                        // custodia ni capacidad operativa: las Policies siguen evaluándolas
+                        // exclusivamente con las asignaciones y pertenencias vigentes.
+                        $participation->orWhereHas('movements.recipients.reads', fn (Builder $read) => $read
+                            ->where('user_id', $user->id));
+
                         if ($automaticOfficeIds->isNotEmpty()) {
                             $participation->orWhereIn('origin_office_id', $automaticOfficeIds)
                                 ->orWhereIn('responsible_office_id', $automaticOfficeIds)

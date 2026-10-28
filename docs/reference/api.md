@@ -102,6 +102,7 @@ Las respuestas de colección usan `data`, `links` y `meta` de paginación. Los e
 | POST | `/expedients/{expedient}/movement-recipients/{recipient}/transfer` | Transfiere directamente el responsable único; `note` es opcional. |
 | POST | `/expedients/{expedient}/movement-recipients/{recipient}/status` | Acción de una oficina destinataria. |
 | GET/PUT | `/expedients/{expedient}/movement-recipients/{recipient}/internal-assignments` | Consulta o reemplaza responsable único y colaboradores de una llegada. |
+| GET | `/document-management/office-responsibilities` | Directorio vigente de titulares, delegados y oficinas sin autoridad; exclusivo de superadministración. |
 | GET/POST | `/expedients/{expedient}/access-grants` | Lista o concede acceso extraordinario. |
 | POST | `/expedients/{expedient}/access-grants/{grant}/close` | Cierra concesión. |
 | POST | `/expedients/{expedient}/archive` | Archiva con motivo. |
