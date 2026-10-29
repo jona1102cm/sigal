@@ -636,6 +636,65 @@ test('correcting a position as office manager updates the active office membersh
     $this->assertDatabaseHas('activity_logs', ['event' => 'human_resources.office_position.updated']);
 });
 
+test('superadministration selects the responsible position and its current holder becomes office principal', function () {
+    $administrator = humanResourcesAdministrator();
+    Sanctum::actingAs($administrator);
+    $office = Office::query()->create([
+        'code' => 'PROT-RESP',
+        'name' => 'Secretaría y Protocolo de prueba',
+        'supports_staffing' => true,
+        'requires_manager' => true,
+    ]);
+    $provisionalManager = OfficePosition::query()->create([
+        'office_id' => $office->id,
+        'name' => 'Responsable provisional de Protocolo',
+        'membership_role' => 'manager',
+        'created_by' => null,
+    ]);
+    $advisorPosition = OfficePosition::query()->create([
+        'office_id' => $office->id,
+        'name' => 'Asesor Especial II de Protocolo',
+        'membership_role' => 'official',
+        'created_by' => $administrator->id,
+    ]);
+
+    $employee = $this->postJson('/api/human-resources/employees', humanResourcesPayload($advisorPosition, [
+        'identity_card' => '8400001',
+        'first_names' => 'Yarline',
+        'last_names' => 'Rivero de la Barra',
+    ]))->assertCreated();
+    $userId = $employee->json('data.account.id');
+
+    $this->putJson("/api/human-resources/offices/{$office->id}/responsible-position", [
+        'office_position_id' => $advisorPosition->id,
+    ])->assertOk()
+        ->assertJsonPath('data.id', $advisorPosition->id)
+        ->assertJsonPath('data.membership_role', 'manager');
+
+    expect($provisionalManager->fresh()->membership_role->value)->toBe('official')
+        ->and($advisorPosition->fresh()->membership_role->value)->toBe('manager')
+        ->and(OfficeMembership::query()->where('user_id', $userId)->firstOrFail()->membership_role->value)->toBe('manager')
+        ->and(OfficeManagerAssignment::query()->where('office_id', $office->id)->where('user_id', $userId)->whereNull('effective_to')->count())->toBe(1)
+        ->and(User::query()->findOrFail($userId)->isCurrentManagerOfOffice($office->id))->toBeTrue();
+
+    $this->getJson("/api/document-management/offices/{$office->id}/access-setting")
+        ->assertOk()
+        ->assertJsonPath('data.leadership.principal.user_id', $userId)
+        ->assertJsonPath('data.leadership.responsible_position_id', $advisorPosition->id)
+        ->assertJsonPath('data.leadership.can_manage_responsible_position', true)
+        ->assertJsonFragment([
+            'id' => $advisorPosition->id,
+            'name' => 'Asesor Especial II de Protocolo',
+            'current_holder_count' => 1,
+            'selectable' => true,
+        ]);
+
+    $this->assertDatabaseHas('activity_logs', [
+        'event' => 'human_resources.office_responsible_position.selected',
+        'subject_id' => $advisorPosition->id,
+    ]);
+});
+
 test('the independent human resources account can access its module but not generic user administration', function () {
     $this->artisan('sigal:bootstrap-human-resources-administrator')->assertExitCode(0);
     $humanResourcesUser = User::query()->where('email', 'rrhh@sigal.local')->firstOrFail();

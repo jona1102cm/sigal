@@ -20,8 +20,10 @@ Funcionario, contrato, cargo, membresía de oficina y rol de sistema son concept
 - Tipo, inicio, oficina y cargo son obligatorios. Fin y monto pueden ser opcionales según el contrato.
 - Un funcionario no puede mantener más de un contrato vigente.
 - Cada cargo pertenece a una oficina; el formulario filtra cargos por la oficina elegida y permite crear uno autorizado cuando falta.
-- El cargo contractual clasificado como jefatura es la fuente autoritativa del responsable titular. Al registrar manualmente o importar su contrato, SIGAL crea automáticamente la responsabilidad de la oficina; no existe una segunda designación manual.
-- Cada oficina admite un único contrato vigente en un cargo responsable. El cierre o reclasificación del cargo termina también la responsabilidad y conserva el historial, motivo y actor.
+- Cada oficina que requiere autoridad identifica exactamente uno de sus cargos como **cargo responsable**. La denominación contractual se conserva: por ejemplo, `ASE. ESP. II SECRETARIA GENERAL Y PROTOCOLO` puede ser el cargo responsable sin cambiar de nombre ni crear un cargo ficticio.
+- Superadministración o RR. HH. con permiso de cargos seleccionan esta clasificación desde **Gestión documental › Acceso de mi oficina**, usando únicamente los cargos del catálogo de la oficina. El ocupante vigente pasa a ser automáticamente su responsable titular; no se designa una persona al margen de su contrato.
+- PostgreSQL y el servicio de dominio impiden que una oficina tenga dos cargos clasificados como responsables. Al sustituir la clasificación, el cargo anterior vuelve a funcionario, se cierra su autoridad vigente en el mismo instante y se preserva todo el historial.
+- Un cargo con varios ocupantes vigentes no puede seleccionarse como responsable hasta regularizar la dotación. Cada oficina admite un único contrato vigente en el cargo responsable.
 - Una ausencia temporal no cambia el contrato: titular o superadministración registran una delegación con inicio, fin y motivo desde **Gestión documental › Acceso de mi oficina**. Durante la suplencia, el delegado opera y el titular conserva consulta histórica.
 - Registrar un contrato crea o reutiliza la cuenta y abre membresía. Toda cuenta creada por RR. HH., incluso cuando actúa un superadministrador, recibe exclusivamente el rol Usuario simple; los privilegios se asignan después desde Administración.
 - Si no hay correo, SIGAL genera una dirección interna corta y única basada en el CI.
@@ -57,7 +59,7 @@ Superadministración y RR. HH. pueden descargar una plantilla XLSX en español y
 - El lector valida tipo/estructura del libro; el servicio valida encabezados, catálogos, fechas, CI y duplicados.
 - Los errores se reportan por fila para poder corregir el archivo.
 - El alta de cada registro reutiliza el flujo transaccional de RR. HH.; no existe una segunda lógica de contratos para Excel.
-- Si un cargo nuevo se clasifica como jefatura, el funcionario importado queda automáticamente como responsable titular; la importación se rechaza si produciría dos titulares contractuales vigentes en la misma oficina.
+- Si un cargo nuevo se clasifica como jefatura, el funcionario importado queda automáticamente como responsable titular. Si ya existe otro cargo responsable sin uso, SIGAL reutiliza esa clasificación; si posee historia, se debe seleccionar expresamente el nuevo cargo responsable y la importación evita titularidades simultáneas.
 
 ## Operación programada
 

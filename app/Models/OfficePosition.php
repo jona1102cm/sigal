@@ -40,6 +40,18 @@ class OfficePosition extends Model
         return $this->hasMany(OfficeMembership::class);
     }
 
+    /** Funcionarios que ocupan actualmente este cargo dentro de la oficina. */
+    public function currentMemberships(): HasMany
+    {
+        $now = now();
+
+        return $this->officeMemberships()
+            ->where('effective_from', '<=', $now)
+            ->where(fn ($query) => $query
+                ->whereNull('effective_to')
+                ->orWhere('effective_to', '>', $now));
+    }
+
     public function destinationRotations(): HasMany
     {
         return $this->hasMany(EmploymentRotation::class, 'destination_office_position_id');

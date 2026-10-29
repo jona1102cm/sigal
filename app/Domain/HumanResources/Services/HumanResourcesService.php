@@ -302,6 +302,50 @@ class HumanResourcesService
 
             $this->assertPositionRoleAllowed($office, $data->membershipRole);
 
+            if ($data->membershipRole === OfficeMembershipRole::Manager) {
+                $existingManagers = OfficePosition::query()
+                    ->where('office_id', $office->id)
+                    ->where('membership_role', OfficeMembershipRole::Manager->value)
+                    ->with('office')
+                    ->lockForUpdate()
+                    ->get();
+
+                if ($existingManagers->count() > 1) {
+                    throw ValidationException::withMessages([
+                        'membership_role' => 'La oficina tiene más de un cargo responsable en el catálogo. Regularice primero su configuración.',
+                    ]);
+                }
+
+                $provisionalManager = $existingManagers->first();
+                if ($provisionalManager !== null) {
+                    $hasHistory = $provisionalManager->contracts()->exists()
+                        || $provisionalManager->officeMemberships()->exists()
+                        || $provisionalManager->destinationRotations()->exists();
+
+                    if ($hasHistory) {
+                        throw ValidationException::withMessages([
+                            'membership_role' => "La oficina ya tiene el cargo responsable {$provisionalManager->name}. Seleccione el cargo responsable desde la configuración de la oficina en lugar de crear otro.",
+                        ]);
+                    }
+
+                    $oldValues = $this->positionSnapshot($provisionalManager);
+                    $provisionalManager->update(['name' => $data->name]);
+                    $this->activityLogger->record(
+                        event: 'human_resources.office_position.updated',
+                        actor: $actor,
+                        subject: $provisionalManager,
+                        context: $context,
+                        oldValues: $oldValues,
+                        newValues: [
+                            ...$this->positionSnapshot($provisionalManager->fresh('office')),
+                            'reused_provisional_responsible_position' => true,
+                        ],
+                    );
+
+                    return $provisionalManager->fresh('office');
+                }
+            }
+
             $position = OfficePosition::query()->create([
                 'office_id' => $office->id,
                 'name' => $data->name,
@@ -347,6 +391,11 @@ class HumanResourcesService
                     'membership_role' => 'No se puede convertir este cargo en responsable porque tiene más de un contrato vigente. Primero regularice la dotación del cargo.',
                 ]);
             }
+
+            if ($data->membershipRole === OfficeMembershipRole::Manager) {
+                $this->demoteOtherResponsiblePositions($target, $actor, $context);
+            }
+
             $oldValues = $this->positionSnapshot($target);
             $target->update([
                 'name' => $data->name,
@@ -366,24 +415,27 @@ class HumanResourcesService
                     'position_title' => $data->name,
                 ]);
 
-                if ($previousRole !== $data->membershipRole) {
-                    if ($data->membershipRole === OfficeMembershipRole::Manager) {
+                if ($data->membershipRole === OfficeMembershipRole::Manager) {
+                    $isEffectiveNow = $membership->effective_from->lessThanOrEqualTo(now())
+                        && ($membership->effective_to === null || $membership->effective_to->isAfter(now()));
+
+                    if ($isEffectiveNow && $membership->user()->where('status', UserStatus::Active->value)->exists()) {
                         $this->officeManagerAssignments->assignFromMembership(
                             $membership->refresh(),
                             $actor,
                             $context,
                             CarbonImmutable::now(),
                         );
-                    } else {
-                        $this->officeManagerAssignments->endForMembership(
-                            membership: $membership,
-                            effectiveTo: CarbonImmutable::now(),
-                            closureNote: 'Cierre automático por reclasificación del cargo contractual.',
-                            auditEvent: 'human_resources.office_manager_assignment.ended_on_position_change',
-                            actor: $actor,
-                            context: $context,
-                        );
                     }
+                } elseif ($previousRole === OfficeMembershipRole::Manager) {
+                    $this->officeManagerAssignments->endForMembership(
+                        membership: $membership,
+                        effectiveTo: CarbonImmutable::now(),
+                        closureNote: 'Cierre automático por reclasificación del cargo contractual.',
+                        auditEvent: 'human_resources.office_manager_assignment.ended_on_position_change',
+                        actor: $actor,
+                        context: $context,
+                    );
                 }
             }
 
@@ -400,6 +452,55 @@ class HumanResourcesService
             );
 
             return $target->load('office');
+        });
+    }
+
+    /**
+     * Define qué cargo del catálogo origina la única titularidad de una oficina.
+     * El nombre contractual no cambia: solo cambia su clasificación organizacional.
+     */
+    public function selectResponsiblePosition(
+        Office $office,
+        OfficePosition $position,
+        User $actor,
+        RequestAuditContext $context,
+    ): OfficePosition {
+        return DB::transaction(function () use ($office, $position, $actor, $context): OfficePosition {
+            $targetOffice = Office::query()->lockForUpdate()->findOrFail($office->id);
+            if ($targetOffice->status->value !== 'active' || ! $targetOffice->supports_staffing || ! $targetOffice->requires_manager) {
+                throw ValidationException::withMessages([
+                    'office' => 'Solo una oficina activa que requiera responsable admite esta configuración.',
+                ]);
+            }
+
+            $targetPosition = OfficePosition::query()
+                ->where('office_id', $targetOffice->id)
+                ->lockForUpdate()
+                ->findOrFail($position->id);
+
+            $updated = $this->updateOfficePosition(
+                $targetPosition,
+                new UpdateOfficePositionData(
+                    name: $targetPosition->name,
+                    membershipRole: OfficeMembershipRole::Manager,
+                ),
+                $actor,
+                $context,
+            );
+
+            $this->activityLogger->record(
+                event: 'human_resources.office_responsible_position.selected',
+                actor: $actor,
+                subject: $updated,
+                context: $context,
+                newValues: [
+                    'office_id' => $targetOffice->id,
+                    'office_position_id' => $updated->id,
+                    'position_name' => $updated->name,
+                ],
+            );
+
+            return $updated;
         });
     }
 
@@ -765,6 +866,61 @@ class HumanResourcesService
             throw ValidationException::withMessages([
                 'membership_role' => 'Esta oficina no tiene responsable propio en el organigrama institucional.',
             ]);
+        }
+    }
+
+    /**
+     * Desclasifica el cargo responsable anterior antes de promover el nuevo.
+     * Las membresías históricas cerradas conservan su fotografía; solo se ajustan
+     * las asignaciones todavía abiertas y se cierra su autoridad en el mismo instante.
+     */
+    private function demoteOtherResponsiblePositions(
+        OfficePosition $selected,
+        User $actor,
+        RequestAuditContext $context,
+    ): void {
+        $effectiveAt = CarbonImmutable::now();
+        $previousPositions = OfficePosition::query()
+            ->with('office')
+            ->where('office_id', $selected->office_id)
+            ->whereKeyNot($selected->id)
+            ->where('membership_role', OfficeMembershipRole::Manager->value)
+            ->lockForUpdate()
+            ->get();
+
+        foreach ($previousPositions as $previousPosition) {
+            $oldValues = $this->positionSnapshot($previousPosition);
+            $previousPosition->update(['membership_role' => OfficeMembershipRole::Official]);
+
+            $memberships = OfficeMembership::query()
+                ->where('office_position_id', $previousPosition->id)
+                ->whereNull('effective_to')
+                ->lockForUpdate()
+                ->get();
+
+            foreach ($memberships as $membership) {
+                $membership->update(['membership_role' => OfficeMembershipRole::Official]);
+                $this->officeManagerAssignments->endForMembership(
+                    membership: $membership,
+                    effectiveTo: $effectiveAt,
+                    closureNote: 'Cierre automático por selección de un nuevo cargo responsable para la oficina.',
+                    auditEvent: 'human_resources.office_manager_assignment.ended_on_responsible_position_change',
+                    actor: $actor,
+                    context: $context,
+                );
+            }
+
+            $this->activityLogger->record(
+                event: 'human_resources.office_position.responsibility_removed',
+                actor: $actor,
+                subject: $previousPosition,
+                context: $context,
+                oldValues: $oldValues,
+                newValues: [
+                    ...$this->positionSnapshot($previousPosition->fresh('office')),
+                    'updated_current_membership_ids' => $memberships->pluck('id')->all(),
+                ],
+            );
         }
     }
 

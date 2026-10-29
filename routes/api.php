@@ -72,6 +72,7 @@ Route::middleware(['auth:sanctum', 'active.user', 'legislative.context', 'no.sto
         Route::post('human-resources/employees/{employee}/profile-photo', [HumanResourcesController::class, 'storeProfilePhoto']);
         Route::post('human-resources/employees/{employee}/attachments', [HumanResourcesController::class, 'storeAttachment']);
         Route::get('human-resources/offices/{office}/positions', [HumanResourcesController::class, 'positions']);
+        Route::put('human-resources/offices/{office}/responsible-position', [HumanResourcesController::class, 'updateResponsiblePosition']);
         Route::post('human-resources/positions', [HumanResourcesController::class, 'storePosition']);
         Route::patch('human-resources/positions/{officePosition}', [HumanResourcesController::class, 'updatePosition']);
         Route::post('human-resources/contracts/{contract}/extend', [HumanResourcesController::class, 'extend']);

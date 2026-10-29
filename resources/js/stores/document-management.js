@@ -548,6 +548,18 @@ export const useDocumentManagementStore = defineStore('documentManagement', {
             });
         },
 
+        async setOfficeResponsiblePosition(officeId, officePositionId) {
+            return this.run(`office-responsible-position-${officeId}`, async () => {
+                const payload = await request(`/human-resources/offices/${officeId}/responsible-position`, {
+                    method: 'PUT',
+                    body: { office_position_id: Number(officePositionId) },
+                });
+                const settingPayload = await request(`/document-management/offices/${officeId}/access-setting`);
+                this.officeAccessSetting = settingPayload.data;
+                return payload.data;
+            });
+        },
+
         async createOfficeManagerDelegation(officeId, data) {
             return this.run(`office-delegation-${officeId}`, async () => {
                 const payload = await request(`/document-management/offices/${officeId}/manager-delegations`, {

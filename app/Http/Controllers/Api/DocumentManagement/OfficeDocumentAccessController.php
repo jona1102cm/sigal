@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\DocumentManagement;
 
 use App\Domain\Audit\DTOs\RequestAuditContext;
 use App\Domain\Audit\Services\ActivityLogger;
+use App\Domain\Authorization\Enums\PermissionCode;
 use App\Domain\DocumentManagement\Enums\OfficeDocumentAccessMode;
 use App\Domain\DocumentManagement\Services\OfficeDocumentAccessService;
 use App\Domain\Legislatures\DTOs\CreateLegislativeDelegationData;
@@ -133,6 +134,8 @@ class OfficeDocumentAccessController extends Controller
             'managerDelegations' => fn ($query) => $query->latest('effective_from'),
             'managerDelegations.delegateUser',
             'managerDelegations.principalAssignment.user',
+            'positions' => fn ($query) => $query->orderBy('name'),
+            'positions.currentMemberships.user',
         ]);
         $memberships = $office->currentMemberships()
             ->with('user')
@@ -195,6 +198,26 @@ class OfficeDocumentAccessController extends Controller
                         'kind' => 'delegate',
                     ],
                 'active_delegation_id' => $activeManagerDelegation?->id,
+                'responsible_position_id' => $office->positions
+                    ->first(fn ($position) => $position->membership_role->value === 'manager')?->id,
+                'can_manage_responsible_position' => $actor->hasPermission(PermissionCode::HumanResourcesPositions),
+                'position_candidates' => $office->positions->map(function ($position): array {
+                    $holders = $position->currentMemberships
+                        ->filter(fn ($membership) => $membership->user->isActive())
+                        ->map(fn ($membership) => [
+                            'user_id' => $membership->user_id,
+                            'name' => $membership->user->name,
+                        ])->values();
+
+                    return [
+                        'id' => $position->id,
+                        'name' => $position->name,
+                        'membership_role' => $position->membership_role->value,
+                        'current_holders' => $holders,
+                        'current_holder_count' => $holders->count(),
+                        'selectable' => $holders->count() <= 1,
+                    ];
+                })->values(),
                 'delegate_candidates' => $memberships
                     ->filter(fn ($membership) => (int) $membership->user_id !== (int) $principalManager?->user_id)
                     ->map(fn ($membership) => [

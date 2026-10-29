@@ -12,6 +12,7 @@ const selectedOfficeId = ref('');
 const saved = ref(false);
 const responsibilitySearch = ref('');
 const responsibilityState = ref('all');
+const responsiblePositionId = ref('');
 const form = reactive({ mode: 'manager_assignment', authorized_user_ids: [] });
 const managerDelegation = reactive({ delegate_user_id: '', effective_from: '', effective_to: '', reason: '' });
 const legislativeDelegation = reactive({ delegate_membership_id: '', effective_from: '', effective_to: '', reason: '' });
@@ -52,11 +53,22 @@ const filteredResponsibilityRows = computed(() => {
 });
 const officialMembers = computed(() => setting.value?.members?.filter((member) => member.membership_role === 'official') ?? []);
 const leadership = computed(() => setting.value?.leadership ?? null);
+const responsiblePositionOptions = computed(() => (leadership.value?.position_candidates ?? []).map((position) => {
+    const holders = position.current_holders?.map((holder) => holder.name).join(', ');
+    const occupancy = holders || 'Sin ocupante vigente';
+
+    return {
+        value: position.id,
+        label: `${position.name} · ${occupancy}`,
+        disabled: !position.selectable,
+    };
+}));
 
 watch(setting, (value) => {
     if (!value) return;
     form.mode = value.mode;
     form.authorized_user_ids = [...(value.authorized_user_ids ?? [])];
+    responsiblePositionId.value = value.leadership?.responsible_position_id ?? '';
     Object.assign(managerDelegation, { delegate_user_id: '', effective_from: '', effective_to: '', reason: '' });
     Object.assign(legislativeDelegation, { delegate_membership_id: '', effective_from: '', effective_to: '', reason: '' });
 }, { immediate: true });
@@ -112,6 +124,13 @@ async function createManagerDelegation() {
         reason: managerDelegation.reason,
     });
     if (session.isSuperAdministrator) await documents.loadOfficeLeadershipDirectory(true);
+}
+
+async function saveResponsiblePosition() {
+    if (!leadership.value?.can_manage_responsible_position || !responsiblePositionId.value) return;
+
+    await documents.setOfficeResponsiblePosition(Number(selectedOfficeId.value), Number(responsiblePositionId.value));
+    await documents.loadOfficeLeadershipDirectory(true);
 }
 
 async function endManagerDelegation(delegationId) {
@@ -173,7 +192,15 @@ async function createLegislativeDelegation() {
                     </div>
                     <p v-if="!setting.can_update_setting" class="alert alert--info">Conserva acceso de consulta por ser titular, pero durante la suplencia solamente la autoridad operativa actual puede modificar el reparto o tramitar la correspondencia.</p>
 
-                    <form v-if="setting.office_kind === 'administrative' && setting.can_manage_manager_delegations" class="leadership-delegation-form" @submit.prevent="createManagerDelegation">
+                    <form v-if="setting.office_kind === 'administrative' && leadership.can_manage_responsible_position" class="leadership-delegation-form" @submit.prevent="saveResponsiblePosition">
+                        <div><strong>Cargo responsable de la oficina</strong><small>El nombre del cargo se conserva. Su ocupante vigente quedará reconocido automáticamente como titular; solo puede seleccionarse un cargo con un único ocupante actual.</small></div>
+                        <label class="field field--full"><span>Cargo responsable</span><SearchableSelect v-model="responsiblePositionId" :options="responsiblePositionOptions" placeholder="Seleccione un cargo de esta oficina" required /></label>
+                        <button class="button button--primary" type="submit" :disabled="!responsiblePositionId || documents.busy[`office-responsible-position-${selectedOfficeId}`]">{{ documents.busy[`office-responsible-position-${selectedOfficeId}`] ? 'Actualizando…' : 'Guardar cargo responsable' }}</button>
+                    </form>
+
+                    <p v-if="setting.office_kind === 'administrative' && setting.can_manage_manager_delegations && !leadership.principal" class="alert alert--info">Esta oficina todavía no tiene titular. Seleccione primero el cargo responsable; una delegación solo puede registrarse después y únicamente para una suplencia temporal.</p>
+
+                    <form v-if="setting.office_kind === 'administrative' && setting.can_manage_manager_delegations && leadership.principal" class="leadership-delegation-form" @submit.prevent="createManagerDelegation">
                         <div><strong>Delegación administrativa temporal</strong><small>La persona delegada asumirá la operación; el titular conservará lectura y trazabilidad.</small></div>
                         <label class="field"><span>Funcionario delegado</span><SearchableSelect v-model="managerDelegation.delegate_user_id" :options="leadership.delegate_candidates.map((candidate) => ({ value: candidate.user_id, label: `${candidate.name} · ${candidate.position_title}` }))" placeholder="Seleccione un funcionario" required /></label>
                         <label class="field"><span>Desde</span><input v-model="managerDelegation.effective_from" type="datetime-local" required></label>

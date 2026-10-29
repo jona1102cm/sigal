@@ -25,6 +25,9 @@ export const useSessionStore = defineStore('session', {
         canManageHumanResourcesRotations() {
             return this.hasPermission('human_resources.rotations.manage');
         },
+        canManageHumanResourcesPositions() {
+            return this.hasPermission('human_resources.positions.manage');
+        },
         canViewDashboard() {
             return this.hasPermission('dashboard.view');
         },

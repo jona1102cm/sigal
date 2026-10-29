@@ -207,6 +207,17 @@ function openPosition(position = null) {
     positionOpen.value = true;
 }
 
+function openCurrentAssignmentPosition(contract) {
+    const position = contract.current_assignment?.position;
+    const office = contract.current_assignment?.office;
+    if (!position || !office) return;
+
+    openPosition({
+        ...position,
+        office_id: office.id,
+    });
+}
+
 async function savePosition() {
     const data = positionEditingId.value === null
         ? positionForm
@@ -216,6 +227,7 @@ async function savePosition() {
         : await humanResources.updatePosition(positionEditingId.value, data);
     form.office_id = position.office_id;
     form.office_position_id = position.id;
+    if (humanResources.selected) await humanResources.selectEmployee(humanResources.selected.id);
     positionOpen.value = false;
 }
 
@@ -367,6 +379,7 @@ function formatDateTime(value) {
                                 <div v-if="!contract.ended_at && contract.state !== 'upcoming'" class="contract-card__actions">
                                     <template v-if="contract.ends_on"><input v-model="extensionDates[contract.id]" type="date" :min="contract.ends_on" aria-label="Nueva fecha de finalizacion"><button class="text-button" type="button" :disabled="!extensionDates[contract.id] || humanResources.busy[`extend-contract-${contract.id}`]" @click="extendContract(contract)">Extender</button></template>
                                     <button v-if="session.canManageHumanResourcesRotations" class="text-button" type="button" @click="openRotation(contract)">Rotar de oficina</button>
+                                    <button v-if="session.canManageHumanResourcesPositions && contract.current_assignment?.position" class="text-button" type="button" @click="openCurrentAssignmentPosition(contract)">Corregir clasificación del cargo</button>
                                     <button class="text-button text-button--danger" type="button" :disabled="humanResources.busy[`finish-contract-${contract.id}`]" @click="finishContract(contract)">Finalizar</button>
                                 </div>
                             </article>

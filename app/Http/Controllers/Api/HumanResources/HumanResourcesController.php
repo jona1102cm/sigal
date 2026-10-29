@@ -22,6 +22,7 @@ use App\Http\Requests\HumanResources\StoreEmployeeProfilePhotoRequest;
 use App\Http\Requests\HumanResources\StoreOfficePositionRequest;
 use App\Http\Requests\HumanResources\UpdateEmployeeRequest;
 use App\Http\Requests\HumanResources\UpdateOfficePositionRequest;
+use App\Http\Requests\HumanResources\UpdateOfficeResponsiblePositionRequest;
 use App\Http\Resources\HumanResources\EmployeeResource;
 use App\Http\Resources\HumanResources\EmploymentContractResource;
 use App\Http\Resources\HumanResources\OfficePositionResource;
@@ -299,6 +300,22 @@ class HumanResourcesController extends Controller
         return new OfficePositionResource($this->humanResourcesService->updateOfficePosition(
             $officePosition,
             UpdateOfficePositionData::fromValidated($request->validated()),
+            $request->user(),
+            RequestAuditContext::fromRequest($request),
+        ));
+    }
+
+    public function updateResponsiblePosition(
+        UpdateOfficeResponsiblePositionRequest $request,
+        Office $office,
+    ): OfficePositionResource {
+        abort_unless($request->user()->hasPermission(PermissionCode::HumanResourcesPositions), 403);
+
+        $position = OfficePosition::query()->findOrFail((int) $request->validated('office_position_id'));
+
+        return new OfficePositionResource($this->humanResourcesService->selectResponsiblePosition(
+            $office,
+            $position,
             $request->user(),
             RequestAuditContext::fromRequest($request),
         ));

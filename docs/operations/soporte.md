@@ -125,7 +125,7 @@ Revisar log Laravel, variables de entorno, conexión PostgreSQL, permisos/volume
 
 ### Usuario sin oficina responsable
 
-Verificar en RR. HH. contrato activo, oficina, cargo y membresía vigente. El cargo debe estar clasificado como **jefatura o responsable**: SIGAL genera automáticamente la titularidad histórica. Consultar **Gestión documental → Acceso de mi oficina**; superadministración dispone allí del panorama completo de titulares, delegados y oficinas sin autoridad. Si el contrato se importó antes de esta regla, ejecutar las migraciones pendientes para que el historial sea reparado; no editar directamente tablas ni tokens.
+Verificar en RR. HH. contrato activo, oficina, cargo y membresía vigente. Después, como superadministración o RR. HH. autorizado, abrir **Gestión documental → Acceso de mi oficina**, elegir la oficina y usar **Cargo responsable de la oficina**. La lista muestra los cargos de esa oficina y su ocupante actual; seleccionar el cargo correcto genera automáticamente la titularidad histórica sin renombrarlo. La delegación administrativa se usa únicamente para una suplencia temporal y requiere que antes exista un titular. Si el cargo muestra varios ocupantes, regularizar primero la dotación; no editar directamente tablas, asignaciones ni tokens.
 
 ### Expediente asignado a oficina incorrecta
 

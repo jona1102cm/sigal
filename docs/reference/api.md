@@ -53,6 +53,7 @@ Las respuestas de colección usan `data`, `links` y `meta` de paginación. Los e
 | POST | `/human-resources/employees/{employee}/profile-photo` | Agrega/reemplaza foto conservando historial. |
 | POST | `/human-resources/employees/{employee}/attachments` | Agrega respaldo documental. |
 | GET | `/human-resources/offices/{office}/positions` | Lista cargos de la oficina. |
+| PUT | `/human-resources/offices/{office}/responsible-position` | Selecciona el único cargo responsable de la oficina sin alterar su denominación contractual; actualiza titularidad y auditoría. |
 | POST | `/human-resources/positions` | Crea cargo. |
 | PATCH | `/human-resources/positions/{officePosition}` | Corrige cargo. |
 | POST | `/human-resources/contracts/{contract}/extend` | Extiende fecha final. |

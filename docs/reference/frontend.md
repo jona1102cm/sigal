@@ -24,7 +24,7 @@ Mantiene token/usuario, restaura `/auth/me`, conserva los permisos efectivos y e
 
 Mantiene catálogos, las bandejas Nuevos/Pendientes/Finalizados, el contador individual de llegadas sin abrir, filtros, expediente seleccionado, documentos, movimientos y estado de control operativo. Abrir registra lectura sin tomar control. Las acciones Tomar control, Solicitar asignación, resolver solicitudes y Transferir control vuelven a consultar detalle y bandeja para reflejar inmediatamente la autoridad del servidor. La bandeja también se sincroniza al recuperar foco, al volver visible la pestaña y cada 60 segundos; las respuestas autenticadas usan política `no-store` para evitar datos obsoletos del navegador o proxy.
 
-`OfficeDocumentAccessWorkspace` muestra al superadministrador un panorama filtrable de todas las oficinas que requieren responsable. Distingue titular, autoridad operativa delegada, ausencia de autoridad y fuente administrativa o legislativa; seleccionar una fila abre la configuración detallada de esa oficina.
+`OfficeDocumentAccessWorkspace` muestra al superadministrador un panorama filtrable de todas las oficinas que requieren responsable. Distingue titular, autoridad operativa delegada, ausencia de autoridad y fuente administrativa o legislativa; seleccionar una fila abre la configuración detallada de esa oficina. En oficinas administrativas, el formulario **Cargo responsable de la oficina** lista sus cargos y el ocupante vigente, permite escoger la fuente contractual de la titularidad y mantiene la delegación como una operación temporal separada.
 
 ### `stores/human-resources.js`
 
@@ -64,7 +64,7 @@ No consumir `fetch` directamente desde un componente salvo una razón documentad
 | `AdministrationWorkspace` | Contenedor de usuarios, organización, legislaturas, catálogos y reset. |
 | `UserAccessAdministration` | Usuarios, estado, roles, alcance del observador y reset de emergencia. |
 | `RolePermissionAdministration` | Matriz de vistas/acciones de los cuatro roles fijos. |
-| `OfficeDocumentAccessWorkspace` | Titularidad automática, delegación temporal, modalidad persistente y equipo operativo autorizado. |
+| `OfficeDocumentAccessWorkspace` | Selección del cargo responsable, titularidad automática por su ocupante, delegación temporal, modalidad persistente y equipo operativo autorizado. |
 | `OrganizationAdministration` | Oficinas y organigrama. |
 | `LegislatureAdministration` | Legislaturas y Directiva. |
 | `OperationalResetAdministration` | Limpieza controlada de datos beta. |
