@@ -132,6 +132,8 @@ test('the seeded organization chart distinguishes staffed offices from represent
     $presidencyAdvisors = Office::query()->where('code', 'ASES-PRES')->firstOrFail();
     $commission = Office::query()->where('code', 'COM1')->firstOrFail();
     $financialUnit = Office::query()->where('code', 'UAF')->firstOrFail();
+    $humanResources = Office::query()->where('code', 'RRHH')->firstOrFail();
+    $payroll = Office::query()->where('code', 'PLANILLAS')->firstOrFail();
 
     expect($plenary->supports_staffing)->toBeFalse()
         ->and($plenary->requires_manager)->toBeFalse()
@@ -142,5 +144,6 @@ test('the seeded organization chart distinguishes staffed offices from represent
         ->and($commission->supports_staffing)->toBeTrue()
         ->and($commission->requires_manager)->toBeTrue()
         ->and($financialUnit->supports_staffing)->toBeTrue()
-        ->and($financialUnit->requires_manager)->toBeTrue();
+        ->and($financialUnit->requires_manager)->toBeTrue()
+        ->and($payroll->parent_id)->toBe($humanResources->id);
 });

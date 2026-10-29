@@ -33,7 +33,7 @@ class OrganizationSeeder extends Seeder
             ['code' => 'PPLAN', 'name' => 'Sección Presupuesto y Planificación', 'parent_code' => 'UAF', 'supports_staffing' => true, 'requires_manager' => true],
             ['code' => 'TES', 'name' => 'Sección Tesorería', 'parent_code' => 'UAF', 'supports_staffing' => true, 'requires_manager' => true],
             ['code' => 'BIENS', 'name' => 'Sección de Bienes y Servicios', 'parent_code' => 'UAF', 'supports_staffing' => true, 'requires_manager' => true],
-            ['code' => 'PLANILLAS', 'name' => 'Responsable de Elaboración de Planillas', 'parent_code' => 'UAF', 'supports_staffing' => true, 'requires_manager' => true],
+            ['code' => 'PLANILLAS', 'name' => 'Responsable de Elaboración de Planillas', 'parent_code' => 'RRHH', 'supports_staffing' => true, 'requires_manager' => true],
             ['code' => 'AFALM', 'name' => 'Activos Fijos y Almacenes', 'parent_code' => 'BIENS', 'supports_staffing' => true, 'requires_manager' => true],
         ];
 

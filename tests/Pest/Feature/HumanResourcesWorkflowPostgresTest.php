@@ -695,6 +695,76 @@ test('superadministration selects the responsible position and its current holde
     ]);
 });
 
+test('support corrects an unused initial office assignment without creating a rotation', function () {
+    $administrator = humanResourcesAdministrator();
+    Sanctum::actingAs($administrator);
+    $sourceOffice = Office::query()->create([
+        'code' => 'CORR-ORIG',
+        'name' => 'Oficina cargada por error',
+        'supports_staffing' => true,
+        'requires_manager' => true,
+    ]);
+    $targetOffice = Office::query()->create([
+        'code' => 'CORR-DEST',
+        'name' => 'Sección correcta',
+        'supports_staffing' => true,
+        'requires_manager' => true,
+    ]);
+    $sourcePosition = OfficePosition::query()->create([
+        'office_id' => $sourceOffice->id,
+        'name' => 'Jefe de Sección Correcta',
+        'membership_role' => 'official',
+        'created_by' => $administrator->id,
+    ]);
+    $provisionalTargetPosition = OfficePosition::query()->create([
+        'office_id' => $targetOffice->id,
+        'name' => 'Responsable provisional de la sección correcta',
+        'membership_role' => 'manager',
+        'created_by' => null,
+    ]);
+
+    $response = $this->postJson('/api/human-resources/employees', humanResourcesPayload($sourcePosition, [
+        'identity_card' => '8400101',
+        'first_names' => 'Rayssa Rachel',
+        'last_names' => 'Diez Pozo',
+    ]))->assertCreated();
+    $contractId = $response->json('data.open_contract.id');
+    $membership = OfficeMembership::query()->where('employment_contract_id', $contractId)->firstOrFail();
+    $originalEffectiveFrom = $membership->effective_from;
+
+    $this->artisan('sigal:correct-initial-contract-assignment', [
+        'contract' => $contractId,
+        'office' => $targetOffice->code,
+        '--role' => 'manager',
+        '--actor' => $administrator->id,
+        '--reason' => 'Corrección confirmada de la carga inicial.',
+    ])->assertSuccessful();
+
+    expect($sourcePosition->fresh()->office_id)->toBe($targetOffice->id)
+        ->and($sourcePosition->fresh()->membership_role->value)->toBe('manager')
+        ->and($membership->fresh()->office_id)->toBe($targetOffice->id)
+        ->and($membership->fresh()->membership_role->value)->toBe('manager')
+        ->and($membership->fresh()->effective_from->equalTo($originalEffectiveFrom))->toBeTrue()
+        ->and(EmploymentRotation::query()->where('employment_contract_id', $contractId)->exists())->toBeFalse()
+        ->and(OfficePosition::query()->whereKey($provisionalTargetPosition->id)->exists())->toBeFalse()
+        ->and(OfficeManagerAssignment::query()
+            ->where('office_id', $targetOffice->id)
+            ->where('office_membership_id', $membership->id)
+            ->whereNull('effective_to')
+            ->exists())->toBeTrue();
+
+    $this->assertDatabaseHas('activity_logs', [
+        'event' => 'human_resources.initial_contract_assignment.corrected',
+        'subject_id' => $contractId,
+        'actor_id' => $administrator->id,
+    ]);
+    $this->assertDatabaseHas('activity_logs', [
+        'event' => 'human_resources.office_position.unused_provisional_removed',
+        'subject_id' => $provisionalTargetPosition->id,
+        'actor_id' => $administrator->id,
+    ]);
+});
+
 test('the independent human resources account can access its module but not generic user administration', function () {
     $this->artisan('sigal:bootstrap-human-resources-administrator')->assertExitCode(0);
     $humanResourcesUser = User::query()->where('email', 'rrhh@sigal.local')->firstOrFail();

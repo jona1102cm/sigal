@@ -127,6 +127,19 @@ Revisar log Laravel, variables de entorno, conexión PostgreSQL, permisos/volume
 
 Verificar en RR. HH. contrato activo, oficina, cargo y membresía vigente. Después, como superadministración o RR. HH. autorizado, abrir **Gestión documental → Acceso de mi oficina**, elegir la oficina y usar **Cargo responsable de la oficina**. La lista muestra los cargos de esa oficina y su ocupante actual; seleccionar el cargo correcto genera automáticamente la titularidad histórica sin renombrarlo. La delegación administrativa se usa únicamente para una suplencia temporal y requiere que antes exista un titular. Si el cargo muestra varios ocupantes, regularizar primero la dotación; no editar directamente tablas, asignaciones ni tokens.
 
+### Contrato cargado desde el inicio en una oficina incorrecta
+
+No registrar una rotación si la persona nunca trabajó en la oficina equivocada. Después de confirmar documentalmente el error, comprobar que el contrato no tenga rotaciones, que el cargo no sea compartido y que el usuario no haya ejecutado acciones auditadas. El soporte autorizado puede ejecutar:
+
+```bash
+php artisan sigal:correct-initial-contract-assignment ID_CONTRATO CODIGO_OFICINA \
+  --role=manager \
+  --actor=ID_USUARIO_AUTORIZADO \
+  --reason="Corrección confirmada de la carga inicial"
+```
+
+La operación conserva el inicio contractual, traslada el cargo exclusivo y su membresía, reemplaza únicamente un cargo responsable provisional nunca utilizado y genera titularidad y auditoría. Si existe actividad, una rotación o referencias compartidas, el comando se bloquea para evitar reescribir historia real.
+
 ### Expediente asignado a oficina incorrecta
 
 Consultar el último movimiento por `sent_at` e `id` y sus destinatarios primarios. El control no corresponde necesariamente a la oficina inicial. Revisar también si la participación fue finalizada o era informativa.

@@ -16,7 +16,7 @@ Estado: **implementado conforme al organigrama institucional y listo para la car
 - **Pleno Asamblea Legislativa** es el nodo institucional raíz y no administra funcionarios.
 - Del Pleno dependen **Asesores del Pleno** —oficina con funcionarios sin responsable propio— y **Directiva**, nodo representativo sin funcionarios.
 - De Directiva dependen Primera Vicepresidencia, Primera Secretaría y Presidencia de Directiva. Presidencia concentra Asesores de Presidencia —oficina con funcionarios sin responsable propio—, Oficialía Mayor Administrativa y Financiera (OMAF), Secretaría General y Protocolo, Comisiones y Bancadas.
-- De OMAF dependen Unidad de Administración Financiera, Unidad Jurídica, Unidad de Recursos Humanos, Sección de Servicios Informáticos y Sección de Comunicación. La Unidad de Administración Financiera concentra Contabilidad y Cierre, Presupuesto y Planificación, Tesorería, Bienes y Servicios, Responsable de Elaboración de Planillas y, bajo Bienes y Servicios, Activos Fijos y Almacenes.
+- De OMAF dependen Unidad de Administración Financiera, Unidad Jurídica, Unidad de Recursos Humanos, Sección de Servicios Informáticos y Sección de Comunicación. La Unidad de Administración Financiera concentra Contabilidad y Cierre, Presupuesto y Planificación, Tesorería, Bienes y Servicios y, bajo Bienes y Servicios, Activos Fijos y Almacenes. El Responsable de Elaboración de Planillas depende de la Unidad de Recursos Humanos.
 - De Secretaría General y Protocolo depende la Unidad de Registros y Archivos (URA).
 - Comisiones y Bancadas son nodos agrupadores sin funcionarios ni responsable de oficina. Cada una de sus siete comisiones y siete bancadas dependientes es una oficina operativa, con funcionarios y responsable propio.
 

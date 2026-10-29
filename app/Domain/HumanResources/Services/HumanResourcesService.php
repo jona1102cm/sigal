@@ -6,6 +6,7 @@ use App\Domain\Audit\DTOs\RequestAuditContext;
 use App\Domain\Audit\Services\ActivityLogger;
 use App\Domain\Authorization\Enums\RoleCode;
 use App\Domain\Authorization\Enums\UserStatus;
+use App\Domain\HumanResources\DTOs\CorrectInitialContractAssignmentData;
 use App\Domain\HumanResources\DTOs\CreateOfficePositionData;
 use App\Domain\HumanResources\DTOs\EmployeeRegistrationResult;
 use App\Domain\HumanResources\DTOs\RegisterEmployeeContractData;
@@ -13,6 +14,7 @@ use App\Domain\HumanResources\DTOs\UpdateEmployeeData;
 use App\Domain\HumanResources\DTOs\UpdateOfficePositionData;
 use App\Domain\HumanResources\Enums\EmployeeAttachmentType;
 use App\Domain\Organization\Enums\OfficeMembershipRole;
+use App\Models\ActivityLog;
 use App\Models\Employee;
 use App\Models\EmployeeAttachment;
 use App\Models\EmploymentContract;
@@ -501,6 +503,198 @@ class HumanResourcesService
             );
 
             return $updated;
+        });
+    }
+
+    /**
+     * Corrige una asignación que fue registrada erróneamente desde el origen.
+     *
+     * No crea una rotación ni altera la fecha contractual. Para no reescribir
+     * historia real, solo admite contratos sin rotaciones ni actividad del
+     * funcionario y cargos que no estén compartidos con otros registros.
+     */
+    public function correctInitialContractAssignment(
+        EmploymentContract $contract,
+        CorrectInitialContractAssignmentData $data,
+        User $actor,
+        RequestAuditContext $context,
+    ): EmploymentContract {
+        return DB::transaction(function () use ($contract, $data, $actor, $context): EmploymentContract {
+            $target = EmploymentContract::query()
+                ->with(['officePosition.office', 'employee.user'])
+                ->lockForUpdate()
+                ->findOrFail($contract->id);
+
+            if (! $target->isOpen() || ! $this->shouldHaveAccessNow($target)) {
+                throw ValidationException::withMessages([
+                    'contract' => 'Solo se puede corregir una asignación inicial de un contrato vigente y activo.',
+                ]);
+            }
+
+            if (EmploymentRotation::query()->where('employment_contract_id', $target->id)->exists()) {
+                throw ValidationException::withMessages([
+                    'contract' => 'El contrato ya tiene rotaciones y no puede reinterpretarse como un error de carga inicial.',
+                ]);
+            }
+
+            $membership = OfficeMembership::query()
+                ->with(['office', 'user'])
+                ->where('employment_contract_id', $target->id)
+                ->whereNull('effective_to')
+                ->lockForUpdate()
+                ->first();
+
+            if ($membership === null || $membership->employment_rotation_id !== null) {
+                throw ValidationException::withMessages([
+                    'contract' => 'El contrato no conserva una única membresía inicial abierta que pueda corregirse.',
+                ]);
+            }
+
+            if (ActivityLog::query()->where('actor_id', $membership->user_id)->exists()) {
+                throw ValidationException::withMessages([
+                    'contract' => 'El funcionario ya ejecutó acciones auditadas. Registre una rotación real para no alterar su historia operativa.',
+                ]);
+            }
+
+            $targetOffice = Office::query()->lockForUpdate()->findOrFail($data->targetOfficeId);
+            if ($targetOffice->status->value !== 'active' || ! $targetOffice->supports_staffing) {
+                throw ValidationException::withMessages([
+                    'target_office_id' => 'La oficina correcta debe estar activa y admitir funcionarios.',
+                ]);
+            }
+            if ((int) $membership->office_id === (int) $targetOffice->id) {
+                throw ValidationException::withMessages([
+                    'target_office_id' => 'La membresía ya pertenece a la oficina indicada.',
+                ]);
+            }
+
+            $this->assertPositionRoleAllowed($targetOffice, $data->membershipRole);
+            $position = OfficePosition::query()
+                ->with('office')
+                ->lockForUpdate()
+                ->findOrFail($target->office_position_id);
+
+            $positionIsShared = EmploymentContract::query()
+                ->where('office_position_id', $position->id)
+                ->whereKeyNot($target->id)
+                ->exists()
+                || OfficeMembership::query()
+                    ->where('office_position_id', $position->id)
+                    ->whereKeyNot($membership->id)
+                    ->exists()
+                || EmploymentRotation::query()
+                    ->where('destination_office_position_id', $position->id)
+                    ->exists();
+
+            if ($positionIsShared) {
+                throw ValidationException::withMessages([
+                    'office_position_id' => 'El cargo está compartido o posee historia adicional; no puede trasladarse como una simple corrección inicial.',
+                ]);
+            }
+
+            if (OfficePosition::query()
+                ->where('office_id', $targetOffice->id)
+                ->whereKeyNot($position->id)
+                ->whereRaw('LOWER(name) = LOWER(?)', [$position->name])
+                ->exists()) {
+                throw ValidationException::withMessages([
+                    'office_position_id' => 'La oficina correcta ya contiene otro cargo con la misma denominación.',
+                ]);
+            }
+
+            $provisionalManagers = collect();
+            if ($data->membershipRole === OfficeMembershipRole::Manager) {
+                $provisionalManagers = OfficePosition::query()
+                    ->with('office')
+                    ->where('office_id', $targetOffice->id)
+                    ->where('membership_role', OfficeMembershipRole::Manager->value)
+                    ->whereKeyNot($position->id)
+                    ->lockForUpdate()
+                    ->get();
+
+                foreach ($provisionalManagers as $provisionalManager) {
+                    $hasHistory = $provisionalManager->contracts()->exists()
+                        || $provisionalManager->officeMemberships()->exists()
+                        || $provisionalManager->destinationRotations()->exists();
+
+                    if ($hasHistory) {
+                        throw ValidationException::withMessages([
+                            'membership_role' => "La oficina ya tiene el cargo responsable {$provisionalManager->name} con historia. Use la gestión ordinaria de responsables.",
+                        ]);
+                    }
+                }
+            }
+
+            if ($membership->membership_role === OfficeMembershipRole::Manager) {
+                throw ValidationException::withMessages([
+                    'contract' => 'La asignación equivocada ya originó una responsabilidad de oficina. Requiere una regularización histórica específica.',
+                ]);
+            }
+
+            $oldContract = $this->contractSnapshot($target);
+            $oldPosition = $this->positionSnapshot($position);
+            $oldMembership = $this->membershipSnapshot($membership);
+
+            foreach ($provisionalManagers as $provisionalManager) {
+                $provisionalSnapshot = $this->positionSnapshot($provisionalManager);
+                $this->activityLogger->record(
+                    event: 'human_resources.office_position.unused_provisional_removed',
+                    actor: $actor,
+                    subject: $provisionalManager,
+                    context: $context,
+                    oldValues: $provisionalSnapshot,
+                    newValues: [
+                        'replacement_office_position_id' => $position->id,
+                        'reason' => $data->reason,
+                    ],
+                );
+                $provisionalManager->delete();
+            }
+
+            $position->update([
+                'office_id' => $targetOffice->id,
+                'membership_role' => $data->membershipRole,
+            ]);
+            $membership->update([
+                'office_id' => $targetOffice->id,
+                'membership_role' => $data->membershipRole,
+                'position_title' => $position->name,
+                'assigned_by' => $actor->id,
+            ]);
+            $target->touch();
+
+            if ($data->membershipRole === OfficeMembershipRole::Manager) {
+                $this->officeManagerAssignments->assignFromMembership(
+                    $membership->refresh(),
+                    $actor,
+                    $context,
+                    CarbonImmutable::parse($membership->effective_from),
+                );
+            }
+
+            $position->load('office');
+            $membership->load('office');
+            $target->load('officePosition.office');
+
+            $this->activityLogger->record(
+                event: 'human_resources.initial_contract_assignment.corrected',
+                actor: $actor,
+                subject: $target,
+                context: $context,
+                oldValues: [
+                    'contract' => $oldContract,
+                    'position' => $oldPosition,
+                    'membership' => $oldMembership,
+                ],
+                newValues: [
+                    'contract' => $this->contractSnapshot($target),
+                    'position' => $this->positionSnapshot($position),
+                    'membership' => $this->membershipSnapshot($membership),
+                    'reason' => $data->reason,
+                ],
+            );
+
+            return $target->load(['officePosition.office', 'currentOfficeMembership.office', 'currentOfficeMembership.officePosition']);
         });
     }
 
@@ -1047,6 +1241,22 @@ class HumanResourcesService
             'starts_on' => $contract->starts_on->toDateString(),
             'ends_on' => $contract->ends_on?->toDateString(),
             'ended_at' => $contract->ended_at?->toIso8601String(),
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function membershipSnapshot(OfficeMembership $membership): array
+    {
+        return [
+            'id' => $membership->id,
+            'employment_contract_id' => $membership->employment_contract_id,
+            'office_id' => $membership->office_id,
+            'office_code' => $membership->office->code,
+            'office_position_id' => $membership->office_position_id,
+            'membership_role' => $membership->membership_role->value,
+            'position_title' => $membership->position_title,
+            'effective_from' => $membership->effective_from->toIso8601String(),
+            'effective_to' => $membership->effective_to?->toIso8601String(),
         ];
     }
 
